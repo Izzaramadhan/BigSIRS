@@ -6,6 +6,24 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* Design Tokens from requirement */
+  --color-primary: #087f78;
+  --color-primary-dark: #06655f;
+  --color-primary-light: #dff7f4;
+  --color-text-navy: #17243d;
+  --color-text-secondary: #667085;
+  --color-page-bg: #f7f7fb;
+  --color-card-bg: #ffffff;
+  --color-border-soft: #e8edf3;
+  --color-danger: #d64545;
+  --color-danger-bg: #fff0f0;
+  --color-warning: #d97706;
+  
+  --sidebar-width: 260px;
+  --topbar-height: 64px;
+}
+
 html,
 body,
 #app {
@@ -17,4 +35,22 @@ body,
 body {
   min-width: 320px;
   min-height: 100vh;
+  background-color: var(--color-page-bg);
+  color: var(--color-text-navy);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Utilities */
+.card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+}
+
+.text-primary { color: var(--color-primary); }
+.text-danger { color: var(--color-danger); }
+.text-warning { color: var(--color-warning); }
+.text-secondary { color: var(--color-text-secondary); }
+
