@@ -28,6 +28,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('procedure-categories/{procedureCategory}/status', [\App\Http\Controllers\Api\V1\MasterData\ProcedureCategoryController::class, 'status']);
             Route::apiResource('procedure-categories', \App\Http\Controllers\Api\V1\MasterData\ProcedureCategoryController::class);
+
+            Route::patch('tariff-components/{tariffComponent}/status', [\App\Http\Controllers\Api\V1\MasterData\TariffComponentController::class, 'updateStatus']);
+            Route::apiResource('tariff-components', \App\Http\Controllers\Api\V1\MasterData\TariffComponentController::class);
         });
     });
 });

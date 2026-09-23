@@ -38,6 +38,12 @@ const router = createRouter({
       component: () => import('../views/master-data/ProcedureCategoryView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/tariff-components',
+      name: 'master-data.tariff-components',
+      component: () => import('../views/master-data/TariffComponentView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
