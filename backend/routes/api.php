@@ -31,6 +31,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('tariff-components/{tariffComponent}/status', [\App\Http\Controllers\Api\V1\MasterData\TariffComponentController::class, 'updateStatus']);
             Route::apiResource('tariff-components', \App\Http\Controllers\Api\V1\MasterData\TariffComponentController::class);
+
+            Route::patch('tariff-types/{tariffType}/status', [\App\Http\Controllers\Api\V1\MasterData\TariffTypeController::class, 'updateStatus']);
+            Route::apiResource('tariff-types', \App\Http\Controllers\Api\V1\MasterData\TariffTypeController::class);
         });
     });
 });
