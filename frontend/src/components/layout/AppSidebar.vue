@@ -37,18 +37,57 @@ const navigation = [
     label: 'SISTEM & PENGATURAN',
     items: [
       { name: 'Laporan', path: '/laporan', icon: 'M3 3v18h18 M18 9l-5-5-3 3-5-5', disabled: true },
-      { name: 'Master Data', path: '/master', icon: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', disabled: true },
+      {
+        name: 'Master Data',
+        icon: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z',
+        expanded: false,
+        submenu: [
+          { name: 'Poliklinik', path: '/master-data/polyclinics' },
+          { name: 'Penjamin', path: '/master-data/guarantors', disabled: true }
+        ]
+      },
       { name: 'Pengaturan', path: '/pengaturan', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z', disabled: true }
     ]
   }
 ];
 
+import { ref, watch, onMounted } from 'vue';
+
+const expandedMenus = ref({});
+
+const toggleSubmenu = (menuName) => {
+  expandedMenus.value[menuName] = !expandedMenus.value[menuName];
+};
+
 const handleMenuClick = (item) => {
   if (item.disabled) {
-    // Ideally we would show a toast here. For now it just does nothing.
     return;
   }
+  if (item.submenu) {
+    toggleSubmenu(item.name);
+  }
 };
+
+const checkActiveSubmenu = () => {
+  navigation.forEach(group => {
+    group.items.forEach(item => {
+      if (item.submenu) {
+        const isActive = item.submenu.some(sub => route.path.startsWith(sub.path));
+        if (isActive) {
+          expandedMenus.value[item.name] = true;
+        }
+      }
+    });
+  });
+};
+
+onMounted(() => {
+  checkActiveSubmenu();
+});
+
+watch(() => route.path, () => {
+  checkActiveSubmenu();
+});
 </script>
 
 <template>
@@ -74,8 +113,9 @@ const handleMenuClick = (item) => {
         <h3 class="nav-group-title">{{ group.label }}</h3>
         <ul class="nav-list">
           <li v-for="item in group.items" :key="item.name" class="nav-item">
+            <!-- Normal Link -->
             <router-link
-              v-if="!item.disabled"
+              v-if="!item.disabled && !item.submenu"
               :to="item.path"
               class="nav-link"
               :class="{ 'nav-link--active': route.path === item.path }"
@@ -86,7 +126,26 @@ const handleMenuClick = (item) => {
               </svg>
               <span>{{ item.name }}</span>
             </router-link>
-            
+
+            <!-- Submenu Parent -->
+            <button
+              v-else-if="!item.disabled && item.submenu"
+              class="nav-link nav-link--submenu"
+              :class="{ 'nav-link--active-parent': item.submenu.some(sub => route.path.startsWith(sub.path)) }"
+              type="button"
+              @click="handleMenuClick(item)"
+              :aria-expanded="expandedMenus[item.name]"
+            >
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path :d="item.icon" />
+              </svg>
+              <span>{{ item.name }}</span>
+              <svg class="submenu-icon" :class="{ 'submenu-icon--open': expandedMenus[item.name] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+
+            <!-- Disabled -->
             <button
               v-else
               class="nav-link nav-link--disabled"
@@ -99,6 +158,28 @@ const handleMenuClick = (item) => {
               </svg>
               <span>{{ item.name }}</span>
             </button>
+
+            <!-- Submenu Items -->
+            <ul v-if="item.submenu" v-show="expandedMenus[item.name]" class="submenu-list">
+              <li v-for="sub in item.submenu" :key="sub.name" class="submenu-item">
+                <router-link
+                  v-if="!sub.disabled"
+                  :to="sub.path"
+                  class="submenu-link"
+                  :class="{ 'submenu-link--active': route.path === sub.path }"
+                >
+                  {{ sub.name }}
+                </router-link>
+                <button
+                  v-else
+                  class="submenu-link submenu-link--disabled"
+                  type="button"
+                  title="Fitur belum tersedia"
+                >
+                  {{ sub.name }}
+                </button>
+              </li>
+            </ul>
           </li>
         </ul>
       </template>
@@ -120,7 +201,7 @@ const handleMenuClick = (item) => {
       </div>
     </div>
   </aside>
-  
+
   <div v-if="isOpen" class="sidebar-overlay" @click="emit('close')" aria-hidden="true"></div>
 </template>
 
@@ -239,6 +320,78 @@ const handleMenuClick = (item) => {
 .nav-icon {
   width: 18px;
   height: 18px;
+}
+
+.nav-link--submenu {
+  justify-content: space-between;
+}
+
+.nav-link--submenu span {
+  flex: 1;
+}
+
+.submenu-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.submenu-icon--open {
+  transform: rotate(180deg);
+}
+
+.nav-link--active-parent {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.nav-link--active-parent .nav-icon {
+  color: var(--color-primary);
+}
+
+.submenu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  padding-left: 2.25rem;
+  margin-top: 0.25rem;
+}
+
+.submenu-item {
+  margin-bottom: 0.2rem;
+}
+
+.submenu-link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.submenu-link:hover:not(.submenu-link--disabled) {
+  color: var(--color-primary);
+  background: var(--color-page-bg);
+}
+
+.submenu-link--active {
+  color: var(--color-primary);
+  font-weight: 600;
+  background: var(--color-page-bg);
+}
+
+.submenu-link--disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
 .sidebar-footer {
