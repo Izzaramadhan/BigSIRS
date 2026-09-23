@@ -16,4 +16,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/me', [AuthController::class, 'me']);
         });
     });
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::prefix('master-data')->group(function () {
+            Route::get('polyclinics/service-types', [\App\Http\Controllers\Api\V1\MasterData\PolyclinicController::class, 'serviceTypes']);
+            Route::patch('polyclinics/{polyclinic}/status', [\App\Http\Controllers\Api\V1\MasterData\PolyclinicController::class, 'status']);
+            Route::apiResource('polyclinics', \App\Http\Controllers\Api\V1\MasterData\PolyclinicController::class);
+
+            Route::patch('guarantors/{guarantor}/status', [\App\Http\Controllers\Api\V1\MasterData\GuarantorController::class, 'status']);
+            Route::apiResource('guarantors', \App\Http\Controllers\Api\V1\MasterData\GuarantorController::class);
+        });
+    });
 });

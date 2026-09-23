@@ -26,6 +26,12 @@ const router = createRouter({
       component: () => import('../views/AboutView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/polyclinics',
+      name: 'master-data.polyclinics',
+      component: () => import('../views/master-data/PolyclinicView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
