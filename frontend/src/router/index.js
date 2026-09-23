@@ -44,6 +44,12 @@ const router = createRouter({
       component: () => import('../views/master-data/TariffComponentView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/tariff-types',
+      name: 'master-data.tariff-types',
+      component: () => import('../views/master-data/TariffTypeView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 

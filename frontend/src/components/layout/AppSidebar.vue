@@ -48,7 +48,8 @@ const navigation = [
             name: 'Master Data Tindakan',
             submenu: [
               { name: 'Kategori Tindakan', path: '/master-data/procedure-categories' },
-              { name: 'Komponen', path: '/master-data/tariff-components' }
+              { name: 'Komponen', path: '/master-data/tariff-components' },
+              { name: 'Jenis Tarif', path: '/master-data/tariff-types' }
             ]
           }
         ]
