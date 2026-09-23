@@ -1,5 +1,6 @@
 <script setup>
 import { useRoute } from 'vue-router';
+import { ref, watch, onMounted } from 'vue';
 
 defineProps({
   isOpen: {
@@ -43,15 +44,18 @@ const navigation = [
         expanded: false,
         submenu: [
           { name: 'Poliklinik', path: '/master-data/polyclinics' },
-          { name: 'Penjamin', path: '/master-data/guarantors', disabled: true }
+          { 
+            name: 'Master Data Tindakan',
+            submenu: [
+              { name: 'Kategori Tindakan', path: '/master-data/procedure-categories' }
+            ]
+          }
         ]
       },
       { name: 'Pengaturan', path: '/pengaturan', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z', disabled: true }
     ]
   }
 ];
-
-import { ref, watch, onMounted } from 'vue';
 
 const expandedMenus = ref({});
 
@@ -72,13 +76,41 @@ const checkActiveSubmenu = () => {
   navigation.forEach(group => {
     group.items.forEach(item => {
       if (item.submenu) {
-        const isActive = item.submenu.some(sub => route.path.startsWith(sub.path));
-        if (isActive) {
+        let isItemActive = false;
+        
+        item.submenu.forEach(sub => {
+          if (sub.submenu) {
+            const isSubActive = sub.submenu.some(nestedSub => route.path.startsWith(nestedSub.path));
+            if (isSubActive) {
+              expandedMenus.value[sub.name] = true;
+              isItemActive = true;
+            }
+          } else {
+            if (route.path.startsWith(sub.path)) {
+              isItemActive = true;
+            }
+          }
+        });
+
+        if (isItemActive) {
           expandedMenus.value[item.name] = true;
         }
       }
     });
   });
+};
+
+const isItemActive = (item) => {
+  if (!item.submenu) return route.path === item.path;
+  return item.submenu.some(sub => {
+    if (sub.submenu) return sub.submenu.some(s => route.path.startsWith(s.path));
+    return route.path.startsWith(sub.path);
+  });
+};
+
+const isSubItemActive = (sub) => {
+  if (!sub.submenu) return route.path === sub.path;
+  return sub.submenu.some(s => route.path.startsWith(s.path));
 };
 
 onMounted(() => {
@@ -131,10 +163,11 @@ watch(() => route.path, () => {
             <button
               v-else-if="!item.disabled && item.submenu"
               class="nav-link nav-link--submenu"
-              :class="{ 'nav-link--active-parent': item.submenu.some(sub => route.path.startsWith(sub.path)) }"
+              :class="{ 'nav-link--active-parent': isItemActive(item) }"
               type="button"
               @click="handleMenuClick(item)"
-              :aria-expanded="expandedMenus[item.name]"
+              :aria-expanded="expandedMenus[item.name] || false"
+              :aria-controls="'submenu-' + item.name.replace(/\s+/g, '-').toLowerCase()"
             >
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path :d="item.icon" />
@@ -159,17 +192,59 @@ watch(() => route.path, () => {
               <span>{{ item.name }}</span>
             </button>
 
-            <!-- Submenu Items -->
-            <ul v-if="item.submenu" v-show="expandedMenus[item.name]" class="submenu-list">
+            <!-- Submenu Items (Level 2) -->
+            <ul v-if="item.submenu" v-show="expandedMenus[item.name]" class="submenu-list" :id="'submenu-' + item.name.replace(/\s+/g, '-').toLowerCase()">
               <li v-for="sub in item.submenu" :key="sub.name" class="submenu-item">
+                
+                <!-- Nested Submenu Parent (Level 2) -->
+                <button
+                  v-if="sub.submenu && !sub.disabled"
+                  class="submenu-link submenu-link--group"
+                  :class="{ 'submenu-link--active-parent': isSubItemActive(sub) }"
+                  type="button"
+                  @click="handleMenuClick(sub)"
+                  :aria-expanded="expandedMenus[sub.name] || false"
+                  :aria-controls="'submenu-' + sub.name.replace(/\s+/g, '-').toLowerCase()"
+                >
+                  <span>{{ sub.name }}</span>
+                  <svg class="submenu-icon" :class="{ 'submenu-icon--open': expandedMenus[sub.name] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+
+                <!-- Nested Submenu Items (Level 3) -->
+                <ul v-if="sub.submenu" v-show="expandedMenus[sub.name]" class="nested-submenu-list" :id="'submenu-' + sub.name.replace(/\s+/g, '-').toLowerCase()">
+                  <li v-for="nestedSub in sub.submenu" :key="nestedSub.name" class="nested-submenu-item">
+                    <router-link
+                      v-if="!nestedSub.disabled"
+                      :to="nestedSub.path"
+                      class="nested-submenu-link"
+                      :class="{ 'nested-submenu-link--active': route.path === nestedSub.path }"
+                    >
+                      {{ nestedSub.name }}
+                    </router-link>
+                    <button
+                      v-else
+                      class="nested-submenu-link nested-submenu-link--disabled"
+                      type="button"
+                      title="Fitur belum tersedia"
+                    >
+                      {{ nestedSub.name }}
+                    </button>
+                  </li>
+                </ul>
+
+                <!-- Normal Submenu Link -->
                 <router-link
-                  v-if="!sub.disabled"
+                  v-else-if="!sub.disabled"
                   :to="sub.path"
                   class="submenu-link"
                   :class="{ 'submenu-link--active': route.path === sub.path }"
                 >
                   {{ sub.name }}
                 </router-link>
+                
+                <!-- Disabled Submenu Link -->
                 <button
                   v-else
                   class="submenu-link submenu-link--disabled"
@@ -362,7 +437,8 @@ watch(() => route.path, () => {
 }
 
 .submenu-link {
-  display: block;
+  display: flex;
+  align-items: center;
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   color: var(--color-text-secondary);
@@ -378,6 +454,10 @@ watch(() => route.path, () => {
   cursor: pointer;
 }
 
+.submenu-link--group {
+  justify-content: space-between;
+}
+
 .submenu-link:hover:not(.submenu-link--disabled) {
   color: var(--color-primary);
   background: var(--color-page-bg);
@@ -389,7 +469,57 @@ watch(() => route.path, () => {
   background: var(--color-page-bg);
 }
 
+.submenu-link--active-parent {
+  color: var(--color-primary);
+  background: var(--color-page-bg);
+}
+
 .submenu-link--disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.nested-submenu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  padding-left: 1rem;
+  margin-top: 0.15rem;
+}
+
+.nested-submenu-item {
+  margin-bottom: 0.15rem;
+}
+
+.nested-submenu-link {
+  display: block;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nested-submenu-link:hover:not(.nested-submenu-link--disabled) {
+  color: var(--color-primary);
+  background: var(--color-page-bg);
+}
+
+.nested-submenu-link--active {
+  color: var(--color-primary);
+  font-weight: 600;
+  background: var(--color-page-bg);
+}
+
+.nested-submenu-link--disabled {
   color: #94a3b8;
   cursor: not-allowed;
 }

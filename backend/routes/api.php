@@ -25,6 +25,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('guarantors/{guarantor}/status', [\App\Http\Controllers\Api\V1\MasterData\GuarantorController::class, 'status']);
             Route::apiResource('guarantors', \App\Http\Controllers\Api\V1\MasterData\GuarantorController::class);
+
+            Route::patch('procedure-categories/{procedureCategory}/status', [\App\Http\Controllers\Api\V1\MasterData\ProcedureCategoryController::class, 'status']);
+            Route::apiResource('procedure-categories', \App\Http\Controllers\Api\V1\MasterData\ProcedureCategoryController::class);
         });
     });
 });
