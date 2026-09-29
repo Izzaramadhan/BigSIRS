@@ -67,6 +67,7 @@ const openEditModal = async (item) => {
     modalErrors.value = {};
     isModalOpen.value = true;
   } catch (err) {
+    console.error(err);
     alert(error.value || 'Gagal mengambil rincian tindakan untuk diubah.');
   }
 };
