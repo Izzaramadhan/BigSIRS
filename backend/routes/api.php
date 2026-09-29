@@ -34,6 +34,18 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('tariff-types/{tariffType}/status', [\App\Http\Controllers\Api\V1\MasterData\TariffTypeController::class, 'updateStatus']);
             Route::apiResource('tariff-types', \App\Http\Controllers\Api\V1\MasterData\TariffTypeController::class);
+
+            Route::patch('procedures/{procedure}/visibility', [\App\Http\Controllers\Api\V1\MasterData\MedicalProcedureController::class, 'updateVisibility']);
+            Route::apiResource('procedures', \App\Http\Controllers\Api\V1\MasterData\MedicalProcedureController::class);
+
+
+            Route::patch('report-groups/{reportGroup}/status', [\App\Http\Controllers\Api\V1\MasterData\ReportGroupController::class, 'updateStatus']);
+            Route::apiResource('report-groups', \App\Http\Controllers\Api\V1\MasterData\ReportGroupController::class);
+        });
+
+        Route::prefix('lookups')->group(function () {
+            Route::get('icd9-cms', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'index']);
+            Route::get('icd9-cms/{icd9Cm}', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'show']);
         });
     });
 });

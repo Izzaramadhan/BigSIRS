@@ -1,0 +1,798 @@
+{
+    "ref_tarif_tindakan": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "id_jenis_tarif",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "MUL",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_kategori",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "MUL",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "nama",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "kode",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "harga",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "satuan",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "enum('0','1','2')",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "icd9_code",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 1685,
+        "sample": [
+            {
+                "id": 1,
+                "id_jenis_tarif": 1,
+                "id_kategori": 17,
+                "nama": " Konsultasi \/Pemeriksaan \/Medikasi ",
+                "kode": "KGA031",
+                "harga": 7500,
+                "satuan": null,
+                "status": "1",
+                "created_at": "2019-05-21 14:57:25",
+                "updated_at": "2022-05-17 02:58:38",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 1,
+                "icd9_code": null
+            },
+            {
+                "id": 2,
+                "id_jenis_tarif": 4,
+                "id_kategori": 17,
+                "nama": " Topikal Aplikasi Fluoride  ",
+                "kode": "KGA02",
+                "harga": 40000,
+                "satuan": null,
+                "status": "1",
+                "created_at": "2019-05-21 14:57:25",
+                "updated_at": "2022-03-14 13:15:09",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 1,
+                "icd9_code": ""
+            },
+            {
+                "id": 3,
+                "id_jenis_tarif": 1,
+                "id_kategori": 17,
+                "nama": "Aplikasi Saforide",
+                "kode": "KGA032",
+                "harga": 0,
+                "satuan": null,
+                "status": "2",
+                "created_at": "2019-05-21 14:57:25",
+                "updated_at": "2022-05-17 03:21:36",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 1,
+                "icd9_code": null
+            }
+        ]
+    },
+    "map_tarif_tindakan_komponen": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "MUL",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "id_tarif_tindakan",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_map_jenis_tarif_komponen",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "harga",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "enum('0','1')",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 1781,
+        "sample": [
+            {
+                "id": 1,
+                "id_tarif_tindakan": 1,
+                "id_map_jenis_tarif_komponen": 1,
+                "harga": 7500,
+                "status": "1",
+                "created_at": "2020-07-04 23:10:31",
+                "updated_at": "2020-07-05 06:10:31",
+                "deleted_at": null,
+                "id_user": null
+            },
+            {
+                "id": 2,
+                "id_tarif_tindakan": 2,
+                "id_map_jenis_tarif_komponen": 1,
+                "harga": 40000,
+                "status": "0",
+                "created_at": "2022-03-14 06:15:11",
+                "updated_at": "2022-03-14 13:10:10",
+                "deleted_at": "2022-03-14 13:15:10",
+                "id_user": 1
+            },
+            {
+                "id": 3,
+                "id_tarif_tindakan": 3,
+                "id_map_jenis_tarif_komponen": 1,
+                "harga": 0,
+                "status": "1",
+                "created_at": "2020-07-04 23:08:25",
+                "updated_at": "2020-07-05 06:08:25",
+                "deleted_at": null,
+                "id_user": null
+            }
+        ]
+    },
+    "map_tarif_tindakan_poliklinik": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "id_poliklinik",
+                "Type": "smallint",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_ref_tarif_tindakan",
+                "Type": "smallint",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "enum('0','1')",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "smallint",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 35,
+        "sample": [
+            {
+                "id": 6,
+                "id_poliklinik": 129,
+                "id_ref_tarif_tindakan": 429,
+                "status": "0",
+                "created_at": "2020-06-30 04:44:13",
+                "updated_at": "2020-06-30 11:44:13",
+                "deleted_at": "2020-06-30 11:45:18",
+                "id_user": 1
+            },
+            {
+                "id": 7,
+                "id_poliklinik": 123,
+                "id_ref_tarif_tindakan": 429,
+                "status": "0",
+                "created_at": "2020-06-30 04:44:13",
+                "updated_at": "2020-06-30 11:44:13",
+                "deleted_at": "2020-06-30 11:45:18",
+                "id_user": 1
+            },
+            {
+                "id": 8,
+                "id_poliklinik": 120,
+                "id_ref_tarif_tindakan": 429,
+                "status": "0",
+                "created_at": "2020-06-30 04:44:14",
+                "updated_at": "2020-06-30 11:44:13",
+                "deleted_at": "2020-06-30 11:45:18",
+                "id_user": 1
+            }
+        ]
+    },
+    "map_tindakan_kelompok_laporan": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "id_kelompok_laporan",
+                "Type": "smallint",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_ref_tarif_tindakan",
+                "Type": "smallint",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "enum('0','1')",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "smallint",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 2,
+        "sample": [
+            {
+                "id": 1,
+                "id_kelompok_laporan": 4,
+                "id_ref_tarif_tindakan": 1761,
+                "status": "1",
+                "created_at": "2021-10-06 04:04:45",
+                "updated_at": null,
+                "deleted_at": null,
+                "id_user": 1
+            },
+            {
+                "id": 8,
+                "id_kelompok_laporan": 46,
+                "id_ref_tarif_tindakan": 2,
+                "status": "1",
+                "created_at": "2022-03-14 06:15:12",
+                "updated_at": null,
+                "deleted_at": null,
+                "id_user": 1
+            }
+        ]
+    },
+    "ref_kategori_tindakan": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "nama",
+                "Type": "varchar(255)",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deskripsi",
+                "Type": "text",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "kode",
+                "Type": "varchar(3)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 22,
+        "sample": [
+            {
+                "id": 17,
+                "nama": "KGA",
+                "deskripsi": "KGA",
+                "kode": "KGA",
+                "status": 1,
+                "created_at": "2018-07-16 14:09:33",
+                "updated_at": "2018-10-31 06:25:23",
+                "deleted_at": "2021-05-15 14:56:15",
+                "id_user": 1
+            },
+            {
+                "id": 18,
+                "nama": "IPM",
+                "deskripsi": "IPM",
+                "kode": "IPM",
+                "status": 1,
+                "created_at": "2018-07-16 14:09:49",
+                "updated_at": "2018-07-26 08:44:32",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 1
+            },
+            {
+                "id": 19,
+                "nama": "PROSTO",
+                "deskripsi": "PROSTO",
+                "kode": "PRO",
+                "status": 1,
+                "created_at": "2018-07-26 15:19:43",
+                "updated_at": "0000-00-00 00:00:00",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 0
+            }
+        ]
+    },
+    "ref_jenis_tarif": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "nama",
+                "Type": "varchar(255)",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deskripsi",
+                "Type": "varchar(255)",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "kode",
+                "Type": "varchar(10)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 53,
+        "sample": [
+            {
+                "id": 1,
+                "nama": "KOAS",
+                "deskripsi": "Pelayanan Koas",
+                "kode": "KOA",
+                "status": 1,
+                "created_at": "2018-05-23 07:49:58",
+                "updated_at": "2019-05-20 16:04:26",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 1
+            },
+            {
+                "id": 2,
+                "nama": "RESIDEN",
+                "deskripsi": "Pelayanan Residen",
+                "kode": "RES",
+                "status": 1,
+                "created_at": "2018-05-23 07:50:41",
+                "updated_at": "2019-05-20 16:06:30",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 1
+            },
+            {
+                "id": 4,
+                "nama": "UMUM",
+                "deskripsi": "Pelayanan Umum",
+                "kode": "UMU",
+                "status": 1,
+                "created_at": "2018-07-13 08:23:13",
+                "updated_at": "2019-05-20 16:06:40",
+                "deleted_at": "2018-07-13 08:23:50",
+                "id_user": 1
+            }
+        ]
+    },
+    "ref_komponen": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "kode",
+                "Type": "varchar(50)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "nama",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deskripsi",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "enum('0','1')",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "count": 17,
+        "sample": [
+            {
+                "id": 1,
+                "kode": null,
+                "nama": "Ko-ass",
+                "deskripsi": "-",
+                "status": "0",
+                "created_at": "2019-05-20 07:23:50",
+                "updated_at": null,
+                "deleted_at": "2019-05-20 14:23:50",
+                "id_user": 1
+            },
+            {
+                "id": 2,
+                "kode": null,
+                "nama": "Residen",
+                "deskripsi": "-",
+                "status": "0",
+                "created_at": "2019-05-20 07:23:53",
+                "updated_at": null,
+                "deleted_at": "2019-05-20 14:23:53",
+                "id_user": 1
+            },
+            {
+                "id": 3,
+                "kode": null,
+                "nama": "Umum",
+                "deskripsi": "",
+                "status": "0",
+                "created_at": "2019-05-20 07:23:55",
+                "updated_at": null,
+                "deleted_at": "2019-05-20 14:23:55",
+                "id_user": 1
+            }
+        ]
+    }
+}
