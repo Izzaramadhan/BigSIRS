@@ -1,0 +1,473 @@
+{
+    "ref_icd9": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int unsigned",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "kode",
+                "Type": "varchar(45)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "nama",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "name",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "keterangan",
+                "Type": "text",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated-at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            }
+        ],
+        "sample": []
+    },
+    "ref_icd_9": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "kode",
+                "Type": "varchar(255)",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "nama",
+                "Type": "text",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "kode_inacbg",
+                "Type": "varchar(100)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deskripsi_inacbg",
+                "Type": "text",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "tarif_kelas1",
+                "Type": "float",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "tarif_kelas2",
+                "Type": "float",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "tarif_kelas3",
+                "Type": "float",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "tarif_rawat_jalan",
+                "Type": "float",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "sample": [
+            {
+                "id": 1,
+                "kode": "87.49",
+                "nama": "Other chest x-ray",
+                "status": 1,
+                "created_at": "2025-05-28 17:31:14",
+                "updated_at": "0000-00-00 00:00:00",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 0,
+                "kode_inacbg": null,
+                "deskripsi_inacbg": null,
+                "tarif_kelas1": null,
+                "tarif_kelas2": null,
+                "tarif_kelas3": null,
+                "tarif_rawat_jalan": null
+            },
+            {
+                "id": 2,
+                "kode": "89.52",
+                "nama": "Electrocardiogram",
+                "status": 1,
+                "created_at": "2025-05-28 17:31:14",
+                "updated_at": "0000-00-00 00:00:00",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 0,
+                "kode_inacbg": null,
+                "deskripsi_inacbg": null,
+                "tarif_kelas1": null,
+                "tarif_kelas2": null,
+                "tarif_kelas3": null,
+                "tarif_rawat_jalan": null
+            },
+            {
+                "id": 3,
+                "kode": "88.76",
+                "nama": "Diagnostic ultrasound of abdomen and retroperitoneum",
+                "status": 1,
+                "created_at": "2025-05-28 17:31:14",
+                "updated_at": "0000-00-00 00:00:00",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 0,
+                "kode_inacbg": null,
+                "deskripsi_inacbg": null,
+                "tarif_kelas1": null,
+                "tarif_kelas2": null,
+                "tarif_kelas3": null,
+                "tarif_rawat_jalan": null
+            }
+        ]
+    },
+    "trx_icd_9": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "id_visit",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_odontogram",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_icd_9",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "group",
+                "Type": "enum('umum','gigi')",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "NO",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "sample": [
+            {
+                "id": 1,
+                "id_visit": 112,
+                "id_odontogram": 0,
+                "id_icd_9": 2785,
+                "group": "umum",
+                "status": 1,
+                "created_at": "2022-06-21 03:47:14",
+                "updated_at": "0000-00-00 00:00:00",
+                "deleted_at": "0000-00-00 00:00:00",
+                "id_user": 103
+            }
+        ]
+    },
+    "ref_report_group": {
+        "columns": [
+            {
+                "Field": "id",
+                "Type": "int",
+                "Null": "NO",
+                "Key": "PRI",
+                "Default": null,
+                "Extra": "auto_increment"
+            },
+            {
+                "Field": "nama",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deskripsi",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "tipe",
+                "Type": "varchar(255)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "status",
+                "Type": "enum('0','1')",
+                "Null": "NO",
+                "Key": "",
+                "Default": "1",
+                "Extra": ""
+            },
+            {
+                "Field": "created_at",
+                "Type": "timestamp",
+                "Null": "NO",
+                "Key": "",
+                "Default": "CURRENT_TIMESTAMP",
+                "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+            },
+            {
+                "Field": "updated_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "deleted_at",
+                "Type": "datetime",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "id_user",
+                "Type": "int",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            },
+            {
+                "Field": "type",
+                "Type": "varchar(30)",
+                "Null": "YES",
+                "Key": "",
+                "Default": null,
+                "Extra": ""
+            }
+        ],
+        "sample": [
+            {
+                "id": 1,
+                "nama": "Tumpatan Gigi Tetap",
+                "deskripsi": null,
+                "tipe": "RL3.3",
+                "status": "1",
+                "created_at": "2021-10-06 03:00:02",
+                "updated_at": null,
+                "deleted_at": null,
+                "id_user": null,
+                "type": null
+            },
+            {
+                "id": 2,
+                "nama": "Tumpatan Gigi  Sulung",
+                "deskripsi": null,
+                "tipe": "RL3.3",
+                "status": "1",
+                "created_at": "2021-10-06 03:00:19",
+                "updated_at": null,
+                "deleted_at": null,
+                "id_user": null,
+                "type": null
+            },
+            {
+                "id": 3,
+                "nama": "Pengobatan Pulpa",
+                "deskripsi": null,
+                "tipe": "RL3.3",
+                "status": "1",
+                "created_at": "2021-10-06 03:00:33",
+                "updated_at": null,
+                "deleted_at": null,
+                "id_user": null,
+                "type": null
+            }
+        ]
+    }
+}

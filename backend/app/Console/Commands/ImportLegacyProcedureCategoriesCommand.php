@@ -57,13 +57,11 @@ class ImportLegacyProcedureCategoriesCommand extends Command
 
                 if ($isSoftDeleted) {
                     $stats['skipped_soft_deleted']++;
-                    continue;
+                    // We will import them to prevent orphan relationships, but set is_active=false
                 }
 
                 $stats['valid_for_import']++;
-
-                $isActive = (int) $legacy->status === 1;
-                
+                $isActive = $isSoftDeleted ? false : ((int) $legacy->status === 1);
                 if ($isActive) {
                     $stats['status_active']++;
                 } else {

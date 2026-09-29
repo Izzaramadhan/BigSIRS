@@ -50,6 +50,18 @@ const router = createRouter({
       component: () => import('../views/master-data/TariffTypeView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/procedures',
+      name: 'master-data.procedures',
+      component: () => import('../views/master-data/ProcedureView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/master-data/report-groups',
+      name: 'master-data.report-groups',
+      component: () => import('../views/master-data/ReportGroupView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
