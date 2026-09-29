@@ -74,6 +74,12 @@ const router = createRouter({
       component: () => import('../views/master-data/ProcedureUserMappingView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/diagnoses/icd10',
+      name: 'master-data.icd10',
+      component: () => import('../views/master-data/Icd10CodeView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
