@@ -48,6 +48,9 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('procedure-user-mappings', \App\Http\Controllers\Api\V1\MasterData\ProcedureUserMappingController::class);
             Route::patch('icd10/{icd10}/status', [\App\Http\Controllers\Api\V1\MasterData\Icd10CodeController::class, 'updateStatus']);
             Route::apiResource('icd10', \App\Http\Controllers\Api\V1\MasterData\Icd10CodeController::class);
+
+            Route::patch('icd9-cms/{icd9_cm}/status', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'updateStatus']);
+            Route::apiResource('icd9-cms', \App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class);
         });
 
         Route::prefix('lookups')->group(function () {

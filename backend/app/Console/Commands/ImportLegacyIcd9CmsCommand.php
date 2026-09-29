@@ -55,9 +55,11 @@ class ImportLegacyIcd9CmsCommand extends Command
                         $existing->update([
                             'legacy_id' => $row->id,
                             'code' => $row->kode,
-                            'description' => $row->nama,
+                            'name' => $row->nama,
                             'is_active' => $row->status == 1,
                             'needs_review' => $isNeedsReview,
+                            'inacbg_code' => $row->kode_inacbg ?? null,
+                            'inacbg_name' => $row->deskripsi_inacbg ?? null,
                         ]);
                     }
                 } else {
@@ -66,9 +68,11 @@ class ImportLegacyIcd9CmsCommand extends Command
                         Icd9Cm::create([
                             'legacy_id' => $row->id,
                             'code' => $row->kode,
-                            'description' => $row->nama,
+                            'name' => $row->nama,
                             'is_active' => $row->status == 1,
                             'needs_review' => $isNeedsReview,
+                            'inacbg_code' => $row->kode_inacbg ?? null,
+                            'inacbg_name' => $row->deskripsi_inacbg ?? null,
                         ]);
                     }
                 }
@@ -86,9 +90,9 @@ class ImportLegacyIcd9CmsCommand extends Command
                             Icd9Cm::create([
                                 'legacy_id' => null,
                                 'code' => $code,
-                                'description' => null, // Empty description as per rules
+                                'name' => 'Tidak Diketahui', // Use generic name
                                 'is_active' => true,
-                                'needs_review' => true, // Marked as needs_review
+                                'needs_review' => true,
                             ]);
                         }
                     }
