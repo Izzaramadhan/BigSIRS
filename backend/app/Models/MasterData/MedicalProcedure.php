@@ -46,4 +46,10 @@ class MedicalProcedure extends Model
     {
         return $this->belongsToMany(ReportGroup::class, 'medical_procedure_report_group');
     }
+
+    public function employees(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\Employee::class, 'procedure_employee', 'procedure_id', 'employee_id')
+                    ->withTimestamps();
+    }
 }

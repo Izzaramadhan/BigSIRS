@@ -68,6 +68,12 @@ const router = createRouter({
       component: () => import('../views/master-data/ProcedurePackageView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/procedure-user-mappings',
+      name: 'master-data.procedure-user-mappings',
+      component: () => import('../views/master-data/ProcedureUserMappingView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
