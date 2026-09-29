@@ -54,6 +54,13 @@ const navigation = [
               { name: 'Paket Tindakan', path: '/master-data/procedure-packages' },
               { name: 'Mapping Tindakan User', path: '/master-data/procedure-user-mappings' }
             ]
+          },
+          {
+            name: 'Data Diagnosa',
+            submenu: [
+              { name: 'ICD-10', path: '/master-data/diagnoses/icd10' },
+              { name: 'ICD-9', path: '/master-data/diagnoses/icd9', disabled: true }
+            ]
           }
         ]
       },

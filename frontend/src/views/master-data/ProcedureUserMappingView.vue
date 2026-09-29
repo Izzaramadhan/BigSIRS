@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useProcedureUserMappings } from '@/composables/useProcedureUserMappings'
 import ProcedureUserMappingTable from '@/components/master-data/procedure-user-mappings/ProcedureUserMappingTable.vue'
 import ProcedureUserMappingFormModal from '@/components/master-data/procedure-user-mappings/ProcedureUserMappingFormModal.vue'
@@ -21,6 +21,36 @@ const showFormModal = ref(false)
 const showDeleteConfirm = ref(false)
 const selectedMapping = ref(null)
 const selectedMappingId = ref(null)
+
+const visiblePages = computed(() => {
+  if (!meta.value || !meta.value.last_page) return []
+  const current = meta.value.current_page
+  const last = meta.value.last_page
+  const delta = 2
+  const range = []
+  const rangeWithDots = []
+  let l
+
+  for (let i = 1; i <= last; i++) {
+    if (i === 1 || i === last || (i >= current - delta && i <= current + delta)) {
+      range.push(i)
+    }
+  }
+
+  for (let i of range) {
+    if (l) {
+      if (i - l === 2) {
+        rangeWithDots.push(l + 1)
+      } else if (i - l !== 1) {
+        rangeWithDots.push('...')
+      }
+    }
+    rangeWithDots.push(i)
+    l = i
+  }
+
+  return rangeWithDots
+})
 
 const searchTimeout = ref(null)
 
@@ -176,11 +206,12 @@ watch(searchQuery, () => {
         </button>
         
         <button 
-          v-for="page in meta.last_page" 
-          :key="page"
+          v-for="(page, index) in visiblePages" 
+          :key="index"
           class="btn-page"
           :class="{ active: page === meta.current_page }"
-          @click="changePage(page)"
+          @click="page !== '...' ? changePage(page) : null"
+          :disabled="page === '...'"
         >
           {{ page }}
         </button>
