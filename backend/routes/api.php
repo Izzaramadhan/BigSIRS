@@ -41,6 +41,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('report-groups/{reportGroup}/status', [\App\Http\Controllers\Api\V1\MasterData\ReportGroupController::class, 'updateStatus']);
             Route::apiResource('report-groups', \App\Http\Controllers\Api\V1\MasterData\ReportGroupController::class);
+
+            Route::patch('procedure-packages/{procedurePackage}/status', [\App\Http\Controllers\Api\V1\MasterData\ProcedurePackageController::class, 'updateStatus']);
+            Route::apiResource('procedure-packages', \App\Http\Controllers\Api\V1\MasterData\ProcedurePackageController::class);
         });
 
         Route::prefix('lookups')->group(function () {

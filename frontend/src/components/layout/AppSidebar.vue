@@ -50,7 +50,8 @@ const navigation = [
               { name: 'Kategori Tindakan', path: '/master-data/procedure-categories' },
               { name: 'Komponen', path: '/master-data/tariff-components' },
               { name: 'Jenis Tarif', path: '/master-data/tariff-types' },
-              { name: 'Tindakan', path: '/master-data/procedures' }
+              { name: 'Tindakan', path: '/master-data/procedures' },
+              { name: 'Paket Tindakan', path: '/master-data/procedure-packages' }
             ]
           }
         ]

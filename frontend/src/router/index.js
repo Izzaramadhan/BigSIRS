@@ -62,6 +62,12 @@ const router = createRouter({
       component: () => import('../views/master-data/ReportGroupView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/procedure-packages',
+      name: 'master-data.procedure-packages',
+      component: () => import('../views/master-data/ProcedurePackageView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
