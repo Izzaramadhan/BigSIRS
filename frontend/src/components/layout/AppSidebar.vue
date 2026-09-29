@@ -59,7 +59,7 @@ const navigation = [
             name: 'Data Diagnosa',
             submenu: [
               { name: 'ICD-10', path: '/master-data/diagnoses/icd10' },
-              { name: 'ICD-9', path: '/master-data/diagnoses/icd9', disabled: true }
+              { name: 'ICD-9-CM', path: '/master-data/diagnoses/icd9' }
             ]
           }
         ]

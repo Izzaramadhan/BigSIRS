@@ -80,6 +80,12 @@ const router = createRouter({
       component: () => import('../views/master-data/Icd10CodeView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/master-data/diagnoses/icd9',
+      name: 'master-data.icd9',
+      component: () => import('../views/master-data/Icd9CmView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
