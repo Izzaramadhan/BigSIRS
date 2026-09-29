@@ -44,11 +44,14 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('procedure-packages/{procedurePackage}/status', [\App\Http\Controllers\Api\V1\MasterData\ProcedurePackageController::class, 'updateStatus']);
             Route::apiResource('procedure-packages', \App\Http\Controllers\Api\V1\MasterData\ProcedurePackageController::class);
+
+            Route::apiResource('procedure-user-mappings', \App\Http\Controllers\Api\V1\MasterData\ProcedureUserMappingController::class);
         });
 
         Route::prefix('lookups')->group(function () {
             Route::get('icd9-cms', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'index']);
             Route::get('icd9-cms/{icd9Cm}', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'show']);
+            Route::get('employees', [\App\Http\Controllers\Api\V1\LookupController::class, 'employees']);
         });
     });
 });
