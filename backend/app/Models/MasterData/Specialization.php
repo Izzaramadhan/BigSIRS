@@ -1,13 +1,12 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\MasterData;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Models\MasterData\MedicalProcedure;
 
-class Employee extends Model
+class Specialization extends Model
 {
     use HasFactory, SoftDeletes;
 
@@ -15,17 +14,10 @@ class Employee extends Model
         'legacy_id',
         'code',
         'name',
-        'profession',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
     ];
-
-    public function procedures()
-    {
-        return $this->belongsToMany(MedicalProcedure::class, 'procedure_employee', 'employee_id', 'procedure_id')
-                    ->withTimestamps();
-    }
 }
