@@ -44,6 +44,12 @@ const navigation = [
         expanded: false,
         submenu: [
           { name: 'Poliklinik', path: '/master-data/polyclinics' },
+          {
+            name: 'Data Dokter',
+            submenu: [
+              { name: 'Dokter', path: '/master-data/doctors' }
+            ]
+          },
           { 
             name: 'Master Data Tindakan',
             submenu: [

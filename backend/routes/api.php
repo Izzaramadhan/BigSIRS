@@ -51,6 +51,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('icd9-cms/{icd9_cm}/status', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'updateStatus']);
             Route::apiResource('icd9-cms', \App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class);
+
+            Route::patch('doctors/{doctor}/status', [\App\Http\Controllers\Api\V1\MasterData\DoctorController::class, 'updateStatus']);
+            Route::apiResource('doctors', \App\Http\Controllers\Api\V1\MasterData\DoctorController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -58,7 +61,17 @@ Route::prefix('v1')->group(function () {
             Route::get('icd9-cms/{icd9Cm}', [\App\Http\Controllers\Api\V1\MasterData\Icd9CmController::class, 'show']);
             Route::get('employees', [\App\Http\Controllers\Api\V1\LookupController::class, 'employees']);
             Route::get('icd10', [\App\Http\Controllers\Api\V1\MasterData\Icd10CodeController::class, 'index']);
+            Route::get('doctors', [\App\Http\Controllers\Api\V1\MasterData\DoctorController::class, 'lookup']);
+            Route::get('specializations', [\App\Http\Controllers\Api\V1\LookupController::class, 'specializations']);
+            Route::get('provinces', [\App\Http\Controllers\Api\V1\LookupController::class, 'provinces']);
+            Route::get('cities', [\App\Http\Controllers\Api\V1\LookupController::class, 'cities']);
+            Route::get('districts', [\App\Http\Controllers\Api\V1\LookupController::class, 'districts']);
+            Route::get('villages', [\App\Http\Controllers\Api\V1\LookupController::class, 'villages']);
+            Route::get('educations', [\App\Http\Controllers\Api\V1\LookupController::class, 'educations']);
+            Route::get('occupations', [\App\Http\Controllers\Api\V1\LookupController::class, 'occupations']);
         });
     });
 });
 
+
+Route::get('debug/doctors/{doctor}', [\App\Http\Controllers\Api\V1\MasterData\DoctorController::class, 'show']);
