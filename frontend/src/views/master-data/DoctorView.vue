@@ -4,7 +4,9 @@ import { useDoctors } from '@/composables/useDoctors';
 import DoctorTable from '@/components/master-data/doctors/DoctorTable.vue';
 import DoctorFilters from '@/components/master-data/doctors/DoctorFilters.vue';
 import DoctorFormModal from '@/components/master-data/doctors/DoctorFormModal.vue';
+import DoctorDetailModal from '@/components/master-data/doctors/DoctorDetailModal.vue';
 import DoctorEmptyState from '@/components/master-data/doctors/DoctorEmptyState.vue';
+import DoctorService from '@/services/master-data/doctors.service';
 
 const {
   items,
@@ -12,21 +14,23 @@ const {
   filters,
   sort,
   loading,
-  submitting,
   error,
   fetchDoctors,
-  createDoctor,
-  updateDoctor,
   toggleStatus,
   deleteDoctor,
   setPage,
   setSort
 } = useDoctors();
 
-const formModalOpen = ref(false);
-const selectedDoctor = ref(null);
+const isEditOpen = ref(false);
+const isDetailOpen = ref(false);
 const formErrors = ref({});
 const notification = ref(null);
+const formMode = ref('create');
+const selectedDoctorId = ref(null);
+const doctorDetail = ref(null);
+const detailLoading = ref(false);
+const statusLoadingId = ref(null);
 
 const showNotification = (message, type = 'success') => {
   notification.value = { message, type };
@@ -35,16 +39,75 @@ const showNotification = (message, type = 'success') => {
   }, 3000);
 };
 
-const openAddModal = () => {
-  selectedDoctor.value = null;
+const openCreateDoctor = () => {
+  formMode.value = 'create';
+  selectedDoctorId.value = null;
+  doctorDetail.value = null;
   formErrors.value = {};
-  formModalOpen.value = true;
+  isEditOpen.value = true;
 };
 
-const openEditModal = (item) => {
-  selectedDoctor.value = item;
+const openDoctorDetail = async (row) => {
+  selectedDoctorId.value = row.id;
+  isDetailOpen.value = true;
+  detailLoading.value = true;
+  
+  try {
+    const response = await DoctorService.getDoctor(row.id);
+    const detail = response.data?.data || response.data || response;
+
+    if (!detail?.id) {
+      throw new Error('Detail Dokter tidak valid');
+    }
+
+    doctorDetail.value = detail;
+  } catch (err) {
+    showNotification('Gagal memuat detail Dokter.', 'error');
+    console.error(err);
+    isDetailOpen.value = false;
+  } finally {
+    detailLoading.value = false;
+  }
+};
+
+const openEditDoctor = async (row) => {
+  selectedDoctorId.value = row.id;
+  detailLoading.value = true;
   formErrors.value = {};
-  formModalOpen.value = true;
+  
+  try {
+    const response = await DoctorService.getDoctor(row.id);
+    const detail = response.data?.data || response.data || response;
+
+    if (!detail?.id) {
+      throw new Error('Detail Dokter tidak valid');
+    }
+
+    doctorDetail.value = detail;
+    formMode.value = 'edit';
+    isEditOpen.value = true;
+  } catch (err) {
+    showNotification('Gagal memuat data Dokter untuk diedit.', 'error');
+    console.error(err);
+  } finally {
+    detailLoading.value = false;
+  }
+};
+
+const openEditFromDetail = () => {
+  if (doctorDetail.value) {
+    isDetailOpen.value = false;
+    formMode.value = 'edit';
+    isEditOpen.value = true;
+  }
+};
+
+const closeDoctorForm = () => {
+  isEditOpen.value = false;
+};
+
+const closeDoctorDetail = () => {
+  isDetailOpen.value = false;
 };
 
 const handleFilter = ({ key, value }) => {
@@ -61,41 +124,35 @@ const handleResetFilters = () => {
   fetchDoctors();
 };
 
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {};
-  
-  let result;
-  if (selectedDoctor.value) {
-    result = await updateDoctor(selectedDoctor.value.id, payload);
-  } else {
-    result = await createDoctor(payload);
-  }
-  
-  if (result.success) {
-    formModalOpen.value = false;
-    showNotification(`Dokter berhasil ${selectedDoctor.value ? 'diperbarui' : 'ditambahkan'}.`);
-    fetchDoctors();
-  } else {
-    if (result.error.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {};
-    } else {
-      formErrors.value = { general: 'Terjadi kesalahan sistem. Silakan coba lagi.' };
-    }
-  }
+const handleDoctorSaved = () => {
+  isEditOpen.value = false;
+  showNotification(`Dokter berhasil ${formMode.value === 'edit' ? 'diperbarui' : 'ditambahkan'}.`);
+  fetchDoctors();
+};
+
+const normalizeActiveStatus = (value) => {
+  return value === true || value === 1 || value === '1' || value === 'true';
 };
 
 const handleToggleStatus = async (item) => {
-  const result = await toggleStatus(item.id, !item.is_active);
+  const currentStatus = normalizeActiveStatus(item.is_active);
+  const nextStatus = !currentStatus;
+  
+  statusLoadingId.value = item.id;
+  const result = await toggleStatus(item.id, nextStatus);
   if (result.success) {
-    showNotification('Status Dokter berhasil diubah.');
+    showNotification(`Dokter berhasil ${nextStatus ? 'diaktifkan' : 'dinonaktifkan'}.`);
     fetchDoctors();
   } else {
-    showNotification('Gagal mengubah status Dokter.', 'error');
+    showNotification(`Gagal mengubah status Dokter.`, 'error');
   }
+  statusLoadingId.value = null;
 };
+
 
 const handleDeleteConfirm = async (item) => {
   if (confirm(`Yakin ingin menghapus dokter ${item.name}?`)) {
+    detailLoading.value = true; // Use for loading state indicator
     const result = await deleteDoctor(item.id);
     if (result.success) {
       showNotification('Dokter berhasil dihapus.');
@@ -103,6 +160,7 @@ const handleDeleteConfirm = async (item) => {
     } else {
       showNotification('Terjadi kesalahan saat menghapus data.', 'error');
     }
+    detailLoading.value = false;
   }
 };
 
@@ -135,11 +193,12 @@ onMounted(() => {
       </div>
       
       <div class="header-actions">
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <button type="button" class="btn-primary" @click="openCreateDoctor" :disabled="editLoading">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-if="!editLoading">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
+          <span v-if="editLoading" class="spinner"></span>
           Tambah Dokter
         </button>
       </div>
@@ -168,10 +227,10 @@ onMounted(() => {
       <template v-else>
         <DoctorEmptyState 
           v-if="!loading && items.length === 0" 
-          :is-search="!!filters.search || filters.is_active !== null || !!filters.specialization_id"
+          :is-search="!!filters.search"
         >
-          <template #action v-if="!filters.search && filters.is_active === null && !filters.specialization_id">
-            <button class="btn-primary" @click="openAddModal">Tambah Dokter</button>
+          <template #action v-if="!filters.search">
+            <button class="btn-primary" @click="openCreateDoctor">Tambah Dokter</button>
           </template>
         </DoctorEmptyState>
         
@@ -181,8 +240,10 @@ onMounted(() => {
             :pagination="pagination"
             :sort="sort"
             :loading="loading"
+            :statusLoadingId="statusLoadingId"
             @sort="setSort"
-            @edit="openEditModal"
+            @view="openDoctorDetail"
+            @edit="openEditDoctor"
             @toggle-status="handleToggleStatus"
             @delete="handleDeleteConfirm"
           />
@@ -233,13 +294,21 @@ onMounted(() => {
 
     <!-- Modals -->
     <DoctorFormModal 
-      v-if="formModalOpen"
-      :is-open="formModalOpen"
-      :doctor="selectedDoctor"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="formModalOpen = false"
-      @submit="handleFormSubmit"
+      v-if="isEditOpen"
+      :key="`${formMode}-${selectedDoctorId ?? 'new'}`"
+      :open="isEditOpen"
+      :mode="formMode"
+      :initial-data="doctorDetail"
+      @close="closeDoctorForm"
+      @saved="handleDoctorSaved"
+    />
+    <DoctorDetailModal
+      v-if="isDetailOpen"
+      :open="isDetailOpen"
+      :loading="detailLoading"
+      :detail="doctorDetail"
+      @close="closeDoctorDetail"
+      @edit="openEditFromDetail"
     />
   </div>
 </template>

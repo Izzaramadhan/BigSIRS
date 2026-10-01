@@ -6,25 +6,54 @@ class DoctorService {
     return response.data
   }
 
+  buildFormData(data, method = null) {
+    const formData = new FormData();
+    if (method) {
+      formData.append('_method', method);
+    }
+    
+    if (data.employee_id) formData.append('employee_id', data.employee_id);
+    if (data.signature) formData.append('signature', data.signature);
+    if (data.remove_signature) formData.append('remove_signature', data.remove_signature ? '1' : '0');
+
+    if (data.person) {
+      for (const [key, value] of Object.entries(data.person)) {
+        if (value !== null && value !== undefined) {
+          formData.append(`person[${key}]`, value);
+        }
+      }
+    }
+
+    if (data.professional) {
+      for (const [key, value] of Object.entries(data.professional)) {
+        if (value !== null && value !== undefined) {
+          formData.append(`professional[${key}]`, value === true ? '1' : (value === false ? '0' : value));
+        }
+      }
+    }
+    
+    return formData;
+  }
+
   async createDoctor(data) {
-    const response = await axios.post('/master-data/doctors', data, {
+    const formData = this.buildFormData(data);
+    const response = await axios.post('/master-data/doctors', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    return response.data
+    });
+    return response.data;
   }
 
   async getDoctor(id) {
-    const response = await axios.get(`/master-data/doctors/${id}`)
-    return response.data
+    const response = await axios.get(`/master-data/doctors/${id}`);
+    return response.data;
   }
 
   async updateDoctor(id, data) {
-    // We use POST with _method=PUT to support file uploads in PHP/Laravel
-    data.append('_method', 'PUT')
-    const response = await axios.post(`/master-data/doctors/${id}`, data, {
+    const formData = this.buildFormData(data, 'PUT');
+    const response = await axios.post(`/master-data/doctors/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    return response.data
+    });
+    return response.data;
   }
 
   async updateStatus(id, isActive) {

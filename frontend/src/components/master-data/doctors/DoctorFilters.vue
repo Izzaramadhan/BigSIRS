@@ -1,6 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue';
-import axios from '@/utils/axios';
+import { ref, watch } from 'vue';
 
 const props = defineProps({
   filters: {
@@ -16,29 +15,10 @@ const props = defineProps({
 const emit = defineEmits(['filter', 'reset', 'refresh']);
 
 const localSearch = ref(props.filters.search);
-let searchTimeout = null;
 
-const specializations = ref([]);
-
-const fetchSpecializations = async () => {
-  try {
-    const response = await axios.get('/lookups/specializations');
-    specializations.value = response.data.data || response.data;
-  } catch (err) {
-    console.error('Failed to load specializations', err);
-  }
+const executeSearch = () => {
+  emit('filter', { key: 'search', value: localSearch.value });
 };
-
-onMounted(() => {
-  fetchSpecializations();
-});
-
-watch(localSearch, (newVal) => {
-  if (searchTimeout) clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    emit('filter', { key: 'search', value: newVal });
-  }, 400);
-});
 
 watch(() => props.filters.search, (newVal) => {
   if (localSearch.value !== newVal) {
@@ -57,39 +37,23 @@ watch(() => props.filters.search, (newVal) => {
       <input 
         type="text" 
         v-model="localSearch" 
+        @keyup.enter="executeSearch"
         placeholder="Cari nama dokter atau kode..." 
         class="search-input"
         :disabled="loading"
         aria-label="Cari dokter"
       >
+      <button 
+        type="button" 
+        class="btn-search" 
+        @click="executeSearch"
+        :disabled="loading"
+      >
+        Cari
+      </button>
     </div>
     
     <div class="filter-controls">
-      <select 
-        :value="filters.is_active" 
-        @change="emit('filter', { key: 'is_active', value: $event.target.value === 'null' ? null : $event.target.value === 'true' })"
-        class="filter-select"
-        :disabled="loading"
-        aria-label="Filter status aktif"
-      >
-        <option value="null">Semua Status</option>
-        <option value="true">Aktif</option>
-        <option value="false">Nonaktif</option>
-      </select>
-      
-      <select 
-        :value="filters.specialization_id" 
-        @change="emit('filter', { key: 'specialization_id', value: $event.target.value === 'null' ? null : $event.target.value })"
-        class="filter-select"
-        :disabled="loading"
-        aria-label="Filter spesialisasi"
-      >
-        <option value="null">Semua Spesialisasi</option>
-        <option v-for="st in specializations" :key="st.id" :value="st.id">
-          {{ st.name }}
-        </option>
-      </select>
-      
       <button 
         type="button" 
         class="btn-icon" 
@@ -137,6 +101,8 @@ watch(() => props.filters.search, (newVal) => {
   flex: 1;
   min-width: 250px;
   max-width: 400px;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .search-icon {
@@ -147,6 +113,7 @@ watch(() => props.filters.search, (newVal) => {
   width: 18px;
   height: 18px;
   color: var(--color-text-secondary);
+  pointer-events: none;
 }
 
 .search-input {
@@ -163,6 +130,21 @@ watch(() => props.filters.search, (newVal) => {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.btn-search {
+  background: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  padding: 0 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-search:hover:not(:disabled) {
+  opacity: 0.9;
 }
 
 .filter-controls {

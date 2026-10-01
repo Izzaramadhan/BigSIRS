@@ -15,10 +15,19 @@ defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  statusLoadingId: {
+    type: [Number, String],
+    default: null
   }
 });
 
-const emit = defineEmits(['sort', 'edit', 'toggle-status', 'delete']);
+const emit = defineEmits(['sort', 'view', 'edit', 'toggle-status', 'delete']);
+
+const isDoctorActive = (doctor) => {
+  const value = doctor.is_active;
+  return value === true || value === 1 || value === '1' || value === 'true';
+};
 </script>
 
 <template>
@@ -33,20 +42,7 @@ const emit = defineEmits(['sort', 'edit', 'toggle-status', 'delete']);
               {{ sort.direction === 'asc' ? '↑' : '↓' }}
             </span>
           </th>
-          <th @click="emit('sort', 'str_number')" class="sortable">
-            No. STR
-            <span class="sort-icon" v-if="sort.column === 'str_number'">
-              {{ sort.direction === 'asc' ? '↑' : '↓' }}
-            </span>
-          </th>
-          <th @click="emit('sort', 'sip_number')" class="sortable">
-            No. SIP
-            <span class="sort-icon" v-if="sort.column === 'sip_number'">
-              {{ sort.direction === 'asc' ? '↑' : '↓' }}
-            </span>
-          </th>
           <th>Spesialisasi</th>
-          <th>Status</th>
           <th class="text-right">Aksi</th>
         </tr>
       </thead>
@@ -54,43 +50,49 @@ const emit = defineEmits(['sort', 'edit', 'toggle-status', 'delete']);
         <tr v-for="(item, index) in items" :key="item.id">
           <td>{{ (pagination.current_page - 1) * pagination.per_page + index + 1 }}</td>
           <td>
-            <div class="fw-medium">{{ item.name }}</div>
-            <div class="text-sm text-secondary">{{ item.nik }}</div>
+            <div class="fw-medium">{{ item.name || '—' }}</div>
           </td>
-          <td>{{ item.str_number || '-' }}</td>
-          <td>
-            <div>{{ item.sip_number || '-' }}</div>
-            <div class="text-sm text-secondary" v-if="item.sip_valid_until">
-              Berlaku s/d: {{ item.sip_valid_until }}
-            </div>
-          </td>
-          <td>{{ item.specialization || '-' }}</td>
-          <td>
-            <button 
-              class="status-toggle"
-              :class="item.is_active ? 'is-active' : 'is-inactive'"
-              @click="emit('toggle-status', item)"
-              :disabled="loading"
-              :title="item.is_active ? 'Nonaktifkan' : 'Aktifkan'"
-            >
-              {{ item.is_active ? 'Aktif' : 'Nonaktif' }}
-            </button>
-          </td>
+          <td>{{ item.specialization?.name ?? '—' }}</td>
           <td class="text-right actions-cell">
-            <button class="btn-icon" @click="emit('edit', item)" title="Edit">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-            </button>
-            <button class="btn-icon btn-icon-danger" @click="emit('delete', item)" title="Hapus">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-              </svg>
-            </button>
+            <div class="action-group">
+              <button class="btn-icon" @click="emit('view', item)" title="Lihat Detail" aria-label="Lihat detail Dokter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+              <button class="btn-icon" @click="emit('edit', item)" title="Edit" aria-label="Edit Dokter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="status-pill"
+                :class="isDoctorActive(item) ? 'status-pill--active' : 'status-pill--inactive'"
+                :disabled="statusLoadingId === item.id"
+                :aria-label="isDoctorActive(item) ? `Nonaktifkan ${item.name}` : `Aktifkan ${item.name}`"
+                :title="isDoctorActive(item) ? 'Klik untuk menonaktifkan Dokter' : 'Klik untuk mengaktifkan Dokter'"
+                @click="emit('toggle-status', item)"
+              >
+                {{
+                  statusLoadingId === item.id
+                    ? 'Memproses...'
+                    : isDoctorActive(item)
+                      ? 'Aktif'
+                      : 'Nonaktif'
+                }}
+              </button>
+              <button class="btn-icon btn-icon-danger" @click="emit('delete', item)" title="Hapus" aria-label="Hapus Dokter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -156,6 +158,19 @@ const emit = defineEmits(['sort', 'edit', 'toggle-status', 'delete']);
 
 .text-right {
   text-align: right;
+}
+
+.actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  justify-content: flex-end;
 }
 
 .fw-medium {
@@ -229,5 +244,52 @@ const emit = defineEmits(['sort', 'edit', 'toggle-status', 'delete']);
 .btn-icon-danger:hover {
   color: #dc2626;
   background: #fee2e2;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 26px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 120ms ease;
+}
+
+.status-pill--active {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.status-pill--inactive {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.status-pill:hover:not(:disabled) {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+}
+
+.status-pill:focus-visible {
+  outline: 2px solid #0f8f83;
+  outline-offset: 2px;
+}
+
+.status-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
 }
 </style>

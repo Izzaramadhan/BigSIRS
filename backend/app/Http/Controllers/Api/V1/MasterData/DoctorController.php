@@ -20,9 +20,14 @@ class DoctorController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->whereHas('employee', function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%"); // legacy_id or code might be NIK
+            $query->where(function($q) use ($search) {
+                $q->where('sip_number', 'like', "%{$search}%")
+                  ->orWhere('legacy_id', 'like', "%{$search}%")
+                  ->orWhereHas('employee', function ($q2) use ($search) {
+                      $q2->where('name', 'like', "%{$search}%")
+                        ->orWhere('national_id', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%");
+                  });
             });
         }
 
@@ -56,13 +61,27 @@ class DoctorController extends Controller
         return DB::transaction(function () use ($request) {
             $data = $request->validated();
             
+            $personData = $data['person'];
+            $professionalData = $data['professional'];
+            $employeeId = $request->input('employee_id');
+            
+            if ($employeeId) {
+                $employee = \App\Models\Employee::findOrFail($employeeId);
+                $employee->update($personData);
+            } else {
+                $personData['profession'] = 'Dokter';
+                $personData['is_active'] = true;
+                $employee = \App\Models\Employee::create($personData);
+            }
+
             // Handle signature upload
             if ($request->hasFile('signature')) {
                 $path = $request->file('signature')->store('signatures', 'public');
-                $data['signature_path'] = $path;
+                $professionalData['signature_path'] = $path;
             }
 
-            $doctor = Doctor::create($data);
+            $professionalData['employee_id'] = $employee->id;
+            $doctor = Doctor::create($professionalData);
             
             return new DoctorResource($doctor->load(['employee', 'specialization']));
         });
@@ -77,6 +96,12 @@ class DoctorController extends Controller
     {
         return DB::transaction(function () use ($request, $doctor) {
             $data = $request->validated();
+            
+            $personData = $data['person'];
+            $professionalData = $data['professional'];
+            
+            $employee = $doctor->employee;
+            $employee->update($personData);
 
             if ($request->hasFile('signature')) {
                 // Delete old signature
@@ -84,15 +109,15 @@ class DoctorController extends Controller
                     Storage::disk('public')->delete($doctor->signature_path);
                 }
                 $path = $request->file('signature')->store('signatures', 'public');
-                $data['signature_path'] = $path;
+                $professionalData['signature_path'] = $path;
             } elseif ($request->boolean('remove_signature')) {
                 if ($doctor->signature_path && Storage::disk('public')->exists($doctor->signature_path)) {
                     Storage::disk('public')->delete($doctor->signature_path);
                 }
-                $data['signature_path'] = null;
+                $professionalData['signature_path'] = null;
             }
 
-            $doctor->update($data);
+            $doctor->update($professionalData);
 
             return new DoctorResource($doctor->load(['employee', 'specialization']));
         });

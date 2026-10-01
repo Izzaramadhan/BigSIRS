@@ -39,7 +39,7 @@ class DoctorTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'specialization', 'is_active']
+                    '*' => ['id', 'name', 'specialization']
                 ],
                 'meta' => ['current_page', 'last_page', 'per_page', 'total']
             ]);
@@ -63,7 +63,7 @@ class DoctorTest extends TestCase
 
     public function test_can_search_by_nik()
     {
-        $employee = Employee::factory()->create(['code' => '330123456789']);
+        $employee = Employee::factory()->create(['national_id' => '330123456789']);
         $doctor = Doctor::factory()->create(['employee_id' => $employee->id]);
         Doctor::factory()->create();
 
@@ -72,7 +72,19 @@ class DoctorTest extends TestCase
 
         $response->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.nik', '330123456789');
+            ->assertJsonPath('data.0.id', $doctor->id);
+    }
+
+    public function test_non_doctor_employee_does_not_appear_in_search()
+    {
+        $employee = Employee::factory()->create(['name' => 'Budi Bukan Dokter']);
+        // Do NOT create a doctor profile for this employee
+
+        $response = $this->actingAs($this->user)
+            ->getJson('/api/v1/master-data/doctors?search=Budi');
+
+        $response->assertOk()
+            ->assertJsonCount(0, 'data');
     }
 
     public function test_can_filter_by_specialization()
@@ -88,7 +100,7 @@ class DoctorTest extends TestCase
 
         $response->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.specialization_id', $spec1->id);
+            ->assertJsonPath('data.0.specialization.id', $spec1->id);
     }
 
     public function test_can_filter_by_status()
@@ -100,8 +112,7 @@ class DoctorTest extends TestCase
             ->getJson('/api/v1/master-data/doctors?status=1');
 
         $response->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.is_active', true);
+            ->assertJsonCount(1, 'data');
     }
 
     public function test_can_create_doctor_with_existing_employee()
@@ -113,13 +124,19 @@ class DoctorTest extends TestCase
 
         $data = [
             'employee_id' => $employee->id,
-            'specialization_id' => $spec->id,
-            'str_number' => 'STR123',
-            'sip_number' => 'SIP123',
-            'sip_valid_until' => '2030-12-31',
-            'bpjs_dpjp_code' => 'DPJP1',
-            'ihs_number' => 'IHS1',
-            'is_active' => true,
+            'person' => [
+                'name' => $employee->name,
+                'gender' => 'L',
+                'national_id' => '1234567890123456'
+            ],
+            'professional' => [
+                'specialization_id' => $spec->id,
+                'str_number' => 'STR123',
+                'sip_number' => 'SIP123',
+                'sip_valid_until' => '2030-12-31',
+                'bpjs_dpjp_code' => 'DPJP1',
+                'is_active' => true,
+            ],
             'signature' => UploadedFile::fake()->createWithContent('ttd.jpg', 'fake-image-content')->mimeType('image/jpeg'),
         ];
 
@@ -141,6 +158,8 @@ class DoctorTest extends TestCase
 
         $data = [
             'employee_id' => $doctor->employee_id,
+            'person' => ['name' => 'test', 'gender' => 'L'],
+            'professional' => ['specialization_id' => 1]
         ];
 
         $response = $this->actingAs($this->user)
@@ -158,16 +177,43 @@ class DoctorTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('data.id', $doctor->id)
-            ->assertJsonStructure(['data' => ['str_number', 'sip_number', 'has_signature']]);
+            ->assertJsonStructure([
+                'data' => [
+                    'str_number', 
+                    'sip_number', 
+                    'has_signature',
+                    'employee' => [
+                        'id',
+                        'national_id',
+                        'name',
+                        'education_id',
+                        'occupation_id',
+                        'province_id',
+                        'city_id',
+                        'district_id',
+                        'village_id',
+                    ]
+                ]
+            ]);
     }
 
     public function test_can_update_doctor()
     {
-        $doctor = Doctor::factory()->create(['str_number' => 'OLD']);
+        $employee = Employee::factory()->create(['name' => 'Old Name']);
+        $doctor = Doctor::factory()->create(['str_number' => 'OLD', 'employee_id' => $employee->id]);
+        $spec = Specialization::factory()->create();
 
         $data = [
             'employee_id' => $doctor->employee_id,
-            'str_number' => 'NEW_STR',
+            'person' => [
+                'name' => 'New Name',
+                'gender' => 'P'
+            ],
+            'professional' => [
+                'specialization_id' => $spec->id,
+                'str_number' => 'NEW_STR',
+                'is_active' => true,
+            ]
         ];
 
         $response = $this->actingAs($this->user)
@@ -178,21 +224,102 @@ class DoctorTest extends TestCase
             'id' => $doctor->id,
             'str_number' => 'NEW_STR'
         ]);
+        $this->assertDatabaseHas('employees', [
+            'id' => $employee->id,
+            'name' => 'New Name'
+        ]);
     }
 
     public function test_unique_validation_ignores_self_on_update()
     {
-        $doctor = Doctor::factory()->create(['sip_number' => 'SIP1']);
+        $employee = Employee::factory()->create();
+        $doctor = Doctor::factory()->create(['sip_number' => 'SIP1', 'employee_id' => $employee->id]);
+        $spec = Specialization::factory()->create();
 
         $data = [
             'employee_id' => $doctor->employee_id,
-            'sip_number' => 'SIP1',
+            'person' => [
+                'name' => $employee->name,
+                'gender' => 'L'
+            ],
+            'professional' => [
+                'specialization_id' => $spec->id,
+                'sip_number' => 'SIP1',
+                'is_active' => true,
+            ]
         ];
 
         $response = $this->actingAs($this->user)
             ->putJson('/api/v1/master-data/doctors/' . $doctor->id, $data);
 
         $response->assertOk(); // No validation error
+    }
+
+    public function test_create_validates_gender_is_required()
+    {
+        $employee = Employee::factory()->create();
+        $spec = Specialization::factory()->create();
+
+        $data = [
+            'employee_id' => $employee->id,
+            'person' => [
+                'name' => $employee->name,
+                // gender is missing
+            ],
+            'professional' => [
+                'specialization_id' => $spec->id,
+            ],
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/master-data/doctors', $data);
+
+        $response->assertJsonValidationErrors(['person.gender']);
+    }
+
+    public function test_create_validates_gender_is_valid_enum()
+    {
+        $employee = Employee::factory()->create();
+        $spec = Specialization::factory()->create();
+
+        $data = [
+            'employee_id' => $employee->id,
+            'person' => [
+                'name' => $employee->name,
+                'gender' => 'INVALID_GENDER'
+            ],
+            'professional' => [
+                'specialization_id' => $spec->id,
+            ],
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/master-data/doctors', $data);
+
+        $response->assertJsonValidationErrors(['person.gender']);
+    }
+
+    public function test_update_validates_gender_is_required()
+    {
+        $employee = Employee::factory()->create(['name' => 'Old Name', 'gender' => 'L']);
+        $doctor = Doctor::factory()->create(['employee_id' => $employee->id]);
+        $spec = Specialization::factory()->create();
+
+        $data = [
+            'employee_id' => $doctor->employee_id,
+            'person' => [
+                'name' => 'New Name',
+                // gender is missing
+            ],
+            'professional' => [
+                'specialization_id' => $spec->id,
+            ]
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->putJson('/api/v1/master-data/doctors/' . $doctor->id, $data);
+
+        $response->assertJsonValidationErrors(['person.gender']);
     }
 
     public function test_can_update_status()

@@ -39,7 +39,7 @@ const fetchOptions = async (query = '') => {
       is_active: true,
       per_page: 50
     })
-    options.value = response.data
+    options.value = response.data ? (Array.isArray(response.data) ? response.data : (response.data.data || response.data)) : (response.data || response)
   } catch (err) {
     console.error('Failed to fetch employees', err)
   } finally {

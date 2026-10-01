@@ -59,13 +59,7 @@ export function useDoctors() {
   const createDoctor = async (payload) => {
     submitting.value = true;
     try {
-      const formData = new FormData();
-      for (const key in payload) {
-        if (payload[key] !== null && payload[key] !== undefined) {
-          formData.append(key, payload[key]);
-        }
-      }
-      await doctorService.createDoctor(formData);
+      await doctorService.createDoctor(payload);
       return { success: true };
     } catch (err) {
       return { success: false, error: err };
@@ -77,17 +71,7 @@ export function useDoctors() {
   const updateDoctor = async (id, payload) => {
     submitting.value = true;
     try {
-      const formData = new FormData();
-      for (const key in payload) {
-        if (payload[key] !== null && payload[key] !== undefined) {
-          if (typeof payload[key] === 'boolean') {
-            formData.append(key, payload[key] ? 1 : 0);
-          } else {
-            formData.append(key, payload[key]);
-          }
-        }
-      }
-      await doctorService.updateDoctor(id, formData);
+      await doctorService.updateDoctor(id, payload);
       return { success: true };
     } catch (err) {
       return { success: false, error: err };
