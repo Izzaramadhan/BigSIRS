@@ -79,9 +79,24 @@ class LookupController extends Controller
         return response()->json($query->orderBy('name')->get());
     }
 
-    public function educations()
+    public function educations(Request $request)
     {
-        return response()->json(\App\Models\Education::orderBy('name')->get());
+        $query = \App\Models\Education::query();
+        
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+
+        if ($request->has('is_active')) {
+            $query->where('is_active', $request->boolean('is_active'));
+        }
+
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
+        return response()->json($query->orderBy('name')->get());
     }
 
     public function occupations()
