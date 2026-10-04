@@ -47,7 +47,8 @@ const navigation = [
           {
             name: 'Data Dasar',
             submenu: [
-              { name: 'Pendidikan', path: '/master-data/basic-data/educations' }
+              { name: 'Pendidikan', path: '/master-data/basic-data/educations' },
+              { name: 'Pekerjaan', path: '/master-data/basic-data/occupations' }
             ]
           },
           {

@@ -52,4 +52,14 @@ class Employee extends Model
     {
         return $this->hasOne(\App\Models\MasterData\Doctor::class, 'employee_id');
     }
+
+    public function education()
+    {
+        return $this->belongsTo(Education::class);
+    }
+
+    public function occupation()
+    {
+        return $this->belongsTo(Occupation::class);
+    }
 }
