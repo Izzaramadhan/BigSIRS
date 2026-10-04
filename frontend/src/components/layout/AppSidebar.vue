@@ -45,6 +45,12 @@ const navigation = [
         submenu: [
           { name: 'Poliklinik', path: '/master-data/polyclinics' },
           {
+            name: 'Data Dasar',
+            submenu: [
+              { name: 'Pendidikan', path: '/master-data/basic-data/educations' }
+            ]
+          },
+          {
             name: 'Data Dokter',
             submenu: [
               { name: 'Dokter', path: '/master-data/doctors' },

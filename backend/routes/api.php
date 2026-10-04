@@ -56,6 +56,9 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('doctors', \App\Http\Controllers\Api\V1\MasterData\DoctorController::class);
             
             Route::apiResource('doctor-schedules', \App\Http\Controllers\Api\V1\MasterData\DoctorScheduleController::class);
+
+            Route::patch('educations/{education}/status', [\App\Http\Controllers\Api\V1\MasterData\EducationController::class, 'updateStatus']);
+            Route::apiResource('educations', \App\Http\Controllers\Api\V1\MasterData\EducationController::class);
         });
 
         Route::prefix('lookups')->group(function () {
