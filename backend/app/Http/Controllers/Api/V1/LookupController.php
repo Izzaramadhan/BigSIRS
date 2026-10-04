@@ -99,8 +99,15 @@ class LookupController extends Controller
         return response()->json($query->orderBy('name')->get());
     }
 
-    public function occupations()
+    public function occupations(Request $request)
     {
-        return response()->json(\App\Models\Occupation::orderBy('name')->get());
+        $query = \App\Models\Occupation::where('is_active', true);
+
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
+        return response()->json($query->orderBy('name')->get());
     }
 }
