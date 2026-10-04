@@ -33,17 +33,19 @@ const filteredOptions = computed(() => {
 });
 
 const selectedItem = computed(() => {
-  return props.options.find(o => o.id === props.modelValue);
+  return props.options.find(o => o.id === props.modelValue || o.value === props.modelValue);
 });
 
 const getDisplayName = (opt) => {
+  if (opt.label) return opt.label;
   if (opt.code && (opt.name || opt.description)) {
     return `${opt.code} — ${opt.name || opt.description}`;
   }
   return opt.name || opt.description || opt.code || 'Unknown';
 };
 
-const selectOption = (id) => {
+const selectOption = (opt) => {
+  const id = opt.value !== undefined ? opt.value : opt.id;
   emit('update:modelValue', id);
   isOpen.value = false;
   searchQuery.value = '';
@@ -86,10 +88,10 @@ onUnmounted(() => {
         <div v-if="filteredOptions.length === 0" class="no-options">Tidak ada data ditemukan.</div>
         <div 
           v-for="opt in filteredOptions" 
-          :key="opt.id" 
+          :key="opt.value !== undefined ? opt.value : opt.id" 
           class="option-item"
-          :class="{ 'is-selected': props.modelValue === opt.id }"
-          @click.stop="selectOption(opt.id)"
+          :class="{ 'is-selected': props.modelValue === (opt.value !== undefined ? opt.value : opt.id) }"
+          @click.stop="selectOption(opt)"
         >
           {{ getDisplayName(opt) }}
         </div>

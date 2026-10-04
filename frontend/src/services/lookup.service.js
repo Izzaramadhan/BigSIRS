@@ -10,7 +10,11 @@ class LookupService {
     const response = await axios.get('/lookups/employees', { params })
     return response.data // Keep this as is if they expect paginator for employees
   }
-  
+  async getDoctors(params = {}) {
+    const response = await axios.get('/lookups/doctors', { params })
+    return response.data
+  }
+
   async getSpecializations(params = {}) {
     const response = await axios.get('/lookups/specializations', { params })
     return extractCollection(response)

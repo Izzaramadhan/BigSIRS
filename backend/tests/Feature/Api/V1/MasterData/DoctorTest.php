@@ -362,7 +362,7 @@ class DoctorTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'display_name', 'specialization', 'is_active']
+                    '*' => ['id', 'label', 'name', 'specialization_name', 'is_active']
                 ]
             ]);
             
