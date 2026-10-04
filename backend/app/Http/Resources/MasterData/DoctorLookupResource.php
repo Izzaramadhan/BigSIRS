@@ -9,11 +9,17 @@ class DoctorLookupResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $name = $this->employee ? $this->employee->name : 'Unknown';
+        $specializationName = $this->specialization ? $this->specialization->name : '';
+        
+        $label = $specializationName ? "{$name} — {$specializationName}" : $name;
+
         return [
             'id' => $this->id,
-            'display_name' => $this->employee ? $this->employee->name : 'Unknown',
-            'specialization' => $this->specialization ? $this->specialization->name : null,
-            'is_active' => $this->is_active,
+            'label' => $label,
+            'name' => $name,
+            'specialization_name' => $specializationName,
+            'is_active' => (bool) $this->is_active,
         ];
     }
 }

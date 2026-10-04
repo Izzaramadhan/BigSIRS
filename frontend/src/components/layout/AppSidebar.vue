@@ -47,7 +47,8 @@ const navigation = [
           {
             name: 'Data Dokter',
             submenu: [
-              { name: 'Dokter', path: '/master-data/doctors' }
+              { name: 'Dokter', path: '/master-data/doctors' },
+              { name: 'Jadwal Dokter', path: '/master-data/doctor-schedules' }
             ]
           },
           { 
