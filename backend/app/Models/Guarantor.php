@@ -19,11 +19,14 @@ class Guarantor extends Model
         'name',
         'type',
         'is_active',
+        'is_government',
+        'inacbg_id',
     ];
 
     protected $casts = [
         'type' => GuarantorType::class,
         'is_active' => 'boolean',
+        'is_government' => 'boolean',
     ];
 
     public function scopeActive(Builder $query): Builder

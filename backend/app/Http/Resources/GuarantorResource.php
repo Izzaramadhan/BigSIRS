@@ -22,6 +22,8 @@ class GuarantorResource extends JsonResource
             'type' => $this->type?->value,
             'type_label' => $this->type?->label(),
             'is_active' => $this->is_active,
+            'is_government' => $this->is_government,
+            'inacbg_id' => $this->inacbg_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

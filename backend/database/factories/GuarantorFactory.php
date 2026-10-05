@@ -22,6 +22,8 @@ class GuarantorFactory extends Factory
             'name' => $this->faker->company(),
             'type' => $this->faker->randomElement(\App\Enums\GuarantorType::cases()),
             'is_active' => true,
+            'is_government' => $this->faker->boolean(),
+            'inacbg_id' => $this->faker->optional()->numerify('##'),
         ];
     }
 }

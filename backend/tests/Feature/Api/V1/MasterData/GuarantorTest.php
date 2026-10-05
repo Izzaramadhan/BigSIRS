@@ -61,6 +61,8 @@ class GuarantorTest extends TestCase
             'code' => ' asr-01 ',
             'name' => ' Asuransi   Umum ',
             'type' => 'self_pay',
+            'is_government' => true,
+            'inacbg_id' => '12',
             'is_active' => true,
         ];
 
@@ -72,6 +74,8 @@ class GuarantorTest extends TestCase
             'code' => 'ASR-01',
             'name' => 'Asuransi Umum',
             'type' => 'self_pay',
+            'is_government' => true,
+            'inacbg_id' => '12',
         ]);
     }
 
@@ -97,6 +101,8 @@ class GuarantorTest extends TestCase
             'code' => 'ASR-02',
             'name' => 'Asuransi Update',
             'type' => 'government',
+            'is_government' => false,
+            'inacbg_id' => '0',
         ];
 
         $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/guarantors/{$guarantor->id}", $payload);
@@ -107,6 +113,8 @@ class GuarantorTest extends TestCase
             'code' => 'ASR-02',
             'name' => 'Asuransi Update',
             'type' => 'government',
+            'is_government' => false,
+            'inacbg_id' => '0',
         ]);
     }
 

@@ -51,6 +51,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/basic-data/insurance-types',
+      name: 'master-data.insurance-types',
+      component: () => import('../views/master-data/InsuranceTypeView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/doctor-schedules',
       name: 'master-data.doctor-schedules',
       component: () => import('../views/master-data/DoctorScheduleView.vue'),
