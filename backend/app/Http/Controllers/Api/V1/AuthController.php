@@ -33,6 +33,13 @@ class AuthController extends Controller
         }
 
         $username = strtolower(trim($request->username));
+        \Illuminate\Support\Facades\Log::info('Login Attempt Info', [
+            'db_host' => config('database.connections.mysql.host'),
+            'db_port' => config('database.connections.mysql.port'),
+            'db_database' => config('database.connections.mysql.database'),
+            'env_db_host' => env('DB_HOST'),
+            'gethostname' => gethostname()
+        ]);
         $user = User::where('username', $username)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {

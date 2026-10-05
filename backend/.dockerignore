@@ -1,0 +1,8 @@
+.env
+.env.*
+.git
+.gitignore
+vendor
+node_modules
+storage/logs/*
+bootstrap/cache/*.php
