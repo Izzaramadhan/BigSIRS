@@ -19,7 +19,7 @@ class GuarantorController extends Controller
         $sort = $request->query('sort', 'name');
         $direction = strtolower($request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
         
-        $allowedSorts = ['id', 'code', 'name', 'type', 'created_at', 'updated_at', 'is_active'];
+        $allowedSorts = ['id', 'code', 'name', 'type', 'created_at', 'updated_at', 'is_active', 'is_government', 'inacbg_id'];
         if (!in_array($sort, $allowedSorts)) {
             $sort = 'name';
         }

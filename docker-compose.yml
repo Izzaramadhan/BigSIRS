@@ -49,7 +49,7 @@ services:
       LEGACY_DB_CONNECTION: mysql
       LEGACY_DB_HOST: mysql
       LEGACY_DB_PORT: 3306
-      LEGACY_DB_DATABASE: simrs_legacy
+      LEGACY_DB_DATABASE: simrs_legacy_restored
       LEGACY_DB_USERNAME: root
       LEGACY_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     depends_on:

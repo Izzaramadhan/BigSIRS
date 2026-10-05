@@ -22,7 +22,7 @@ class UpdateGuarantorRequest extends FormRequest
             'name' => $this->name !== null ? preg_replace('/\s+/', ' ', trim($this->name)) : null,
         ]);
         
-        foreach (['legacy_id', 'code', 'name'] as $field) {
+        foreach (['legacy_id', 'code', 'name', 'inacbg_id'] as $field) {
             if ($this->has($field) && trim((string)$this->get($field)) === '') {
                 $this->merge([$field => null]);
             }
@@ -43,6 +43,8 @@ class UpdateGuarantorRequest extends FormRequest
             'legacy_id' => ['nullable', 'integer', 'unique:guarantors,legacy_id,' . $id],
             'type' => ['required', new \Illuminate\Validation\Rules\Enum(\App\Enums\GuarantorType::class)],
             'is_active' => ['boolean'],
+            'is_government' => ['required', 'boolean'],
+            'inacbg_id' => ['nullable', 'string', 'max:10'],
         ];
     }
 }

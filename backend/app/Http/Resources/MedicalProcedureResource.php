@@ -39,7 +39,7 @@ class MedicalProcedureResource extends JsonResource
                                 'id' => $comp->id,
                                 'tariff_component_id' => $comp->tariff_component_id,
                                 'percentage_snapshot' => $comp->percentage_snapshot,
-                                'amount' => $comp->amount,
+                                'amount' => (float) $comp->amount,
                                 'tariff_component' => $comp->relationLoaded('tariffComponent') ? [
                                     'id' => $comp->tariffComponent->id,
                                     'name' => $comp->tariffComponent->name,
