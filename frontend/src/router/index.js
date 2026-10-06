@@ -45,6 +45,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/basic-data/regencies',
+      name: 'master-data.regencies',
+      component: () => import('../views/master-data/RegencyView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/basic-data/occupations',
       name: 'master-data.occupations',
       component: () => import('../views/master-data/OccupationView.vue'),

@@ -27,7 +27,7 @@ class Employee extends Model
         'address',
         'postal_code',
         'province_id',
-        'city_id',
+        'regency_id',
         'district_id',
         'village_id',
         'phone',

@@ -46,7 +46,7 @@ class DoctorResource extends JsonResource
                     'address' => $this->employee->address,
                     'postal_code' => $this->employee->postal_code,
                     'province_id' => $this->employee->province_id,
-                    'city_id' => $this->employee->city_id,
+                    'regency_id' => $this->employee->regency_id,
                     'district_id' => $this->employee->district_id,
                     'village_id' => $this->employee->village_id,
                     'phone' => $this->employee->phone,

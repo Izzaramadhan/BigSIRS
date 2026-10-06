@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Education;
 use App\Models\Occupation;
 use App\Models\Province;
-use App\Models\City;
+use App\Models\Regency;
 use App\Models\District;
 use App\Models\Village;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +30,7 @@ class LegacyImportReferencesCommand extends Command
         $this->importEducations($legacyDb, $dryRun);
         $this->importOccupations($legacyDb, $dryRun);
         $this->importProvinces($legacyDb, $dryRun);
-        $this->importCities($legacyDb, $dryRun);
+        $this->importRegencies($legacyDb, $dryRun);
         $this->importDistricts($legacyDb, $dryRun);
         $this->importVillages($legacyDb, $dryRun);
     }
@@ -117,14 +117,15 @@ class LegacyImportReferencesCommand extends Command
         });
     }
 
-    private function importCities($legacyDb, $dryRun)
+    private function importRegencies($legacyDb, $dryRun)
     {
         $data = $legacyDb->select("SELECT id, id_provinsi, nama as name FROM ref_kabupaten");
         // Preload provinces mapping
         $provinceMap = Province::pluck('id', 'legacy_id')->toArray();
-        $this->doImport('Cities', $data, $dryRun, City::class, function($row) use ($provinceMap) {
+        $this->doImport('Regencies', $data, $dryRun, Regency::class, function($row) use ($provinceMap) {
             if (!isset($provinceMap[$row->id_provinsi])) return null;
             return [
+                'code' => $row->id,
                 'name' => $row->name,
                 'province_id' => $provinceMap[$row->id_provinsi]
             ];
@@ -134,12 +135,12 @@ class LegacyImportReferencesCommand extends Command
     private function importDistricts($legacyDb, $dryRun)
     {
         $data = $legacyDb->select("SELECT id, id_kabupaten, nama as name FROM ref_kecamatan");
-        $cityMap = City::pluck('id', 'legacy_id')->toArray();
-        $this->doImport('Districts', $data, $dryRun, District::class, function($row) use ($cityMap) {
-            if (!isset($cityMap[$row->id_kabupaten])) return null;
+        $regencyMap = Regency::pluck('id', 'legacy_id')->toArray();
+        $this->doImport('Districts', $data, $dryRun, District::class, function($row) use ($regencyMap) {
+            if (!isset($regencyMap[$row->id_kabupaten])) return null;
             return [
                 'name' => $row->name,
-                'city_id' => $cityMap[$row->id_kabupaten]
+                'regency_id' => $regencyMap[$row->id_kabupaten]
             ];
         });
     }
