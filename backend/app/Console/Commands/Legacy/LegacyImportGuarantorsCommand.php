@@ -2,12 +2,12 @@
 
 namespace App\Console\Commands\Legacy;
 
+use App\Enums\GuarantorType;
+use App\Models\Guarantor;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\Guarantor;
-use App\Enums\GuarantorType;
 use Illuminate\Support\Facades\Log;
 
 #[Signature('legacy:import-guarantors {--dry-run : Only show what would be imported}')]
@@ -18,23 +18,23 @@ class LegacyImportGuarantorsCommand extends Command
     {
         $dryRun = $this->option('dry-run');
         if ($dryRun) {
-            $this->info("Running in DRY-RUN mode. No data will be written.");
+            $this->info('Running in DRY-RUN mode. No data will be written.');
         }
 
         $legacyDb = DB::connection('legacy');
-        
-        $this->info("Fetching legacy guarantors from ref_jenis_asuransi...");
 
-        $rows = $legacyDb->select("
+        $this->info('Fetching legacy guarantors from ref_jenis_asuransi...');
+
+        $rows = $legacyDb->select('
             SELECT id, jenis_asuransi, pemerintah, status, type, id_inacbg, kode, deleted_at
             FROM ref_jenis_asuransi
-        ");
+        ');
 
         $stats = [
             'read' => count($rows),
             'skipped_deleted' => 0,
-            'create' => 0, 
-            'update' => 0, 
+            'create' => 0,
+            'update' => 0,
             'failed' => 0,
         ];
 
@@ -42,6 +42,7 @@ class LegacyImportGuarantorsCommand extends Command
             try {
                 if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['skipped_deleted']++;
+
                     return;
                 }
 
@@ -54,24 +55,24 @@ class LegacyImportGuarantorsCommand extends Command
 
                 $code = $row->kode;
                 if (empty($code)) {
-                    $code = 'GUR-' . str_pad($row->id, 5, '0', STR_PAD_LEFT);
+                    $code = 'GUR-'.str_pad($row->id, 5, '0', STR_PAD_LEFT);
                 }
 
                 $inacbgId = $row->id_inacbg;
-                if (trim((string)$inacbgId) === '') {
+                if (trim((string) $inacbgId) === '') {
                     $inacbgId = null;
                 }
 
-                if (!$dryRun) {
+                if (! $dryRun) {
                     $guarantor = Guarantor::withTrashed()->updateOrCreate(
                         ['legacy_id' => $row->id],
                         [
                             'name' => trim($row->jenis_asuransi),
                             'code' => $code,
                             'type' => $type,
-                            'is_government' => (bool)$row->pemerintah,
+                            'is_government' => (bool) $row->pemerintah,
                             'inacbg_id' => $inacbgId,
-                            'is_active' => (bool)$row->status,
+                            'is_active' => (bool) $row->status,
                             'deleted_at' => null, // restore if soft deleted
                         ]
                     );
@@ -91,21 +92,23 @@ class LegacyImportGuarantorsCommand extends Command
                 }
             } catch (\Exception $e) {
                 $stats['failed']++;
-                if (!$dryRun) Log::error("Failed importing guarantor legacy_id {$row->id}: " . $e->getMessage());
+                if (! $dryRun) {
+                    Log::error("Failed importing guarantor legacy_id {$row->id}: ".$e->getMessage());
+                }
             }
         });
 
         $this->newLine();
-        $this->info("Import completed.");
+        $this->info('Import completed.');
         $this->table(
-            ['Total Read', 'Valid/Processed', 'Skipped Soft Deleted', 'Would Create / Created', 'Would Update / Updated', 'Failed'], 
+            ['Total Read', 'Valid/Processed', 'Skipped Soft Deleted', 'Would Create / Created', 'Would Update / Updated', 'Failed'],
             [[
                 $stats['read'],
                 $stats['create'] + $stats['update'],
                 $stats['skipped_deleted'],
                 $stats['create'],
                 $stats['update'],
-                $stats['failed']
+                $stats['failed'],
             ]]
         );
     }

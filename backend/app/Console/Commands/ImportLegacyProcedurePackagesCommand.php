@@ -2,21 +2,22 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\MedicalProcedureTariff;
+use App\Models\MasterData\ProcedurePackage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\ProcedurePackage;
-use App\Models\MasterData\MedicalProcedureTariff;
 
 class ImportLegacyProcedurePackagesCommand extends Command
 {
     protected $signature = 'legacy:import-procedure-packages {--dry-run : Perform a dry run without saving to the database}';
+
     protected $description = 'Import procedure packages from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
 
-        $this->info("Starting legacy package import (Dry Run: " . ($isDryRun ? 'Yes' : 'No') . ")");
+        $this->info('Starting legacy package import (Dry Run: '.($isDryRun ? 'Yes' : 'No').')');
 
         DB::beginTransaction();
         try {
@@ -55,6 +56,7 @@ class ImportLegacyProcedurePackagesCommand extends Command
             foreach ($legacyItemsRaw as $item) {
                 if ($item->deleted_at && $item->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['Skipped Soft Deleted']++;
+
                     continue;
                 }
                 $legacyItems[$item->id_ref_paket_tindakan][] = $item;
@@ -63,11 +65,12 @@ class ImportLegacyProcedurePackagesCommand extends Command
             foreach ($legacyPackages as $row) {
                 if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['Skipped Soft Deleted']++;
+
                     continue;
                 }
 
                 $items = $legacyItems[$row->id] ?? [];
-                
+
                 if (empty($items)) {
                     $stats['Packages Without Items']++;
                 }
@@ -75,7 +78,7 @@ class ImportLegacyProcedurePackagesCommand extends Command
                 $package = ProcedurePackage::where('legacy_id', $row->id)->first();
                 if ($package) {
                     $stats['Would Update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $package->update([
                             'name' => $row->nama,
                             'is_active' => $row->status == 1,
@@ -83,7 +86,7 @@ class ImportLegacyProcedurePackagesCommand extends Command
                     }
                 } else {
                     $stats['Would Create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $package = ProcedurePackage::create([
                             'legacy_id' => $row->id,
                             'name' => $row->nama,
@@ -107,14 +110,15 @@ class ImportLegacyProcedurePackagesCommand extends Command
 
                     $mappedTariff = $tariffMap[$legacyItem->id_ref_tarif_tindakan] ?? null;
 
-                    if (!$mappedTariff || !$mappedTariff->medicalProcedure) {
+                    if (! $mappedTariff || ! $mappedTariff->medicalProcedure) {
                         $stats['Missing Procedure Mapping']++;
+
                         continue;
                     }
 
                     $totalAmount += $mappedTariff->total_amount;
 
-                    if (!$isDryRun && $package->exists) {
+                    if (! $isDryRun && $package->exists) {
                         $package->items()->updateOrCreate(
                             ['legacy_id' => $legacyItem->id],
                             [
@@ -129,7 +133,7 @@ class ImportLegacyProcedurePackagesCommand extends Command
                     }
                 }
 
-                if (!$isDryRun && $package->exists) {
+                if (! $isDryRun && $package->exists) {
                     $package->update(['total_amount' => $totalAmount]);
                 }
             }
@@ -140,16 +144,18 @@ class ImportLegacyProcedurePackagesCommand extends Command
 
             if ($isDryRun) {
                 DB::rollBack();
-                $this->info("Dry run completed. Transactions rolled back.");
+                $this->info('Dry run completed. Transactions rolled back.');
             } else {
                 DB::commit();
-                $this->info("Import completed successfully.");
+                $this->info('Import completed successfully.');
             }
+
             return 0;
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
             return 1;
         }
     }

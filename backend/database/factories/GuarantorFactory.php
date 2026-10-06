@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\GuarantorType;
 use App\Models\Guarantor;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,7 +21,7 @@ class GuarantorFactory extends Factory
         return [
             'code' => strtoupper($this->faker->unique()->bothify('ASR-####')),
             'name' => $this->faker->company(),
-            'type' => $this->faker->randomElement(\App\Enums\GuarantorType::cases()),
+            'type' => $this->faker->randomElement(GuarantorType::cases()),
             'is_active' => true,
             'is_government' => $this->faker->boolean(),
             'inacbg_id' => $this->faker->optional()->numerify('##'),

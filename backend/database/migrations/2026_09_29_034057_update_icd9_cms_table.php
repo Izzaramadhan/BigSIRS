@@ -18,7 +18,7 @@ return new class extends Migration
                 $table->renameColumn('is_visible', 'is_active');
             });
         }
-        if (!Schema::hasColumn('icd9_cms', 'needs_review')) {
+        if (! Schema::hasColumn('icd9_cms', 'needs_review')) {
             Schema::table('icd9_cms', function (Blueprint $table) {
                 $table->boolean('needs_review')->default(false)->after('is_active');
             });

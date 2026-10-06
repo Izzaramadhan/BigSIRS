@@ -19,7 +19,7 @@ class ProvinceFactory extends Factory
     {
         return [
             'legacy_id' => $this->faker->unique()->numerify('##'),
-            'name' => 'PROVINSI ' . strtoupper($this->faker->state()),
+            'name' => 'PROVINSI '.strtoupper($this->faker->state()),
         ];
     }
 }

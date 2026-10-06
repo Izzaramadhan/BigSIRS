@@ -12,13 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('districts', function (Blueprint $table) {
-            if (!Schema::hasColumn('districts', 'code')) {
+            if (! Schema::hasColumn('districts', 'code')) {
                 $table->string('code')->nullable()->after('legacy_id');
             }
-            if (!Schema::hasColumn('districts', 'is_active')) {
+            if (! Schema::hasColumn('districts', 'is_active')) {
                 $table->boolean('is_active')->default(true)->after('regency_id');
             }
-            if (!Schema::hasColumn('districts', 'deleted_at')) {
+            if (! Schema::hasColumn('districts', 'deleted_at')) {
                 $table->softDeletes();
             }
         });

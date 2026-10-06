@@ -2,27 +2,29 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\Icd10Code;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\Icd10Code;
 use Illuminate\Support\Str;
 
 class LegacyImportIcd10Command extends Command
 {
     protected $signature = 'legacy:import-icd10 {--dry-run : Only show what would happen without actually importing}';
+
     protected $description = 'Import ICD-10 codes from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
 
-        $this->info("Starting ICD-10 Import from legacy DB " . ($isDryRun ? '(DRY RUN)' : ''));
+        $this->info('Starting ICD-10 Import from legacy DB '.($isDryRun ? '(DRY RUN)' : ''));
 
         try {
             $legacyDb = DB::connection('legacy');
             $legacyDb->getPdo();
         } catch (\Exception $e) {
-            $this->error("Failed to connect to legacy database: " . $e->getMessage());
+            $this->error('Failed to connect to legacy database: '.$e->getMessage());
+
             return 1;
         }
 
@@ -53,19 +55,21 @@ class LegacyImportIcd10Command extends Command
                     // Check soft deleted
                     if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                         $stats['skipped_soft_deleted']++;
+
                         continue;
                     }
 
                     $code = trim($row->code ?? '');
                     if (empty($code)) {
                         $stats['empty_codes']++;
+
                         continue;
                     }
                     $code = strtoupper($code);
 
                     $name = trim($row->nama ?? '');
                     if (empty($name)) {
-                        $name = 'Tidak Diketahui (ID: ' . $row->id . ')';
+                        $name = 'Tidak Diketahui (ID: '.$row->id.')';
                     }
 
                     $stats['valid']++;
@@ -81,16 +85,16 @@ class LegacyImportIcd10Command extends Command
                         'is_active' => $row->status == '1',
                         'inacbg_code' => trim($row->kode_inacbg ?? ''),
                         'inacbg_name' => trim($row->deskripsi_inacbg ?? ''),
-                        'class_1_tariff' => is_numeric($row->tarif_kelas1) ? (float)$row->tarif_kelas1 : 0,
-                        'class_2_tariff' => is_numeric($row->tarif_kelas2) ? (float)$row->tarif_kelas2 : 0,
-                        'class_3_tariff' => is_numeric($row->tarif_kelas3) ? (float)$row->tarif_kelas3 : 0,
+                        'class_1_tariff' => is_numeric($row->tarif_kelas1) ? (float) $row->tarif_kelas1 : 0,
+                        'class_2_tariff' => is_numeric($row->tarif_kelas2) ? (float) $row->tarif_kelas2 : 0,
+                        'class_3_tariff' => is_numeric($row->tarif_kelas3) ? (float) $row->tarif_kelas3 : 0,
                     ];
 
                     if (Str::contains($code, '-')) {
                         $stats['hierarchy_warnings']++;
                     }
 
-                    if (!empty($targetData['inacbg_code'])) {
+                    if (! empty($targetData['inacbg_code'])) {
                         $stats['inacbg_warnings']++;
                     }
 
@@ -100,47 +104,48 @@ class LegacyImportIcd10Command extends Command
 
                     // Check duplicate code conflicts in target DB (from other legacy records or same code)
                     $existingByCode = Icd10Code::where('code', $code)->first();
-                    if ($existingByCode && $existingByCode->legacy_id !== (int)$row->id) {
+                    if ($existingByCode && $existingByCode->legacy_id !== (int) $row->id) {
                         // In a dry run, we'd log the conflict but in actual we might skip or fail it.
                         // We will allow one code to overwrite if not duplicate within this run, but since they are in legacy:
                         // Legacy profiling showed B20 is duplicated in legacy.
                         $stats['duplicate_codes']++;
                         $stats['conflicts']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             $this->warn("Conflict: Code {$code} already exists for another record (Legacy ID: {$row->id} vs Target Legacy ID: {$existingByCode->legacy_id}). Skipping.");
                         }
+
                         continue;
                     }
 
                     $existing = Icd10Code::where('legacy_id', $row->id)->first();
 
-                    if (!$existing) {
+                    if (! $existing) {
                         $stats['would_create']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             try {
                                 Icd10Code::create($targetData);
                                 $stats['created']++;
                             } catch (\Exception $e) {
                                 $stats['failed']++;
-                                $this->error("Failed to create {$code}: " . $e->getMessage());
+                                $this->error("Failed to create {$code}: ".$e->getMessage());
                             }
                         }
                     } else {
                         $stats['would_update']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             try {
                                 $existing->update($targetData);
                                 $stats['updated']++;
                             } catch (\Exception $e) {
                                 $stats['failed']++;
-                                $this->error("Failed to update {$code}: " . $e->getMessage());
+                                $this->error("Failed to update {$code}: ".$e->getMessage());
                             }
                         }
                     }
                 }
             });
 
-        $this->info("Import Summary:");
+        $this->info('Import Summary:');
         $this->table(
             ['Metric', 'Count'],
             [
@@ -162,7 +167,7 @@ class LegacyImportIcd10Command extends Command
         );
 
         if ($isDryRun) {
-            $this->info("This was a DRY RUN. No actual data was modified.");
+            $this->info('This was a DRY RUN. No actual data was modified.');
         }
 
         return 0;

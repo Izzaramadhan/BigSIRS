@@ -2,13 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Employee;
+use App\Models\MasterData\Doctor;
+use App\Models\MasterData\Specialization;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\Doctor;
-use App\Models\MasterData\Specialization;
-use App\Models\Employee;
 use Illuminate\Support\Facades\Log;
 
 #[Signature('legacy:import-doctors {--dry-run : Only show what would be imported}')]
@@ -19,28 +19,28 @@ class LegacyImportDoctorsCommand extends Command
     {
         $dryRun = $this->option('dry-run');
         if ($dryRun) {
-            $this->info("Running in DRY-RUN mode. No data will be written.");
+            $this->info('Running in DRY-RUN mode. No data will be written.');
         }
 
         $legacyDb = DB::connection('legacy');
-        
-        $this->info("Fetching legacy doctors from ref_dokter...");
+
+        $this->info('Fetching legacy doctors from ref_dokter...');
 
         // We join with ref_pegawai to get the employee legacy ID
-        $doctors = $legacyDb->select("
+        $doctors = $legacyDb->select('
             SELECT d.id, d.id_mpi, d.id_spesialisasi, d.no_str, d.sip, d.masa_berlaku, d.status as is_active,
                    d.deleted_at, d.kode_dpjp, d.ihs_id, d.ttd, p.id as legacy_employee_id
             FROM ref_dokter d
             LEFT JOIN ref_pegawai p ON d.id_mpi = p.id_mpi
-        ");
+        ');
 
         $stats = [
             'read' => count($doctors),
             'orphan_employee' => 0,
             'orphan_specialization' => 0,
             'skipped_deleted' => 0,
-            'create' => 0, 
-            'update' => 0, 
+            'create' => 0,
+            'update' => 0,
             'failed' => 0,
             'signature_missing' => 0,
         ];
@@ -54,11 +54,13 @@ class LegacyImportDoctorsCommand extends Command
             try {
                 if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['skipped_deleted']++;
+
                     return;
                 }
 
-                if (!$row->legacy_employee_id || !isset($empMap[$row->legacy_employee_id])) {
+                if (! $row->legacy_employee_id || ! isset($empMap[$row->legacy_employee_id])) {
                     $stats['orphan_employee']++;
+
                     return;
                 }
 
@@ -75,12 +77,12 @@ class LegacyImportDoctorsCommand extends Command
                 }
 
                 $signaturePath = null;
-                if (!empty($row->ttd)) {
+                if (! empty($row->ttd)) {
                     $signaturePath = $row->ttd;
                     $stats['signature_missing']++; // Mark as missing since we don't have the files
                 }
 
-                if (!$dryRun) {
+                if (! $dryRun) {
                     $doctor = Doctor::withTrashed()->updateOrCreate(
                         ['legacy_id' => $row->id],
                         [
@@ -113,14 +115,16 @@ class LegacyImportDoctorsCommand extends Command
                 }
             } catch (\Exception $e) {
                 $stats['failed']++;
-                if (!$dryRun) Log::error("Failed importing doctor legacy_id {$row->id}: " . $e->getMessage());
+                if (! $dryRun) {
+                    Log::error("Failed importing doctor legacy_id {$row->id}: ".$e->getMessage());
+                }
             }
         });
 
         $this->newLine();
-        $this->info("Import completed.");
+        $this->info('Import completed.');
         $this->table(
-            ['Total Read', 'Valid/Processed', 'Skipped Soft Deleted', 'Orphan Employee', 'Orphan Specialization', 'Would Create / Created', 'Would Update / Updated', 'Signature Missing', 'Failed'], 
+            ['Total Read', 'Valid/Processed', 'Skipped Soft Deleted', 'Orphan Employee', 'Orphan Specialization', 'Would Create / Created', 'Would Update / Updated', 'Signature Missing', 'Failed'],
             [[
                 $stats['read'],
                 $stats['create'] + $stats['update'],
@@ -130,7 +134,7 @@ class LegacyImportDoctorsCommand extends Command
                 $stats['create'],
                 $stats['update'],
                 $stats['signature_missing'],
-                $stats['failed']
+                $stats['failed'],
             ]]
         );
     }

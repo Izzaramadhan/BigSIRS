@@ -14,12 +14,12 @@ class UpdateTariffTypeRequest extends FormRequest
     public function rules(): array
     {
         $tariffType = $this->route('tariff_type');
-        
+
         $codeRule = $tariffType->code !== null ? 'required' : 'nullable';
 
         return [
             'name' => 'required|string|max:255',
-            'code' => [$codeRule, 'string', 'max:50', 'unique:tariff_types,code,' . $tariffType->id],
+            'code' => [$codeRule, 'string', 'max:50', 'unique:tariff_types,code,'.$tariffType->id],
             'description' => 'nullable|string',
             'is_active' => 'boolean',
             'components' => 'required|array|min:1',
@@ -33,7 +33,7 @@ class UpdateTariffTypeRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             $components = $this->input('components', []);
-            
+
             // Check for duplicate components in the input manually
             // We only enforce uniqueness for NEW components or if the user changed the component ID.
             // If they are legacy duplicates and they just update percentage, it's allowed.
@@ -42,29 +42,29 @@ class UpdateTariffTypeRequest extends FormRequest
             // So if they submit duplicate component IDs, and both have an existing component `id` from the pivot, we allow it.
             // But they cannot ADD a duplicate (where pivot `id` is null).
             // Let's implement this custom logic.
-            
+
             $componentCounts = [];
             foreach ($components as $index => $comp) {
                 $compId = $comp['tariff_component_id'] ?? null;
                 $pivotId = $comp['id'] ?? null;
-                
+
                 if ($compId) {
-                    if (!isset($componentCounts[$compId])) {
+                    if (! isset($componentCounts[$compId])) {
                         $componentCounts[$compId] = 0;
                     }
                     $componentCounts[$compId]++;
-                    
-                    if ($componentCounts[$compId] > 1 && !$pivotId) {
+
+                    if ($componentCounts[$compId] > 1 && ! $pivotId) {
                         $validator->errors()->add("components.{$index}.tariff_component_id", 'Komponen ini tidak boleh ditambahkan lebih dari satu kali.');
                     }
                 }
-                
+
                 // percentage validation for > 100
                 $percentage = $comp['percentage'] ?? 0;
-                if ($percentage > 100 && !$pivotId) {
+                if ($percentage > 100 && ! $pivotId) {
                     $validator->errors()->add("components.{$index}.percentage", 'Persentase maksimal 100 untuk data baru.');
                 }
-                
+
                 // If they update an existing pivot, and it had >100, they can keep it or must reduce it to <= 100?
                 // "Jika nilai legacy outlier diubah, nilai baru wajib berada pada rentang 0–100."
                 // Since we don't have the old value here easily, we might validate this in the controller or we can query it.

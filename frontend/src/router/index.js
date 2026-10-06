@@ -81,6 +81,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/nutrition-care',
+      name: 'master-data.nutrition-care',
+      component: () => import('../views/master-data/DietTypeView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/doctor-schedules',
       name: 'master-data.doctor-schedules',
       component: () => import('../views/master-data/DoctorScheduleView.vue'),

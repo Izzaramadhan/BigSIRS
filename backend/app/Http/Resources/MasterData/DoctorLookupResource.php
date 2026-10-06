@@ -11,7 +11,7 @@ class DoctorLookupResource extends JsonResource
     {
         $name = $this->employee ? $this->employee->name : 'Unknown';
         $specializationName = $this->specialization ? $this->specialization->name : '';
-        
+
         $label = $specializationName ? "{$name} — {$specializationName}" : $name;
 
         return [

@@ -5,8 +5,8 @@ namespace Tests\Feature\Api;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Tests\TestCase;
 use Illuminate\Support\Facades\Hash;
+use Tests\TestCase;
 
 class AuthTest extends TestCase
 {
@@ -17,16 +17,16 @@ class AuthTest extends TestCase
         $response = $this->getJson('/api/v1/auth/captcha');
 
         $response->assertStatus(200)
-                 ->assertJsonStructure([
-                     'data' => [
-                         'captcha_id',
-                         'captcha_image',
-                         'expires_in'
-                     ]
-                 ]);
-        
+            ->assertJsonStructure([
+                'data' => [
+                    'captcha_id',
+                    'captcha_image',
+                    'expires_in',
+                ],
+            ]);
+
         $captchaId = $response->json('data.captcha_id');
-        $this->assertTrue(Cache::has('captcha_' . $captchaId));
+        $this->assertTrue(Cache::has('captcha_'.$captchaId));
     }
 
     public function test_can_login_with_valid_username_and_captcha()
@@ -37,7 +37,7 @@ class AuthTest extends TestCase
         ]);
 
         $captchaId = 'test-uuid';
-        Cache::put('captcha_' . $captchaId, Hash::make('ABCDE'), 300);
+        Cache::put('captcha_'.$captchaId, Hash::make('ABCDE'), 300);
 
         $response = $this->postJson('/api/v1/auth/login', [
             'username' => 'johndoe',
@@ -47,7 +47,7 @@ class AuthTest extends TestCase
         ]);
 
         $response->assertStatus(200)
-                 ->assertJsonStructure(['data' => ['token', 'user']]);
+            ->assertJsonStructure(['data' => ['token', 'user']]);
     }
 
     public function test_cannot_login_with_invalid_captcha()
@@ -58,7 +58,7 @@ class AuthTest extends TestCase
         ]);
 
         $captchaId = 'test-uuid';
-        Cache::put('captcha_' . $captchaId, Hash::make('ABCDE'), 300);
+        Cache::put('captcha_'.$captchaId, Hash::make('ABCDE'), 300);
 
         $response = $this->postJson('/api/v1/auth/login', [
             'username' => 'johndoe',
@@ -68,13 +68,13 @@ class AuthTest extends TestCase
         ]);
 
         $response->assertStatus(401)
-                 ->assertJson(['message' => 'Username, password, atau kode keamanan tidak valid.']);
+            ->assertJson(['message' => 'Username, password, atau kode keamanan tidak valid.']);
     }
 
     public function test_cannot_login_with_invalid_username()
     {
         $captchaId = 'test-uuid';
-        Cache::put('captcha_' . $captchaId, Hash::make('ABCDE'), 300);
+        Cache::put('captcha_'.$captchaId, Hash::make('ABCDE'), 300);
 
         $response = $this->postJson('/api/v1/auth/login', [
             'username' => 'wronguser',
@@ -92,7 +92,7 @@ class AuthTest extends TestCase
         $token = $user->createToken('test_token')->plainTextToken;
 
         $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $token,
+            'Authorization' => 'Bearer '.$token,
         ])->getJson('/api/v1/auth/me');
 
         $response->assertStatus(200);
@@ -110,7 +110,7 @@ class AuthTest extends TestCase
         $token = $user->createToken('test_token')->plainTextToken;
 
         $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $token,
+            'Authorization' => 'Bearer '.$token,
         ])->postJson('/api/v1/auth/logout');
 
         $response->assertStatus(200);

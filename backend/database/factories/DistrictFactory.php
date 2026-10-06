@@ -2,11 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Models\District;
 use App\Models\Regency;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\District>
+ * @extends Factory<District>
  */
 class DistrictFactory extends Factory
 {
@@ -20,7 +21,7 @@ class DistrictFactory extends Factory
         return [
             'legacy_id' => $this->faker->unique()->numerify('####'),
             'code' => $this->faker->unique()->numerify('#######'),
-            'name' => 'KECAMATAN ' . strtoupper($this->faker->city()),
+            'name' => 'KECAMATAN '.strtoupper($this->faker->city()),
             'regency_id' => Regency::factory(),
             'is_active' => true,
         ];

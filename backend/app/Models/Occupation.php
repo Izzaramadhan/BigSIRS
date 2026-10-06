@@ -23,8 +23,9 @@ class Occupation extends Model
     public function delete()
     {
         if ($this->employees()->exists()) {
-            throw new \Exception("Cannot delete occupation because it is still used by employees.");
+            throw new \Exception('Cannot delete occupation because it is still used by employees.');
         }
+
         return parent::delete();
     }
 }

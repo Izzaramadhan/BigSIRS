@@ -23,8 +23,9 @@ class UpdateOccupationRequest extends FormRequest
     public function rules(): array
     {
         $occupationId = $this->route('occupation') ? $this->route('occupation')->id : null;
+
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:occupations,name,' . $occupationId],
+            'name' => ['required', 'string', 'max:255', 'unique:occupations,name,'.$occupationId],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

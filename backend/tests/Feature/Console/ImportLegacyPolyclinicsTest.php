@@ -18,9 +18,9 @@ class ImportLegacyPolyclinicsTest extends TestCase
 
         // Override 'legacy' connection with in-memory SQLite for tests
         Config::set('database.connections.legacy', [
-            'driver'   => 'sqlite',
+            'driver' => 'sqlite',
             'database' => ':memory:',
-            'prefix'   => '',
+            'prefix' => '',
         ]);
 
         DB::connection('legacy')->statement('
@@ -242,18 +242,18 @@ class ImportLegacyPolyclinicsTest extends TestCase
     public function test_it_wires_hierarchy_correctly_in_two_phases()
     {
         $parentId = DB::connection('legacy')->table('ref_poliklinik')->insertGetId([
-            'kode'       => 'OP001',
-            'nama'       => 'Poli Umum',
-            'status'     => '1',
-            'parent_id'  => null,
+            'kode' => 'OP001',
+            'nama' => 'Poli Umum',
+            'status' => '1',
+            'parent_id' => null,
             'deleted_at' => null,
         ]);
 
         DB::connection('legacy')->table('ref_poliklinik')->insert([
-            'kode'       => 'OP001A',
-            'nama'       => 'Poli Umum Sub',
-            'status'     => '1',
-            'parent_id'  => $parentId,
+            'kode' => 'OP001A',
+            'nama' => 'Poli Umum Sub',
+            'status' => '1',
+            'parent_id' => $parentId,
             'deleted_at' => null,
         ]);
 
@@ -261,7 +261,7 @@ class ImportLegacyPolyclinicsTest extends TestCase
         $this->assertDatabaseCount('polyclinics', 2);
 
         $parent = Polyclinic::where('code', 'OP001')->first();
-        $child  = Polyclinic::where('code', 'OP001A')->first();
+        $child = Polyclinic::where('code', 'OP001A')->first();
 
         $this->assertNull($parent->parent_id);
         $this->assertEquals($parent->id, $child->parent_id);
@@ -271,18 +271,18 @@ class ImportLegacyPolyclinicsTest extends TestCase
     {
         // Parent is soft-deleted (actual date)
         $softDeletedId = DB::connection('legacy')->table('ref_poliklinik')->insertGetId([
-            'kode'       => 'SDPARENT',
-            'nama'       => 'Parent Dihapus',
-            'status'     => '0',
+            'kode' => 'SDPARENT',
+            'nama' => 'Parent Dihapus',
+            'status' => '0',
             'deleted_at' => '2021-05-15 15:54:40',
         ]);
 
         // Child points to that soft-deleted parent
         DB::connection('legacy')->table('ref_poliklinik')->insert([
-            'kode'       => 'CHILD001',
-            'nama'       => 'Poli Anak',
-            'status'     => '1',
-            'parent_id'  => $softDeletedId,
+            'kode' => 'CHILD001',
+            'nama' => 'Poli Anak',
+            'status' => '1',
+            'parent_id' => $softDeletedId,
             'deleted_at' => null,
         ]);
 

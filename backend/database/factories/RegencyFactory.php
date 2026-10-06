@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Province;
 use App\Models\Regency;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -19,8 +20,8 @@ class RegencyFactory extends Factory
     {
         return [
             'code' => $this->faker->unique()->numerify('####'),
-            'name' => 'KABUPATEN ' . strtoupper($this->faker->city()),
-            'province_id' => \App\Models\Province::factory(),
+            'name' => 'KABUPATEN '.strtoupper($this->faker->city()),
+            'province_id' => Province::factory(),
             'is_active' => true,
         ];
     }

@@ -49,7 +49,7 @@ class DoctorScheduleController extends Controller
         $sortBy = $request->input('sort_by', 'id');
         $sortDir = $request->input('sort_dir', 'desc');
         $allowedSorts = ['id', 'doctor_id', 'polyclinic_id', 'day_of_week', 'start_time', 'end_time'];
-        
+
         if (in_array($sortBy, $allowedSorts)) {
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');
         }
@@ -72,8 +72,8 @@ class DoctorScheduleController extends Controller
                 'message' => 'Dokter sudah memiliki jadwal yang bertabrakan pada hari dan waktu tersebut.',
                 'errors' => [
                     'start_time' => ['Jadwal bertabrakan dengan jadwal yang sudah ada.'],
-                    'end_time' => ['Jadwal bertabrakan dengan jadwal yang sudah ada.']
-                ]
+                    'end_time' => ['Jadwal bertabrakan dengan jadwal yang sudah ada.'],
+                ],
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -102,8 +102,8 @@ class DoctorScheduleController extends Controller
                 'message' => 'Dokter sudah memiliki jadwal yang bertabrakan pada hari dan waktu tersebut.',
                 'errors' => [
                     'start_time' => ['Jadwal bertabrakan dengan jadwal yang sudah ada.'],
-                    'end_time' => ['Jadwal bertabrakan dengan jadwal yang sudah ada.']
-                ]
+                    'end_time' => ['Jadwal bertabrakan dengan jadwal yang sudah ada.'],
+                ],
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -118,6 +118,7 @@ class DoctorScheduleController extends Controller
     public function destroy(DoctorSchedule $doctorSchedule)
     {
         $doctorSchedule->delete();
+
         return response()->noContent();
     }
 

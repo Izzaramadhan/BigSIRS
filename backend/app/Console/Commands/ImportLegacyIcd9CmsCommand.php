@@ -2,26 +2,27 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\Icd9Cm;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\Icd9Cm;
 
 class ImportLegacyIcd9CmsCommand extends Command
 {
     protected $signature = 'legacy:import-icd9-cms {--dry-run : Perform a dry run without saving}';
+
     protected $description = 'Import ICD-9-CM from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
-        $this->info("Starting ICD-9-CM legacy import (Dry Run: " . ($isDryRun ? 'Yes' : 'No') . ")");
+        $this->info('Starting ICD-9-CM legacy import (Dry Run: '.($isDryRun ? 'Yes' : 'No').')');
 
         DB::beginTransaction();
         try {
             $legacyData = DB::connection('legacy')->table('ref_icd_9')->get();
             $tindakanIcds = DB::connection('legacy')->table('ref_tarif_tindakan')
-                                ->whereNotNull('icd9_code')->where('icd9_code', '!=', '')
-                                ->distinct()->pluck('icd9_code')->toArray();
+                ->whereNotNull('icd9_code')->where('icd9_code', '!=', '')
+                ->distinct()->pluck('icd9_code')->toArray();
 
             $stats = [
                 'Total Read' => $legacyData->count(),
@@ -38,6 +39,7 @@ class ImportLegacyIcd9CmsCommand extends Command
             foreach ($legacyData as $row) {
                 if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['Skipped Soft Deleted']++;
+
                     continue;
                 }
 
@@ -48,10 +50,10 @@ class ImportLegacyIcd9CmsCommand extends Command
 
                 $existing = Icd9Cm::where('legacy_id', $row->id)->orWhere('code', $row->kode)->first();
                 $isNeedsReview = empty($row->nama) || trim($row->nama) === '';
-                
+
                 if ($existing) {
                     $stats['Would Update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $existing->update([
                             'legacy_id' => $row->id,
                             'code' => $row->kode,
@@ -64,7 +66,7 @@ class ImportLegacyIcd9CmsCommand extends Command
                     }
                 } else {
                     $stats['Would Create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         Icd9Cm::create([
                             'legacy_id' => $row->id,
                             'code' => $row->kode,
@@ -80,13 +82,13 @@ class ImportLegacyIcd9CmsCommand extends Command
 
             // 2. Import distinct codes from ref_tarif_tindakan that are not in ref_icd_9
             foreach ($tindakanIcds as $code) {
-                if (!in_array($code, $seenCodes)) {
+                if (! in_array($code, $seenCodes)) {
                     $seenCodes[] = $code;
                     $existing = Icd9Cm::where('code', $code)->first();
-                    
-                    if (!$existing) {
+
+                    if (! $existing) {
                         $stats['Orphan Codes Created']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             Icd9Cm::create([
                                 'legacy_id' => null,
                                 'code' => $code,
@@ -99,19 +101,21 @@ class ImportLegacyIcd9CmsCommand extends Command
                 }
             }
 
-            $this->table(['Metric', 'Count'], collect($stats)->map(fn($v, $k) => [$k, $v])->toArray());
+            $this->table(['Metric', 'Count'], collect($stats)->map(fn ($v, $k) => [$k, $v])->toArray());
 
             if ($isDryRun) {
                 DB::rollBack();
-                $this->info("Dry run completed. Transactions rolled back.");
+                $this->info('Dry run completed. Transactions rolled back.');
             } else {
                 DB::commit();
-                $this->info("Import completed successfully.");
+                $this->info('Import completed successfully.');
             }
+
             return 0;
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
             return 1;
         }
     }

@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
-use App\Models\Polyclinic;
-use App\Http\Resources\PolyclinicResource;
 use App\Http\Requests\StorePolyclinicRequest;
 use App\Http\Requests\UpdatePolyclinicRequest;
 use App\Http\Requests\UpdatePolyclinicStatusRequest;
+use App\Http\Resources\PolyclinicResource;
+use App\Models\Polyclinic;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -16,12 +16,12 @@ class PolyclinicController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage   = min((int) $request->query('per_page', 15), 100);
-        $sort      = $request->query('sort', 'name');
+        $perPage = min((int) $request->query('per_page', 15), 100);
+        $sort = $request->query('sort', 'name');
         $direction = strtolower($request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
 
         $allowedSorts = ['id', 'code', 'name', 'service_type', 'quota', 'jkn_quota', 'bpjs_code', 'is_active', 'created_at', 'updated_at'];
-        if (!in_array($sort, $allowedSorts)) {
+        if (! in_array($sort, $allowedSorts)) {
             $sort = 'name';
         }
 
@@ -52,6 +52,7 @@ class PolyclinicController extends Controller
             unset($data['parent_id']);
 
             $polyclinic = Polyclinic::create($data);
+
             return (new PolyclinicResource($polyclinic))->response()->setStatusCode(201);
         });
     }
@@ -69,6 +70,7 @@ class PolyclinicController extends Controller
             unset($data['parent_id']);
 
             $polyclinic->update($data);
+
             return new PolyclinicResource($polyclinic->fresh());
         });
     }
@@ -77,6 +79,7 @@ class PolyclinicController extends Controller
     {
         return DB::transaction(function () use ($request, $polyclinic) {
             $polyclinic->update($request->validated());
+
             return new PolyclinicResource($polyclinic->fresh());
         });
     }
@@ -85,7 +88,7 @@ class PolyclinicController extends Controller
     {
         if ($polyclinic->children()->exists()) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus poliklinik karena memiliki sub-poliklinik aktif.'
+                'message' => 'Tidak dapat menghapus poliklinik karena memiliki sub-poliklinik aktif.',
             ], 409);
         }
 
@@ -105,7 +108,7 @@ class PolyclinicController extends Controller
             'data' => collect(ServiceType::cases())->map(fn ($e) => [
                 'value' => $e->value,
                 'label' => $e->label(),
-            ])
+            ]),
         ]);
     }
 }

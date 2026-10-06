@@ -18,7 +18,7 @@ class StoreEducationRequest extends FormRequest
             'is_active' => 'boolean',
         ];
     }
-    
+
     protected function prepareForValidation()
     {
         if ($this->has('name')) {

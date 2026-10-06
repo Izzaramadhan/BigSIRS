@@ -1,19 +1,22 @@
 <?php
+
 require 'vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
-function printTitle($title) {
+function printTitle($title)
+{
     echo "\n=== $title ===\n";
 }
 
 $legacy = DB::connection('legacy');
 
 printTitle('Tables matching icd or diagnos');
-$tables = $legacy->select("SHOW TABLES");
+$tables = $legacy->select('SHOW TABLES');
 $dbName = 'simrs_legacy'; // Assuming this, or we can just get the values
 $icdTables = [];
 $reportTables = [];
@@ -22,7 +25,7 @@ $tindakanTables = [];
 foreach ($tables as $tableObj) {
     $tableArray = (array) $tableObj;
     $tableName = array_values($tableArray)[0];
-    
+
     if (stripos($tableName, 'icd') !== false || stripos($tableName, 'diagnos') !== false) {
         $icdTables[] = $tableName;
     }
@@ -34,9 +37,9 @@ foreach ($tables as $tableObj) {
     }
 }
 
-echo "ICD Tables: " . implode(', ', $icdTables) . "\n";
-echo "Report Tables: " . implode(', ', $reportTables) . "\n";
-echo "Tindakan Tables: " . implode(', ', $tindakanTables) . "\n";
+echo 'ICD Tables: '.implode(', ', $icdTables)."\n";
+echo 'Report Tables: '.implode(', ', $reportTables)."\n";
+echo 'Tindakan Tables: '.implode(', ', $tindakanTables)."\n";
 
 printTitle('Describe Tindakan Tables');
 $targetTindakanTable = 'master_tindakan'; // Common name, let's see if we find it

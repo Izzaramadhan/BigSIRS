@@ -2,13 +2,13 @@
 
 namespace Database\Factories\MasterData;
 
-use App\Models\MasterData\DoctorSchedule;
 use App\Models\MasterData\Doctor;
+use App\Models\MasterData\DoctorSchedule;
 use App\Models\Polyclinic;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\MasterData\DoctorSchedule>
+ * @extends Factory<DoctorSchedule>
  */
 class DoctorScheduleFactory extends Factory
 {
@@ -23,7 +23,7 @@ class DoctorScheduleFactory extends Factory
     {
         $start_hour = $this->faker->numberBetween(7, 16);
         $end_hour = $start_hour + $this->faker->numberBetween(2, 6);
-        
+
         return [
             'doctor_id' => Doctor::factory(),
             'polyclinic_id' => Polyclinic::factory(),

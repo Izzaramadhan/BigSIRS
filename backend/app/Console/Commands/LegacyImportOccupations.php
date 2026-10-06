@@ -2,25 +2,27 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Occupation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\Occupation;
 
 class LegacyImportOccupations extends Command
 {
     protected $signature = 'legacy:import-occupations {--dry-run : Only show what would be done without making changes}';
+
     protected $description = 'Import occupations from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
-        
-        $this->info("Starting " . ($isDryRun ? "DRY-RUN " : "") . "import of Occupations...");
+
+        $this->info('Starting '.($isDryRun ? 'DRY-RUN ' : '').'import of Occupations...');
 
         try {
             $legacyOccupations = DB::connection('legacy')->table('ref_pekerjaan')->get();
         } catch (\Exception $e) {
-            $this->error("Failed to connect to legacy DB or table not found: " . $e->getMessage());
+            $this->error('Failed to connect to legacy DB or table not found: '.$e->getMessage());
+
             return;
         }
 
@@ -40,29 +42,32 @@ class LegacyImportOccupations extends Command
                 // Check soft delete status (status = '0')
                 if (isset($legacy->status) && $legacy->status === '0') {
                     $stats['soft_deleted']++;
+
                     continue;
                 }
-                
+
                 if (isset($legacy->deleted_at) && $legacy->deleted_at !== '0000-00-00 00:00:00' && $legacy->deleted_at !== null) {
                     $stats['soft_deleted']++;
+
                     continue;
                 }
 
                 $name = trim(preg_replace('/\s+/', ' ', $legacy->pekerjaan ?? ''));
                 if (empty($name)) {
                     $stats['invalid']++;
+
                     continue;
                 }
 
-                $isActive = (!isset($legacy->status) || $legacy->status === '1');
+                $isActive = (! isset($legacy->status) || $legacy->status === '1');
 
                 // Check by legacy_id first
                 $existing = Occupation::where('legacy_id', $legacy->id)->first();
-                
+
                 if ($existing) {
                     if ($existing->name !== $name || $existing->is_active !== $isActive) {
                         $stats['would_update']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             $existing->update([
                                 'name' => $name,
                                 'is_active' => $isActive,
@@ -76,7 +81,7 @@ class LegacyImportOccupations extends Command
                     $existingByName = Occupation::whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
                     if ($existingByName) {
                         $stats['would_update']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             $existingByName->update([
                                 'legacy_id' => $legacy->id,
                                 'is_active' => $isActive,
@@ -84,7 +89,7 @@ class LegacyImportOccupations extends Command
                         }
                     } else {
                         $stats['would_create']++;
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             Occupation::create([
                                 'legacy_id' => $legacy->id,
                                 'name' => $name,
@@ -117,7 +122,7 @@ class LegacyImportOccupations extends Command
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("An error occurred during import: " . $e->getMessage());
+            $this->error('An error occurred during import: '.$e->getMessage());
         }
     }
 }

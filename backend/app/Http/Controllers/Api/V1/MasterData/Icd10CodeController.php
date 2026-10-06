@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\MasterData\Icd10Code;
 use App\Http\Resources\Api\V1\MasterData\Icd10CodeResource;
+use App\Models\MasterData\Icd10Code;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -17,8 +17,8 @@ class Icd10CodeController extends Controller
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('code', 'like', "%{$search}%")
-                  ->orWhere('name', 'like', "%{$search}%")
-                  ->orWhere('english_name', 'like', "%{$search}%");
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('english_name', 'like', "%{$search}%");
             });
         }
 
@@ -66,6 +66,7 @@ class Icd10CodeController extends Controller
     public function show(string $id)
     {
         $icd10 = Icd10Code::findOrFail($id);
+
         return new Icd10CodeResource($icd10);
     }
 
@@ -108,10 +109,11 @@ class Icd10CodeController extends Controller
     {
         $icd10 = Icd10Code::findOrFail($id);
         $validated = $request->validate([
-            'is_active' => 'required|boolean'
+            'is_active' => 'required|boolean',
         ]);
 
         $icd10->update($validated);
+
         return new Icd10CodeResource($icd10);
     }
 }

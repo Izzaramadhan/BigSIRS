@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\MasterData;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateRegencyRequest extends FormRequest
@@ -18,7 +17,7 @@ class UpdateRegencyRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => ['nullable', 'string', 'max:50', 'unique:regencies,code,' . $this->route('regency')->id],
+            'code' => ['nullable', 'string', 'max:50', 'unique:regencies,code,'.$this->route('regency')->id],
             'name' => ['required', 'string', 'max:255'],
             'province_id' => ['required', 'exists:provinces,id'],
             'is_active' => ['boolean'],

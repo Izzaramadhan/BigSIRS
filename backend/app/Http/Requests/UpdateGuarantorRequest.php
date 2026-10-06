@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\GuarantorType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Enum;
 
 class UpdateGuarantorRequest extends FormRequest
 {
@@ -21,9 +23,9 @@ class UpdateGuarantorRequest extends FormRequest
             'code' => $this->code !== null ? strtoupper(trim($this->code)) : null,
             'name' => $this->name !== null ? preg_replace('/\s+/', ' ', trim($this->name)) : null,
         ]);
-        
+
         foreach (['legacy_id', 'code', 'name', 'inacbg_id'] as $field) {
-            if ($this->has($field) && trim((string)$this->get($field)) === '') {
+            if ($this->has($field) && trim((string) $this->get($field)) === '') {
                 $this->merge([$field => null]);
             }
         }
@@ -37,11 +39,12 @@ class UpdateGuarantorRequest extends FormRequest
     public function rules(): array
     {
         $id = $this->route('guarantor')->id ?? $this->route('guarantor');
+
         return [
-            'code' => ['required', 'string', 'max:30', 'unique:guarantors,code,' . $id],
+            'code' => ['required', 'string', 'max:30', 'unique:guarantors,code,'.$id],
             'name' => ['required', 'string', 'max:150'],
-            'legacy_id' => ['nullable', 'integer', 'unique:guarantors,legacy_id,' . $id],
-            'type' => ['required', new \Illuminate\Validation\Rules\Enum(\App\Enums\GuarantorType::class)],
+            'legacy_id' => ['nullable', 'integer', 'unique:guarantors,legacy_id,'.$id],
+            'type' => ['required', new Enum(GuarantorType::class)],
             'is_active' => ['boolean'],
             'is_government' => ['required', 'boolean'],
             'inacbg_id' => ['nullable', 'string', 'max:10'],

@@ -27,6 +27,7 @@ class VillageResource extends JsonResource
                 if ($this->district->relationLoaded('regency')) {
                     return $this->district->regency->name;
                 }
+
                 return null;
             }),
             'created_at' => $this->created_at,

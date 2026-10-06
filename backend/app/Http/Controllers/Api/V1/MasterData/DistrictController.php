@@ -7,8 +7,9 @@ use App\Http\Requests\MasterData\StoreDistrictRequest;
 use App\Http\Requests\MasterData\UpdateDistrictRequest;
 use App\Http\Resources\MasterData\DistrictResource;
 use App\Models\District;
+use App\Models\Employee;
+use App\Models\Village;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class DistrictController extends Controller
 {
@@ -20,7 +21,7 @@ class DistrictController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
@@ -33,7 +34,9 @@ class DistrictController extends Controller
         }
 
         $perPage = $request->input('per_page', 10);
-        if ($perPage > 100) $perPage = 100;
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
 
         return DistrictResource::collection($query->paginate($perPage));
     }
@@ -49,6 +52,7 @@ class DistrictController extends Controller
     public function show(District $district)
     {
         $district->load('regency');
+
         return new DistrictResource($district);
     }
 
@@ -63,10 +67,10 @@ class DistrictController extends Controller
     public function updateStatus(Request $request, District $district)
     {
         $request->validate(['is_active' => 'required|boolean']);
-        
+
         $district->update(['is_active' => $request->is_active]);
         $district->load('regency');
-        
+
         return new DistrictResource($district);
     }
 
@@ -74,15 +78,15 @@ class DistrictController extends Controller
     {
         // Audit usage before deletion
         // Check if District is used by villages (Villages not implemented yet, but good practice to check if exists)
-        if (class_exists(\App\Models\Village::class) && \App\Models\Village::where('district_id', $district->id)->exists()) {
+        if (class_exists(Village::class) && Village::where('district_id', $district->id)->exists()) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus kecamatan karena masih memiliki kelurahan.'
+                'message' => 'Tidak dapat menghapus kecamatan karena masih memiliki kelurahan.',
             ], 409);
         }
 
-        if (class_exists(\App\Models\Employee::class) && \App\Models\Employee::where('district_id', $district->id)->exists()) {
+        if (class_exists(Employee::class) && Employee::where('district_id', $district->id)->exists()) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus kecamatan karena digunakan oleh data pegawai.'
+                'message' => 'Tidak dapat menghapus kecamatan karena digunakan oleh data pegawai.',
             ], 409);
         }
 

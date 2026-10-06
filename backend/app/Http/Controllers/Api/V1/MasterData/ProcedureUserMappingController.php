@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\MasterData\MedicalProcedure;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ProcedureUserMappingController extends Controller
@@ -14,13 +14,13 @@ class ProcedureUserMappingController extends Controller
         $query = MedicalProcedure::whereHas('employees')->with(['employees']);
 
         if ($search = $request->get('search')) {
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhereHas('employees', function($q) use ($search) {
-                      $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%");
-                  });
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhereHas('employees', function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -52,7 +52,7 @@ class ProcedureUserMappingController extends Controller
                             'profession' => $emp->profession,
                             'is_active' => $emp->is_active,
                         ];
-                    })
+                    }),
                 ];
             }),
             'meta' => [
@@ -60,7 +60,7 @@ class ProcedureUserMappingController extends Controller
                 'last_page' => $data->lastPage(),
                 'per_page' => $data->perPage(),
                 'total' => $data->total(),
-            ]
+            ],
         ]);
     }
 
@@ -96,6 +96,7 @@ class ProcedureUserMappingController extends Controller
     public function show(string $id)
     {
         $proc = MedicalProcedure::with('employees')->findOrFail($id);
+
         return response()->json([
             'data' => [
                 'id' => $proc->id,
@@ -112,8 +113,8 @@ class ProcedureUserMappingController extends Controller
                         'profession' => $emp->profession,
                         'is_active' => $emp->is_active,
                     ];
-                })
-            ]
+                }),
+            ],
         ]);
     }
 
@@ -147,6 +148,7 @@ class ProcedureUserMappingController extends Controller
     {
         $procedure = MedicalProcedure::findOrFail($id);
         $procedure->employees()->detach();
+
         return response()->json(['message' => 'Mapping berhasil dihapus']);
     }
 }

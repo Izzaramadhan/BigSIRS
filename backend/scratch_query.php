@@ -1,9 +1,11 @@
 <?php
+
 require __DIR__.'/vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
 $legacy = DB::connection('legacy');
@@ -23,7 +25,7 @@ $tables = $legacy->select("
 
 echo "=== TABLES MATCHING PATTERNS ===\n";
 foreach ($tables as $t) {
-    echo $t->TABLE_NAME . "\n";
+    echo $t->TABLE_NAME."\n";
 }
 
 // 2. Identify the likely tables for Jenis Tarif and the relation to Komponen

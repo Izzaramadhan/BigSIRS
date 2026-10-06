@@ -2,19 +2,20 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\ReportGroup;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\ReportGroup;
 
 class ImportLegacyReportGroupsCommand extends Command
 {
     protected $signature = 'legacy:import-report-groups {--dry-run : Perform a dry run without saving}';
+
     protected $description = 'Import Report Groups from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
-        $this->info("Starting Report Group legacy import (Dry Run: " . ($isDryRun ? 'Yes' : 'No') . ")");
+        $this->info('Starting Report Group legacy import (Dry Run: '.($isDryRun ? 'Yes' : 'No').')');
 
         DB::beginTransaction();
         try {
@@ -30,13 +31,14 @@ class ImportLegacyReportGroupsCommand extends Command
             foreach ($legacyData as $row) {
                 if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['Skipped Soft Deleted']++;
+
                     continue;
                 }
 
                 $existing = ReportGroup::where('legacy_id', $row->id)->orWhere('name', $row->nama)->first();
                 if ($existing) {
                     $stats['Would Update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $existing->update([
                             'legacy_id' => $row->id,
                             'name' => $row->nama,
@@ -47,7 +49,7 @@ class ImportLegacyReportGroupsCommand extends Command
                     }
                 } else {
                     $stats['Would Create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         ReportGroup::create([
                             'legacy_id' => $row->id,
                             'name' => $row->nama,
@@ -59,19 +61,21 @@ class ImportLegacyReportGroupsCommand extends Command
                 }
             }
 
-            $this->table(['Metric', 'Count'], collect($stats)->map(fn($v, $k) => [$k, $v])->toArray());
+            $this->table(['Metric', 'Count'], collect($stats)->map(fn ($v, $k) => [$k, $v])->toArray());
 
             if ($isDryRun) {
                 DB::rollBack();
-                $this->info("Dry run completed. Transactions rolled back.");
+                $this->info('Dry run completed. Transactions rolled back.');
             } else {
                 DB::commit();
-                $this->info("Import completed successfully.");
+                $this->info('Import completed successfully.');
             }
+
             return 0;
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
             return 1;
         }
     }

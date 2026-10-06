@@ -7,7 +7,7 @@ use App\Models\Village;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Village>
+ * @extends Factory<Village>
  */
 class VillageFactory extends Factory
 {
@@ -23,7 +23,7 @@ class VillageFactory extends Factory
         return [
             'district_id' => District::factory(),
             'code' => $this->faker->unique()->numerify('110101####'),
-            'name' => strtoupper($this->faker->citySuffix . ' ' . $this->faker->streetName),
+            'name' => strtoupper($this->faker->citySuffix.' '.$this->faker->streetName),
             'is_active' => true,
         ];
     }

@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Regency;
 use App\Models\District;
+use App\Models\Regency;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -11,26 +11,28 @@ use Illuminate\Support\Str;
 class ImportLegacyDistrictsCommand extends Command
 {
     protected $signature = 'legacy:import-districts {--dry-run : Only show what would be done without saving}';
+
     protected $description = 'Import districts from legacy ref_kecamatan table';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
-        
-        $legacyDb = config('database.default') === 'sqlite' 
-            ? 'simrs_legacy_test' 
+
+        $legacyDb = config('database.default') === 'sqlite'
+            ? 'simrs_legacy_test'
             : 'simrs_legacy_restored';
 
         if (config('database.default') === 'sqlite' && config('database.connections.legacy.database') !== 'simrs_legacy_test') {
             $this->error('Safety guard: Test environment must use simrs_legacy_test');
+
             return 1;
         }
 
         $this->info("Reading from: {$legacyDb}");
-        $this->info($isDryRun ? "MODE: DRY-RUN" : "MODE: ACTUAL IMPORT");
+        $this->info($isDryRun ? 'MODE: DRY-RUN' : 'MODE: ACTUAL IMPORT');
 
         $legacyDistricts = DB::connection('legacy')->table('ref_kecamatan')->get();
-        $this->info("Total Read: " . $legacyDistricts->count());
+        $this->info('Total Read: '.$legacyDistricts->count());
 
         $regencyMap = Regency::pluck('id', 'legacy_id')->toArray();
         $existingDistricts = District::pluck('id', 'legacy_id')->toArray();
@@ -48,26 +50,28 @@ class ImportLegacyDistrictsCommand extends Command
 
         $missingParents = [];
 
-        if (!$isDryRun) {
+        if (! $isDryRun) {
             DB::beginTransaction();
         }
 
         try {
             foreach ($legacyDistricts as $row) {
-                $legacyId = trim((string)$row->id);
-                $legacyRegencyId = trim((string)$row->id_kabupaten);
-                
-                $isDeleted = !in_array($row->deleted_at, [null, '', '0000-00-00', '0000-00-00 00:00:00'], true);
+                $legacyId = trim((string) $row->id);
+                $legacyRegencyId = trim((string) $row->id_kabupaten);
+
+                $isDeleted = ! in_array($row->deleted_at, [null, '', '0000-00-00', '0000-00-00 00:00:00'], true);
                 if ($isDeleted) {
                     $stats['skipped']++;
+
                     continue;
                 }
 
-                if (!isset($regencyMap[$legacyRegencyId])) {
+                if (! isset($regencyMap[$legacyRegencyId])) {
                     $stats['missing_parent']++;
-                    if (!in_array($legacyRegencyId, $missingParents)) {
+                    if (! in_array($legacyRegencyId, $missingParents)) {
                         $missingParents[] = $legacyRegencyId;
                     }
+
                     continue;
                 }
 
@@ -85,13 +89,13 @@ class ImportLegacyDistrictsCommand extends Command
 
                 if (isset($existingDistricts[$legacyId])) {
                     $stats['would_update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         District::where('legacy_id', $legacyId)->update($payload);
                         $stats['updated']++;
                     }
                 } else {
                     $stats['would_create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $payload['legacy_id'] = $legacyId;
                         District::create($payload);
                         $stats['created']++;
@@ -99,15 +103,15 @@ class ImportLegacyDistrictsCommand extends Command
                 }
             }
 
-            if (!$isDryRun) {
+            if (! $isDryRun) {
                 DB::commit();
             }
         } catch (\Exception $e) {
-            if (!$isDryRun) {
+            if (! $isDryRun) {
                 DB::rollBack();
             }
             $stats['failed']++;
-            $this->error("Error: " . $e->getMessage());
+            $this->error('Error: '.$e->getMessage());
         }
 
         $this->table(
@@ -126,7 +130,7 @@ class ImportLegacyDistrictsCommand extends Command
         );
 
         if (count($missingParents) > 0) {
-            $this->warn("Missing parents (legacy id_kabupaten) for " . count($missingParents) . " regencies. Need to import them first.");
+            $this->warn('Missing parents (legacy id_kabupaten) for '.count($missingParents).' regencies. Need to import them first.');
         }
 
         return 0;

@@ -20,7 +20,7 @@ class TariffComponentController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -45,6 +45,7 @@ class TariffComponentController extends Controller
     public function store(StoreTariffComponentRequest $request)
     {
         $component = TariffComponent::create($request->validated());
+
         return new TariffComponentResource($component);
     }
 
@@ -56,12 +57,14 @@ class TariffComponentController extends Controller
     public function update(UpdateTariffComponentRequest $request, TariffComponent $tariffComponent)
     {
         $tariffComponent->update($request->validated());
+
         return new TariffComponentResource($tariffComponent);
     }
 
     public function updateStatus(UpdateTariffComponentStatusRequest $request, TariffComponent $tariffComponent)
     {
         $tariffComponent->update($request->validated());
+
         return new TariffComponentResource($tariffComponent);
     }
 
@@ -69,6 +72,7 @@ class TariffComponentController extends Controller
     {
         // TODO: Check if still referenced by existing tariffs, if yes return 409
         $tariffComponent->delete();
+
         return response()->noContent();
     }
 }

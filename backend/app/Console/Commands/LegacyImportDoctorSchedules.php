@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\MasterData\DoctorSchedule;
 use App\Models\MasterData\Doctor;
+use App\Models\MasterData\DoctorSchedule;
 use App\Models\Polyclinic;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -30,11 +30,11 @@ class LegacyImportDoctorSchedules extends Command
     public function handle()
     {
         $dryRun = $this->option('dry-run');
-        
-        $this->info("Starting import of doctor schedules" . ($dryRun ? " [DRY RUN]" : ""));
-        
+
+        $this->info('Starting import of doctor schedules'.($dryRun ? ' [DRY RUN]' : ''));
+
         $schedules = DB::connection('legacy')->table('trx_jadwal_dokter')->get();
-        $this->info("Total legacy records read: " . $schedules->count());
+        $this->info('Total legacy records read: '.$schedules->count());
 
         $stats = [
             'soft_deleted' => 0,
@@ -69,16 +69,19 @@ class LegacyImportDoctorSchedules extends Command
             foreach ($schedules as $row) {
                 if ($row->status === '0') {
                     $stats['soft_deleted']++;
+
                     continue; // Skip soft deleted
                 }
 
-                if (!isset($doctors[$row->id_dokter])) {
+                if (! isset($doctors[$row->id_dokter])) {
                     $stats['missing_doctor']++;
+
                     continue;
                 }
 
-                if (!isset($polyclinics[$row->id_poliklinik])) {
+                if (! isset($polyclinics[$row->id_poliklinik])) {
                     $stats['missing_polyclinic']++;
+
                     continue;
                 }
 
@@ -86,11 +89,12 @@ class LegacyImportDoctorSchedules extends Command
                 $polyId = $polyclinics[$row->id_poliklinik];
                 $dayOfWeek = $dayMap[$row->hari_praktik] ?? null;
 
-                if (!$dayOfWeek || !$row->jam_mulai || !$row->jam_selesai) {
+                if (! $dayOfWeek || ! $row->jam_mulai || ! $row->jam_selesai) {
                     $stats['failed']++;
+
                     continue;
                 }
-                
+
                 $stats['valid']++;
 
                 $data = [
@@ -100,8 +104,8 @@ class LegacyImportDoctorSchedules extends Command
                     'day_of_week' => $dayOfWeek,
                     'start_time' => $row->jam_mulai,
                     'end_time' => $row->jam_selesai,
-                    'is_holiday' => (bool)$row->libur,
-                    'online_quota' => (int)$row->kuota_online,
+                    'is_holiday' => (bool) $row->libur,
+                    'online_quota' => (int) $row->kuota_online,
                     'created_at' => $row->created_at ?? now(),
                     'updated_at' => $row->updated_at ?? now(),
                 ];
@@ -110,35 +114,36 @@ class LegacyImportDoctorSchedules extends Command
 
                 if ($existing) {
                     $stats['would_update']++;
-                    if (!$dryRun) {
+                    if (! $dryRun) {
                         $existing->update($data);
                         $stats['updated']++;
                     }
                 } else {
                     $stats['would_create']++;
-                    if (!$dryRun) {
+                    if (! $dryRun) {
                         DoctorSchedule::create($data);
                         $stats['created']++;
                     }
                 }
             }
-            
+
             if ($dryRun) {
                 DB::rollBack();
-                $this->info("Dry run completed. No data was modified.");
+                $this->info('Dry run completed. No data was modified.');
             } else {
                 DB::commit();
-                $this->info("Import completed successfully.");
+                $this->info('Import completed successfully.');
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
             return 1;
         }
 
         $this->table(
             ['Metric', 'Value'],
-            collect($stats)->map(fn($v, $k) => [$k, $v])->toArray()
+            collect($stats)->map(fn ($v, $k) => [$k, $v])->toArray()
         );
 
         return 0;

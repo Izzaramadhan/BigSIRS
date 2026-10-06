@@ -25,7 +25,7 @@ return new class extends Migration
         Schema::table('icd9_cms', function (Blueprint $table) {
             $table->dropColumn(['english_name', 'description', 'inacbg_code', 'inacbg_name']);
         });
-        
+
         Schema::table('icd9_cms', function (Blueprint $table) {
             $table->renameColumn('name', 'description');
         });

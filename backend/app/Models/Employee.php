@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\MasterData\Doctor;
+use App\Models\MasterData\MedicalProcedure;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Models\MasterData\MedicalProcedure;
 
 class Employee extends Model
 {
@@ -45,12 +46,12 @@ class Employee extends Model
     public function procedures()
     {
         return $this->belongsToMany(MedicalProcedure::class, 'procedure_employee', 'employee_id', 'procedure_id')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
     public function doctor()
     {
-        return $this->hasOne(\App\Models\MasterData\Doctor::class, 'employee_id');
+        return $this->hasOne(Doctor::class, 'employee_id');
     }
 
     public function education()

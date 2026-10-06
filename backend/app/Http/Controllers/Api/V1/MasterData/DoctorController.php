@@ -5,8 +5,9 @@ namespace App\Http\Controllers\Api\V1\MasterData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\MasterData\StoreDoctorRequest;
 use App\Http\Requests\MasterData\UpdateDoctorRequest;
-use App\Http\Resources\MasterData\DoctorResource;
 use App\Http\Resources\MasterData\DoctorLookupResource;
+use App\Http\Resources\MasterData\DoctorResource;
+use App\Models\Employee;
 use App\Models\MasterData\Doctor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,14 +21,14 @@ class DoctorController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('sip_number', 'like', "%{$search}%")
-                  ->orWhere('legacy_id', 'like', "%{$search}%")
-                  ->orWhereHas('employee', function ($q2) use ($search) {
-                      $q2->where('name', 'like', "%{$search}%")
-                        ->orWhere('national_id', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%");
-                  });
+                    ->orWhere('legacy_id', 'like', "%{$search}%")
+                    ->orWhereHas('employee', function ($q2) use ($search) {
+                        $q2->where('name', 'like', "%{$search}%")
+                            ->orWhere('national_id', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -43,7 +44,7 @@ class DoctorController extends Controller
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDesc = $request->boolean('sort_desc', true);
         $direction = $sortDesc ? 'desc' : 'asc';
-        
+
         // Allowed sort columns whitelist
         $allowedSorts = ['id', 'created_at', 'is_active', 'sip_number', 'str_number'];
         if (in_array($sortBy, $allowedSorts)) {
@@ -60,18 +61,18 @@ class DoctorController extends Controller
     {
         return DB::transaction(function () use ($request) {
             $data = $request->validated();
-            
+
             $personData = $data['person'];
             $professionalData = $data['professional'];
             $employeeId = $request->input('employee_id');
-            
+
             if ($employeeId) {
-                $employee = \App\Models\Employee::findOrFail($employeeId);
+                $employee = Employee::findOrFail($employeeId);
                 $employee->update($personData);
             } else {
                 $personData['profession'] = 'Dokter';
                 $personData['is_active'] = true;
-                $employee = \App\Models\Employee::create($personData);
+                $employee = Employee::create($personData);
             }
 
             // Handle signature upload
@@ -82,7 +83,7 @@ class DoctorController extends Controller
 
             $professionalData['employee_id'] = $employee->id;
             $doctor = Doctor::create($professionalData);
-            
+
             return new DoctorResource($doctor->load(['employee', 'specialization']));
         });
     }
@@ -96,10 +97,10 @@ class DoctorController extends Controller
     {
         return DB::transaction(function () use ($request, $doctor) {
             $data = $request->validated();
-            
+
             $personData = $data['person'];
             $professionalData = $data['professional'];
-            
+
             $employee = $doctor->employee;
             $employee->update($personData);
 
@@ -126,6 +127,7 @@ class DoctorController extends Controller
     public function destroy(Doctor $doctor)
     {
         $doctor->delete();
+
         return response()->noContent();
     }
 
@@ -153,7 +155,7 @@ class DoctorController extends Controller
 
         if ($request->has('is_active')) {
             $query->where('is_active', $request->boolean('is_active'));
-        } else if (!$request->has('include_inactive')) {
+        } elseif (! $request->has('include_inactive')) {
             $query->where('is_active', true);
         }
 

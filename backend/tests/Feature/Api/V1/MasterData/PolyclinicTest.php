@@ -2,9 +2,8 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use App\Enums\ServiceType;
-use App\Models\User;
 use App\Models\Polyclinic;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -23,15 +22,15 @@ class PolyclinicTest extends TestCase
     private function validPayload(array $overrides = []): array
     {
         return array_merge([
-            'code'              => 'POLI-01',
-            'name'              => 'Poli Umum',
-            'service_type'      => 'rawat-jalan',
-            'description'       => 'Deskripsi poli',
-            'is_visible'        => true,
+            'code' => 'POLI-01',
+            'name' => 'Poli Umum',
+            'service_type' => 'rawat-jalan',
+            'description' => 'Deskripsi poli',
+            'is_visible' => true,
             'is_online_visible' => false,
-            'quota'             => 20,
-            'jkn_quota'         => 10,
-            'bpjs_code'         => 'B001',
+            'quota' => 20,
+            'jkn_quota' => 10,
+            'bpjs_code' => 'B001',
         ], $overrides);
     }
 
@@ -100,18 +99,18 @@ class PolyclinicTest extends TestCase
     // ------------------------------------------------------------------ //
     public function test_can_create_polyclinic_with_all_new_fields(): void
     {
-        $payload  = $this->validPayload();
+        $payload = $this->validPayload();
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $payload);
 
         $response->assertCreated();
         $this->assertDatabaseHas('polyclinics', [
-            'code'              => 'POLI-01',
-            'name'              => 'Poli Umum',
-            'service_type'      => 'rawat-jalan',
-            'quota'             => 20,
-            'jkn_quota'         => 10,
-            'bpjs_code'         => 'B001',
-            'is_visible'        => true,
+            'code' => 'POLI-01',
+            'name' => 'Poli Umum',
+            'service_type' => 'rawat-jalan',
+            'quota' => 20,
+            'jkn_quota' => 10,
+            'bpjs_code' => 'B001',
+            'is_visible' => true,
             'is_online_visible' => false,
         ]);
     }
@@ -187,33 +186,33 @@ class PolyclinicTest extends TestCase
     public function test_can_update_polyclinic_with_all_new_fields(): void
     {
         $polyclinic = Polyclinic::factory()->create();
-        $payload    = $this->validPayload([
-            'code'         => $polyclinic->code,
+        $payload = $this->validPayload([
+            'code' => $polyclinic->code,
             'service_type' => 'farmasi',
-            'quota'        => 99,
-            'jkn_quota'    => 50,
+            'quota' => 99,
+            'jkn_quota' => 50,
         ]);
 
         $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/polyclinics/{$polyclinic->id}", $payload);
         $response->assertOk();
 
         $this->assertDatabaseHas('polyclinics', [
-            'id'           => $polyclinic->id,
+            'id' => $polyclinic->id,
             'service_type' => 'farmasi',
-            'quota'        => 99,
-            'jkn_quota'    => 50,
+            'quota' => 99,
+            'jkn_quota' => 50,
         ]);
     }
 
     public function test_parent_id_cannot_be_modified_from_update_form(): void
     {
-        $parent     = Polyclinic::factory()->create();
+        $parent = Polyclinic::factory()->create();
         $polyclinic = Polyclinic::factory()->create(['parent_id' => $parent->id]);
         $origParentId = $polyclinic->parent_id;
 
         // Attempt to clear parent via user form
         $payload = $this->validPayload([
-            'code'      => $polyclinic->code,
+            'code' => $polyclinic->code,
             'parent_id' => null,
         ]);
 
@@ -221,7 +220,7 @@ class PolyclinicTest extends TestCase
 
         // parent_id must remain untouched
         $this->assertDatabaseHas('polyclinics', [
-            'id'        => $polyclinic->id,
+            'id' => $polyclinic->id,
             'parent_id' => $origParentId,
         ]);
     }
@@ -229,7 +228,7 @@ class PolyclinicTest extends TestCase
     public function test_hierarchy_preserved_when_updating(): void
     {
         $parent = Polyclinic::factory()->create();
-        $child  = Polyclinic::factory()->create(['parent_id' => $parent->id]);
+        $child = Polyclinic::factory()->create(['parent_id' => $parent->id]);
 
         $this->actingAs($this->user)->putJson("/api/v1/master-data/polyclinics/{$child->id}", $this->validPayload([
             'code' => $child->code,

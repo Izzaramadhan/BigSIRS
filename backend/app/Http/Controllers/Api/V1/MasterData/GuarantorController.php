@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\Guarantor;
-use App\Http\Resources\GuarantorResource;
 use App\Http\Requests\StoreGuarantorRequest;
 use App\Http\Requests\UpdateGuarantorRequest;
 use App\Http\Requests\UpdateGuarantorStatusRequest;
+use App\Http\Resources\GuarantorResource;
+use App\Models\Guarantor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -18,9 +18,9 @@ class GuarantorController extends Controller
         $perPage = min((int) $request->query('per_page', 15), 100);
         $sort = $request->query('sort', 'name');
         $direction = strtolower($request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
-        
+
         $allowedSorts = ['id', 'code', 'name', 'type', 'created_at', 'updated_at', 'is_active', 'is_government', 'inacbg_id'];
-        if (!in_array($sort, $allowedSorts)) {
+        if (! in_array($sort, $allowedSorts)) {
             $sort = 'name';
         }
 
@@ -47,6 +47,7 @@ class GuarantorController extends Controller
     {
         return DB::transaction(function () use ($request) {
             $guarantor = Guarantor::create($request->validated());
+
             return new GuarantorResource($guarantor);
         });
     }
@@ -60,6 +61,7 @@ class GuarantorController extends Controller
     {
         return DB::transaction(function () use ($request, $guarantor) {
             $guarantor->update($request->validated());
+
             return new GuarantorResource($guarantor);
         });
     }
@@ -68,6 +70,7 @@ class GuarantorController extends Controller
     {
         return DB::transaction(function () use ($request, $guarantor) {
             $guarantor->update($request->validated());
+
             return new GuarantorResource($guarantor);
         });
     }

@@ -16,8 +16,8 @@ class ReportGroupController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
@@ -26,7 +26,7 @@ class ReportGroupController extends Controller
         }
 
         return response()->json([
-            'data' => $query->limit(100)->get()
+            'data' => $query->limit(100)->get(),
         ]);
     }
 
@@ -36,10 +36,11 @@ class ReportGroupController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'type' => 'nullable|string|max:30',
-            'is_active' => 'boolean'
+            'is_active' => 'boolean',
         ]);
 
         $rg = ReportGroup::create($data);
+
         return response()->json(['data' => $rg], 201);
     }
 
@@ -54,25 +55,28 @@ class ReportGroupController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'type' => 'nullable|string|max:30',
-            'is_active' => 'boolean'
+            'is_active' => 'boolean',
         ]);
 
         $reportGroup->update($data);
+
         return response()->json(['data' => $reportGroup]);
     }
 
     public function updateStatus(Request $request, ReportGroup $reportGroup)
     {
         $data = $request->validate([
-            'is_active' => 'required|boolean'
+            'is_active' => 'required|boolean',
         ]);
         $reportGroup->update($data);
+
         return response()->json(['data' => $reportGroup]);
     }
 
     public function destroy(ReportGroup $reportGroup)
     {
         $reportGroup->delete();
+
         return response()->noContent();
     }
 }

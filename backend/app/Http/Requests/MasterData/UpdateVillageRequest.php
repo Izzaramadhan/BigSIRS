@@ -16,23 +16,23 @@ class UpdateVillageRequest extends FormRequest
     {
         return [
             'district_id' => [
-                'required', 
-                'integer', 
-                \Illuminate\Validation\Rule::exists('districts', 'id')->where(function ($query) {
+                'required',
+                'integer',
+                Rule::exists('districts', 'id')->where(function ($query) {
                     $query->where('is_active', true)->whereNull('deleted_at');
-                })
+                }),
             ],
             'code' => [
-                'nullable', 
-                'string', 
-                'max:50', 
-                Rule::unique('villages', 'code')->ignore($this->village)
+                'nullable',
+                'string',
+                'max:50',
+                Rule::unique('villages', 'code')->ignore($this->village),
             ],
             'name' => ['required', 'string', 'max:255'],
             'is_active' => ['boolean'],
         ];
     }
-    
+
     protected function prepareForValidation()
     {
         if ($this->has('name')) {

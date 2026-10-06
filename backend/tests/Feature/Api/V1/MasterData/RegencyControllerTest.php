@@ -2,10 +2,9 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use App\Models\Regency;
-use App\Models\Province;
-use App\Models\District;
 use App\Models\Employee;
+use App\Models\Province;
+use App\Models\Regency;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -15,6 +14,7 @@ class RegencyControllerTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private Province $province;
 
     protected function setUp(): void
@@ -34,8 +34,8 @@ class RegencyControllerTest extends TestCase
             ->assertJsonCount(3, 'data')
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'code', 'name', 'province_id', 'province_name', 'is_active']
-                ]
+                    '*' => ['id', 'code', 'name', 'province_id', 'province_name', 'is_active'],
+                ],
             ]);
     }
 
@@ -57,7 +57,7 @@ class RegencyControllerTest extends TestCase
         Regency::factory()->create(['province_id' => $this->province->id]);
         Regency::factory()->create(['province_id' => $province2->id]);
 
-        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/regencies?province_id=' . $this->province->id);
+        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/regencies?province_id='.$this->province->id);
 
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
@@ -104,7 +104,7 @@ class RegencyControllerTest extends TestCase
         $regency = Regency::factory()->create([
             'code' => '0012',
             'name' => 'KABUPATEN LAMA',
-            'province_id' => $this->province->id
+            'province_id' => $this->province->id,
         ]);
 
         $payload = [

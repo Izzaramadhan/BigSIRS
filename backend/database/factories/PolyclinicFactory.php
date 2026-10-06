@@ -19,17 +19,17 @@ class PolyclinicFactory extends Factory
     public function definition(): array
     {
         return [
-            'code'              => strtoupper($this->faker->unique()->bothify('POLI-####')),
-            'name'              => $this->faker->words(3, true),
-            'service_type'      => $this->faker->randomElement(ServiceType::cases())->value,
-            'description'       => $this->faker->optional()->sentence(),
-            'is_visible'        => true,
+            'code' => strtoupper($this->faker->unique()->bothify('POLI-####')),
+            'name' => $this->faker->words(3, true),
+            'service_type' => $this->faker->randomElement(ServiceType::cases())->value,
+            'description' => $this->faker->optional()->sentence(),
+            'is_visible' => true,
             'is_online_visible' => false,
-            'quota'             => $this->faker->numberBetween(0, 50),
-            'jkn_quota'         => $this->faker->numberBetween(0, 30),
-            'bpjs_code'         => $this->faker->optional()->numerify('BPJS-####'),
-            'satusehat_code'    => $this->faker->optional()->uuid(),
-            'is_active'         => true,
+            'quota' => $this->faker->numberBetween(0, 50),
+            'jkn_quota' => $this->faker->numberBetween(0, 30),
+            'bpjs_code' => $this->faker->optional()->numerify('BPJS-####'),
+            'satusehat_code' => $this->faker->optional()->uuid(),
+            'is_active' => true,
         ];
     }
 }

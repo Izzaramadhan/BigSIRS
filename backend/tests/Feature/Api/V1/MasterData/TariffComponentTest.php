@@ -25,14 +25,14 @@ class TariffComponentTest extends TestCase
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/tariff-components');
 
         $response->assertStatus(200)
-                 ->assertJsonStructure([
-                     'data' => [
-                         '*' => ['id', 'legacy_id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
-                     ],
-                     'meta',
-                     'links'
-                 ]);
-                 
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => ['id', 'legacy_id', 'name', 'description', 'is_active', 'created_at', 'updated_at'],
+                ],
+                'meta',
+                'links',
+            ]);
+
         $this->assertCount(10, $response->json('data')); // default per_page is 10
     }
 
@@ -74,7 +74,7 @@ class TariffComponentTest extends TestCase
         ]);
 
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['name']);
+            ->assertJsonValidationErrors(['name']);
     }
 
     public function test_can_update_tariff_component()
@@ -90,7 +90,7 @@ class TariffComponentTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertEquals('New Name', $response->json('data.name'));
-        
+
         $this->assertDatabaseHas('tariff_components', [
             'id' => $component->id,
             'name' => 'New Name',
@@ -119,7 +119,7 @@ class TariffComponentTest extends TestCase
         $response = $this->actingAs($this->user)->deleteJson("/api/v1/master-data/tariff-components/{$component->id}");
 
         $response->assertStatus(204);
-        
+
         $this->assertSoftDeleted('tariff_components', [
             'id' => $component->id,
         ]);

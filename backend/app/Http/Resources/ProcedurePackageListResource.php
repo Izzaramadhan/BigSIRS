@@ -15,8 +15,8 @@ class ProcedurePackageListResource extends JsonResource
             'total_amount' => $this->total_amount,
             'is_active' => $this->is_active,
             'items_count' => $this->whenCounted('items'),
-            'items_summary' => $this->whenLoaded('items', function() {
-                return $this->items->map(function($item) {
+            'items_summary' => $this->whenLoaded('items', function () {
+                return $this->items->map(function ($item) {
                     return [
                         'id' => $item->id,
                         'procedure_name' => $item->procedure->name ?? 'Unknown',
