@@ -52,7 +52,8 @@ const navigation = [
               { name: 'Kelurahan', path: '/master-data/basic-data/villages' },
               { name: 'Pendidikan', path: '/master-data/basic-data/educations' },
               { name: 'Pekerjaan', path: '/master-data/basic-data/occupations' },
-              { name: 'Jenis Asuransi', path: '/master-data/basic-data/insurance-types' }
+              { name: 'Jenis Asuransi', path: '/master-data/basic-data/insurance-types' },
+              { name: 'Jenis Layanan', path: '/master-data/service-types' }
             ]
           },
           {
