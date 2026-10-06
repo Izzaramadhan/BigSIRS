@@ -63,11 +63,28 @@ class LookupController extends Controller
 
     public function districts(Request $request)
     {
-        $query = \App\Models\District::query();
+        $query = \App\Models\District::query()
+            ->with('regency:id,name')
+            ->where('is_active', true)
+            ->orderBy('name');
+
         if ($request->has('regency_id')) {
             $query->where('regency_id', $request->regency_id);
         }
-        return response()->json($query->orderBy('name')->get());
+
+        $districts = $query->get(['id', 'name', 'code', 'regency_id']);
+        
+        $mapped = $districts->map(function ($district) {
+            return [
+                'id' => $district->id,
+                'name' => $district->name,
+                'code' => $district->code,
+                'regency_id' => $district->regency_id,
+                'regency_name' => $district->regency ? $district->regency->name : null,
+            ];
+        });
+
+        return response()->json($mapped);
     }
 
     public function villages(Request $request)
