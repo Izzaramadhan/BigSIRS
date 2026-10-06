@@ -27,4 +27,9 @@ class District extends Model
     {
         return $this->belongsTo(Regency::class);
     }
+
+    public function villages()
+    {
+        return $this->hasMany(Village::class);
+    }
 }
