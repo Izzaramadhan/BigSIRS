@@ -25,8 +25,8 @@ class LookupService {
     return extractCollection(response)
   }
 
-  async getCities(params = {}) {
-    const response = await axios.get('/lookups/cities', { params })
+  async getRegencies(params = {}) {
+    const response = await axios.get('/lookups/regencies', { params })
     return extractCollection(response)
   }
 

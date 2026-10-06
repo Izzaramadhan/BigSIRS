@@ -47,6 +47,7 @@ const navigation = [
           {
             name: 'Data Dasar',
             submenu: [
+              { name: 'Kabupaten', path: '/master-data/basic-data/regencies' },
               { name: 'Pendidikan', path: '/master-data/basic-data/educations' },
               { name: 'Pekerjaan', path: '/master-data/basic-data/occupations' },
               { name: 'Jenis Asuransi', path: '/master-data/basic-data/insurance-types' }

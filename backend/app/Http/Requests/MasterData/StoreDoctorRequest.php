@@ -38,7 +38,7 @@ class StoreDoctorRequest extends FormRequest
             'person.address' => ['nullable', 'string'],
             'person.postal_code' => ['nullable', 'string', 'max:10'],
             'person.province_id' => ['nullable', 'string', 'max:10'],
-            'person.city_id' => ['nullable', 'string', 'max:10'],
+            'person.regency_id' => ['nullable', 'string', 'max:10'],
             'person.district_id' => ['nullable', 'string', 'max:10'],
             'person.village_id' => ['nullable', 'string', 'max:15'],
             'person.phone' => ['nullable', 'string', 'max:20'],

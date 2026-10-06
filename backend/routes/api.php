@@ -62,6 +62,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('occupations/{occupation}/status', [\App\Http\Controllers\Api\V1\MasterData\OccupationController::class, 'updateStatus']);
             Route::apiResource('occupations', \App\Http\Controllers\Api\V1\MasterData\OccupationController::class);
+
+            Route::patch('regencies/{regency}/status', [\App\Http\Controllers\Api\V1\MasterData\RegencyController::class, 'updateStatus']);
+            Route::apiResource('regencies', \App\Http\Controllers\Api\V1\MasterData\RegencyController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -72,7 +75,7 @@ Route::prefix('v1')->group(function () {
             Route::get('doctors', [\App\Http\Controllers\Api\V1\MasterData\DoctorController::class, 'lookup']);
             Route::get('specializations', [\App\Http\Controllers\Api\V1\LookupController::class, 'specializations']);
             Route::get('provinces', [\App\Http\Controllers\Api\V1\LookupController::class, 'provinces']);
-            Route::get('cities', [\App\Http\Controllers\Api\V1\LookupController::class, 'cities']);
+            Route::get('regencies', [\App\Http\Controllers\Api\V1\LookupController::class, 'regencies']);
             Route::get('districts', [\App\Http\Controllers\Api\V1\LookupController::class, 'districts']);
             Route::get('villages', [\App\Http\Controllers\Api\V1\LookupController::class, 'villages']);
             Route::get('educations', [\App\Http\Controllers\Api\V1\LookupController::class, 'educations']);

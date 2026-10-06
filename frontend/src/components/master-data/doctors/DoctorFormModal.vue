@@ -44,7 +44,7 @@ const createEmptyForm = () => ({
     address: '',
     postal_code: '',
     province_id: '',
-    city_id: '',
+    regency_id: '',
     district_id: '',
     village_id: '',
     phone: '',
@@ -68,7 +68,7 @@ const form = reactive(createEmptyForm());
 const lookups = reactive({
   specializations: [],
   provinces: [],
-  cities: [],
+  regencies: [],
   districts: [],
   villages: [],
   educations: [],
@@ -81,7 +81,7 @@ const previewImage = ref(null);
 const lookupLoading = reactive({
   specializations: false,
   provinces: false,
-  cities: false,
+  regencies: false,
   districts: false,
   villages: false,
   educations: false,
@@ -91,7 +91,7 @@ const lookupLoading = reactive({
 const lookupError = reactive({
   specializations: false,
   provinces: false,
-  cities: false,
+  regencies: false,
   districts: false,
   villages: false,
   educations: false,
@@ -128,39 +128,39 @@ const detailError = ref('');
 
 const onProvinceChange = async () => {
   if (!isHydrating.value) {
-    form.person.city_id = '';
+    form.person.regency_id = '';
     form.person.district_id = '';
     form.person.village_id = '';
   }
-  lookups.cities = [];
+  lookups.regencies = [];
   lookups.districts = [];
   lookups.villages = [];
   if (form.person.province_id) {
-    lookupLoading.cities = true;
-    lookupError.cities = false;
+    lookupLoading.regencies = true;
+    lookupError.regencies = false;
     try {
-      lookups.cities = await LookupService.getCities({ province_id: form.person.province_id });
+      lookups.regencies = await LookupService.getRegencies({ province_id: form.person.province_id });
     } catch (err) {
       console.error(err);
-      lookupError.cities = true;
+      lookupError.regencies = true;
     } finally {
-      lookupLoading.cities = false;
+      lookupLoading.regencies = false;
     }
   }
 };
 
-const onCityChange = async () => {
+const onRegencyChange = async () => {
   if (!isHydrating.value) {
     form.person.district_id = '';
     form.person.village_id = '';
   }
   lookups.districts = [];
   lookups.villages = [];
-  if (form.person.city_id) {
+  if (form.person.regency_id) {
     lookupLoading.districts = true;
     lookupError.districts = false;
     try {
-      lookups.districts = await LookupService.getDistricts({ city_id: form.person.city_id });
+      lookups.districts = await LookupService.getDistricts({ regency_id: form.person.regency_id });
     } catch (err) {
       console.error(err);
       lookupError.districts = true;
@@ -191,7 +191,7 @@ const onDistrictChange = async () => {
 
 const initializeCreateMode = () => {
   Object.assign(form, createEmptyForm());
-  lookups.cities = [];
+  lookups.regencies = [];
   lookups.districts = [];
   lookups.villages = [];
   previewImage.value = null;
@@ -231,13 +231,13 @@ const initializeEditMode = async (detail) => {
       
       form.person.province_id = person.province_id ? Number(person.province_id) : '';
       if (form.person.province_id) {
-        const res = await LookupService.getCities({ province_id: form.person.province_id });
-        lookups.cities = res.data || res;
+        const res = await LookupService.getRegencies({ province_id: form.person.province_id });
+        lookups.regencies = res.data || res;
       }
       
-      form.person.city_id = person.city_id ? Number(person.city_id) : '';
-      if (form.person.city_id) {
-        const res = await LookupService.getDistricts({ city_id: form.person.city_id });
+      form.person.regency_id = person.regency_id ? Number(person.regency_id) : '';
+      if (form.person.regency_id) {
+        const res = await LookupService.getDistricts({ regency_id: form.person.regency_id });
         lookups.districts = res.data || res;
       }
       
@@ -338,7 +338,7 @@ const buildPayload = () => {
       address: normalizeNullableString(form.person.address),
       postal_code: normalizeNullableString(form.person.postal_code),
       province_id: toNullableNumber(form.person.province_id),
-      city_id: toNullableNumber(form.person.city_id),
+      regency_id: toNullableNumber(form.person.regency_id),
       district_id: toNullableNumber(form.person.district_id),
       village_id: toNullableNumber(form.person.village_id),
       phone: normalizeNullableString(form.person.phone),
@@ -598,16 +598,16 @@ const handleSubmit = async () => {
               <label class="form-label">Kabupaten / Kota</label>
               <BaseSelect 
                 id="city" 
-                v-model="form.person.city_id" 
-                @change="onCityChange"
+                v-model="form.person.regency_id" 
+                @change="onRegencyChange"
                 :disabled="!form.person.province_id"
-                :options="lookups.cities" 
-                :loading="lookupLoading.cities" 
-                :hasError="lookupError.cities || !!fieldError('person.city_id', 'city_id')"
+                :options="lookups.regencies" 
+                :loading="lookupLoading.regencies" 
+                :hasError="lookupError.regencies || !!fieldError('person.regency_id', 'regency_id')"
                 placeholder="Pilih Kota/Kab"
                 emptyMessage="Data Kota/Kab belum tersedia"
               />
-              <span v-if="fieldError('person.city_id', 'city_id')" class="error-message">{{ fieldError('person.city_id', 'city_id') }}</span>
+              <span v-if="fieldError('person.regency_id', 'regency_id')" class="error-message">{{ fieldError('person.regency_id', 'regency_id') }}</span>
             </div>
             <div class="form-group">
               <label class="form-label">Kecamatan</label>
@@ -615,7 +615,7 @@ const handleSubmit = async () => {
                 id="district" 
                 v-model="form.person.district_id" 
                 @change="onDistrictChange"
-                :disabled="!form.person.city_id"
+                :disabled="!form.person.regency_id"
                 :options="lookups.districts" 
                 :loading="lookupLoading.districts" 
                 :hasError="lookupError.districts || !!fieldError('person.district_id', 'district_id')"

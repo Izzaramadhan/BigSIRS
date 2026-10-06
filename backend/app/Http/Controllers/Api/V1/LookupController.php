@@ -52,9 +52,9 @@ class LookupController extends Controller
         return response()->json(\App\Models\Province::orderBy('name')->get());
     }
 
-    public function cities(Request $request)
+    public function regencies(Request $request)
     {
-        $query = \App\Models\City::query();
+        $query = \App\Models\Regency::query();
         if ($request->has('province_id')) {
             $query->where('province_id', $request->province_id);
         }
@@ -64,8 +64,8 @@ class LookupController extends Controller
     public function districts(Request $request)
     {
         $query = \App\Models\District::query();
-        if ($request->has('city_id')) {
-            $query->where('city_id', $request->city_id);
+        if ($request->has('regency_id')) {
+            $query->where('regency_id', $request->regency_id);
         }
         return response()->json($query->orderBy('name')->get());
     }

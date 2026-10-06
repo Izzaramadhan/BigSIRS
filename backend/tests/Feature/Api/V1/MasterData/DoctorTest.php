@@ -189,7 +189,7 @@ class DoctorTest extends TestCase
                         'education_id',
                         'occupation_id',
                         'province_id',
-                        'city_id',
+                        'regency_id',
                         'district_id',
                         'village_id',
                     ]
