@@ -139,7 +139,7 @@ const formatGender = (gender) => {
               <span class="detail-value">{{ formatString(person.district?.name) }}</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Kelurahan/Desa</span>
+              <span class="detail-label">Kelurahan</span>
               <span class="detail-value">{{ formatString(person.village?.name) }}</span>
             </div>
             <div class="detail-item">

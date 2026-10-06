@@ -68,6 +68,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('districts/{district}/status', [\App\Http\Controllers\Api\V1\MasterData\DistrictController::class, 'updateStatus']);
             Route::apiResource('districts', \App\Http\Controllers\Api\V1\MasterData\DistrictController::class);
+
+            Route::patch('villages/{village}/status', [\App\Http\Controllers\Api\V1\MasterData\VillageController::class, 'updateStatus']);
+            Route::apiResource('villages', \App\Http\Controllers\Api\V1\MasterData\VillageController::class);
         });
 
         Route::prefix('lookups')->group(function () {
