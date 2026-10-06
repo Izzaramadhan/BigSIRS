@@ -14,7 +14,7 @@ class ServiceTypeService
     {
         $query = ServiceType::query();
 
-        if (!empty($filters['search'])) {
+        if (! empty($filters['search'])) {
             $search = $filters['search'];
             $query->where('name', 'like', "%{$search}%");
         }
@@ -45,6 +45,7 @@ class ServiceTypeService
     public function update(ServiceType $serviceType, array $data): ServiceType
     {
         $serviceType->update($data);
+
         return $serviceType;
     }
 

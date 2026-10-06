@@ -14,9 +14,9 @@ class UpdateIcd9cmCodeRequest extends FormRequest
     public function rules(): array
     {
         $id = $this->route('icd9_cm') ? $this->route('icd9_cm')->id : null;
-        
+
         return [
-            'code' => 'required|string|max:50|unique:icd9_cms,code,' . $id,
+            'code' => 'required|string|max:50|unique:icd9_cms,code,'.$id,
             'name' => 'required|string|max:255',
             'english_name' => 'nullable|string|max:255',
             'description' => 'nullable|string',

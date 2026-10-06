@@ -3,8 +3,8 @@
 namespace App\Http\Requests\MasterData;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class StoreDistrictRequest extends FormRequest
 {

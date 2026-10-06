@@ -2,24 +2,25 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
+use App\Models\MasterData\MedicalProcedure;
+use App\Models\MasterData\ProcedurePackage;
+use App\Models\ProcedureCategory;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use App\Models\User;
-use App\Models\MasterData\ProcedurePackage;
-use App\Models\MasterData\MedicalProcedure;
-use App\Models\ProcedureCategory;
 
 class ProcedurePackageTest extends TestCase
 {
     use RefreshDatabase;
 
     protected $user;
+
     protected $procedure;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->user = User::factory()->create();
         $cat = ProcedureCategory::factory()->create();
         $this->procedure = MedicalProcedure::create([
@@ -40,7 +41,7 @@ class ProcedurePackageTest extends TestCase
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/procedure-packages');
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.0.name', 'Paket A');
+            ->assertJsonPath('data.0.name', 'Paket A');
     }
 
     public function test_can_create_package_and_calculates_total()
@@ -53,16 +54,16 @@ class ProcedurePackageTest extends TestCase
                     'medical_procedure_id' => $this->procedure->id,
                     'quantity' => 2,
                     'unit_amount' => 15000,
-                    'sort_order' => 1
-                ]
-            ]
+                    'sort_order' => 1,
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedure-packages', $payload);
 
         $response->assertStatus(201)
-                 ->assertJsonPath('data.total_amount', "30000.00"); // 2 * 15000
-                 
+            ->assertJsonPath('data.total_amount', '30000.00'); // 2 * 15000
+
         $this->assertDatabaseHas('procedure_packages', ['name' => 'New Package', 'total_amount' => 30000]);
         $this->assertDatabaseHas('procedure_package_items', ['unit_amount' => 15000, 'subtotal_amount' => 30000]);
     }
@@ -71,12 +72,12 @@ class ProcedurePackageTest extends TestCase
     {
         $payload = [
             'name' => 'Empty Package',
-            'items' => []
+            'items' => [],
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedure-packages', $payload);
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['items']);
+            ->assertJsonValidationErrors(['items']);
     }
 
     public function test_invalid_procedure_returns_422()
@@ -88,13 +89,13 @@ class ProcedurePackageTest extends TestCase
                     'medical_procedure_id' => 9999, // Does not exist
                     'quantity' => 1,
                     'unit_amount' => 1000,
-                ]
-            ]
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedure-packages', $payload);
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['items.0.medical_procedure_id']);
+            ->assertJsonValidationErrors(['items.0.medical_procedure_id']);
     }
 
     public function test_delete_without_auth_fails()
@@ -108,28 +109,28 @@ class ProcedurePackageTest extends TestCase
         $package = ProcedurePackage::create([
             'name' => 'Paket Hapus',
             'total_amount' => 10000,
-            'is_active' => true
+            'is_active' => true,
         ]);
-        
+
         $item = $package->items()->create([
             'medical_procedure_id' => $this->procedure->id,
             'quantity' => 1,
             'unit_amount' => 10000,
             'subtotal_amount' => 10000,
-            'sort_order' => 1
+            'sort_order' => 1,
         ]);
 
         $response = $this->actingAs($this->user)->deleteJson("/api/v1/master-data/procedure-packages/{$package->id}");
 
         $response->assertStatus(200)
-                 ->assertJsonPath('success', true);
+            ->assertJsonPath('success', true);
 
         // Verify package is soft-deleted
         $this->assertSoftDeleted('procedure_packages', ['id' => $package->id]);
 
         // Verify procedure is NOT deleted
         $this->assertDatabaseHas('medical_procedures', ['id' => $this->procedure->id, 'deleted_at' => null]);
-        
+
         // Verify package items remain intact in DB
         $this->assertDatabaseHas('procedure_package_items', ['id' => $item->id]);
 
@@ -150,15 +151,15 @@ class ProcedurePackageTest extends TestCase
         $package = ProcedurePackage::create([
             'name' => 'Package Update Test',
             'total_amount' => 30000,
-            'is_active' => true
+            'is_active' => true,
         ]);
-        
+
         $item1 = $package->items()->create([
             'medical_procedure_id' => $this->procedure->id,
             'quantity' => 1,
             'unit_amount' => 10000,
             'subtotal_amount' => 10000,
-            'sort_order' => 1
+            'sort_order' => 1,
         ]);
 
         $procedure2 = MedicalProcedure::create([
@@ -173,7 +174,7 @@ class ProcedurePackageTest extends TestCase
             'quantity' => 2,
             'unit_amount' => 10000,
             'subtotal_amount' => 20000,
-            'sort_order' => 2
+            'sort_order' => 2,
         ]);
 
         // 2. Update package by sending only item1, which should remove item2
@@ -186,26 +187,26 @@ class ProcedurePackageTest extends TestCase
                     'medical_procedure_id' => $this->procedure->id,
                     'quantity' => 2, // updating quantity
                     'unit_amount' => 10000,
-                    'sort_order' => 1
-                ]
+                    'sort_order' => 1,
+                ],
                 // item2 is intentionally omitted
-            ]
+            ],
         ];
 
         $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/procedure-packages/{$package->id}", $payload);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.total_amount', "20000.00"); // 2 * 10000
+            ->assertJsonPath('data.total_amount', '20000.00'); // 2 * 10000
 
         // Database checks
         $this->assertDatabaseHas('procedure_package_items', [
             'id' => $item1->id,
             'quantity' => 2,
-            'subtotal_amount' => 20000
+            'subtotal_amount' => 20000,
         ]);
 
         $this->assertDatabaseMissing('procedure_package_items', [
-            'id' => $item2->id
+            'id' => $item2->id,
         ]);
     }
 }

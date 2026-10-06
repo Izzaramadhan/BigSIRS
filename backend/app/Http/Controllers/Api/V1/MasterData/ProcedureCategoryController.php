@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\ProcedureCategory;
-use App\Http\Resources\ProcedureCategoryResource;
 use App\Http\Requests\StoreProcedureCategoryRequest;
 use App\Http\Requests\UpdateProcedureCategoryRequest;
 use App\Http\Requests\UpdateProcedureCategoryStatusRequest;
+use App\Http\Resources\ProcedureCategoryResource;
+use App\Models\ProcedureCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,20 +15,20 @@ class ProcedureCategoryController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage   = min((int) $request->query('per_page', 15), 100);
-        $sort      = $request->query('sort', 'name');
+        $perPage = min((int) $request->query('per_page', 15), 100);
+        $sort = $request->query('sort', 'name');
         $direction = strtolower($request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
 
         $allowedSorts = ['id', 'name', 'is_active', 'created_at', 'updated_at'];
-        if (!in_array($sort, $allowedSorts)) {
+        if (! in_array($sort, $allowedSorts)) {
             $sort = 'name';
         }
 
         $query = ProcedureCategory::query();
 
         if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('description', 'like', '%' . $request->search . '%');
+            $query->where('name', 'like', '%'.$request->search.'%')
+                ->orWhere('description', 'like', '%'.$request->search.'%');
         }
 
         if ($request->has('is_active') && $request->is_active !== null) {
@@ -44,6 +44,7 @@ class ProcedureCategoryController extends Controller
     {
         return DB::transaction(function () use ($request) {
             $category = ProcedureCategory::create($request->validated());
+
             return (new ProcedureCategoryResource($category))->response()->setStatusCode(201);
         });
     }
@@ -57,6 +58,7 @@ class ProcedureCategoryController extends Controller
     {
         return DB::transaction(function () use ($request, $procedureCategory) {
             $procedureCategory->update($request->validated());
+
             return new ProcedureCategoryResource($procedureCategory->fresh());
         });
     }
@@ -65,6 +67,7 @@ class ProcedureCategoryController extends Controller
     {
         return DB::transaction(function () use ($request, $procedureCategory) {
             $procedureCategory->update($request->validated());
+
             return new ProcedureCategoryResource($procedureCategory->fresh());
         });
     }

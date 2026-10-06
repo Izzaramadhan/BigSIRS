@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class CaptchaController extends Controller
 {
@@ -23,14 +22,14 @@ class CaptchaController extends Controller
 
         // Simpan hash jawaban di cache selama 5 menit
         $captchaId = (string) Str::uuid();
-        Cache::put('captcha_' . $captchaId, Hash::make(strtoupper($captchaText)), 300);
+        Cache::put('captcha_'.$captchaId, Hash::make(strtoupper($captchaText)), 300);
 
         // SVG Generator
         $width = 150;
         $height = 50;
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$width.'" height="'.$height.'" viewBox="0 0 '.$width.' '.$height.'">';
         $svg .= '<rect width="'.$width.'" height="'.$height.'" fill="#f0fdf4"/>'; // light green bg
-        
+
         // Tambahkan garis pengganggu
         for ($i = 0; $i < 5; $i++) {
             $x1 = random_int(0, $width);
@@ -46,14 +45,14 @@ class CaptchaController extends Controller
         $svg .= '</text>';
         $svg .= '</svg>';
 
-        $base64Svg = 'data:image/svg+xml;base64,' . base64_encode($svg);
+        $base64Svg = 'data:image/svg+xml;base64,'.base64_encode($svg);
 
         return response()->json([
             'data' => [
                 'captcha_id' => $captchaId,
                 'captcha_image' => $base64Svg,
-                'expires_in' => 300
-            ]
+                'expires_in' => 300,
+            ],
         ]);
     }
 }

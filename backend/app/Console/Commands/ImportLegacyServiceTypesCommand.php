@@ -35,6 +35,7 @@ class ImportLegacyServiceTypesCommand extends Command
         } catch (Throwable $e) {
             $this->error('Gagal terhubung ke database legacy atau tabel ref_jenis_layanan tidak ditemukan.');
             $this->error($e->getMessage());
+
             return Command::FAILURE;
         }
 
@@ -53,12 +54,12 @@ class ImportLegacyServiceTypesCommand extends Command
             foreach ($legacyServiceTypes as $legacy) {
                 // Determine deleted_at
                 $deletedAt = null;
-                if (!empty($legacy->deleted_at) && $legacy->deleted_at !== '0000-00-00 00:00:00') {
+                if (! empty($legacy->deleted_at) && $legacy->deleted_at !== '0000-00-00 00:00:00') {
                     $deletedAt = $legacy->deleted_at;
                 }
 
                 // Status mapping: if '1' then active, else inactive
-                $isActive = (string)$legacy->status === '1';
+                $isActive = (string) $legacy->status === '1';
 
                 try {
                     $serviceType = ServiceType::withTrashed()->where('legacy_id', $legacy->id)->first();
@@ -85,7 +86,7 @@ class ImportLegacyServiceTypesCommand extends Command
                     }
                 } catch (Throwable $e) {
                     $failed++;
-                    $this->error("\nGagal memproses ID {$legacy->id}: " . $e->getMessage());
+                    $this->error("\nGagal memproses ID {$legacy->id}: ".$e->getMessage());
                 }
 
                 $bar->advance();
@@ -101,7 +102,8 @@ class ImportLegacyServiceTypesCommand extends Command
             return Command::SUCCESS;
         } catch (Throwable $e) {
             DB::rollBack();
-            $this->error("\nTerjadi kesalahan fatal saat menyimpan ke database target: " . $e->getMessage());
+            $this->error("\nTerjadi kesalahan fatal saat menyimpan ke database target: ".$e->getMessage());
+
             return Command::FAILURE;
         }
     }

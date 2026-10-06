@@ -3,20 +3,27 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\District;
+use App\Models\Education;
 use App\Models\Employee;
+use App\Models\MasterData\Specialization;
+use App\Models\Occupation;
+use App\Models\Province;
+use App\Models\Regency;
+use App\Models\Village;
+use Illuminate\Http\Request;
 
 class LookupController extends Controller
 {
     public function employees(Request $request)
     {
         $query = Employee::with('doctor');
-        
+
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhere('national_id', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('national_id', 'like', "%{$search}%");
             });
         }
 
@@ -29,12 +36,12 @@ class LookupController extends Controller
 
     public function specializations(Request $request)
     {
-        $query = \App\Models\MasterData\Specialization::query();
-        
+        $query = Specialization::query();
+
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
@@ -49,21 +56,22 @@ class LookupController extends Controller
 
     public function provinces()
     {
-        return response()->json(\App\Models\Province::orderBy('name')->get());
+        return response()->json(Province::orderBy('name')->get());
     }
 
     public function regencies(Request $request)
     {
-        $query = \App\Models\Regency::query();
+        $query = Regency::query();
         if ($request->has('province_id')) {
             $query->where('province_id', $request->province_id);
         }
+
         return response()->json($query->orderBy('name')->get());
     }
 
     public function districts(Request $request)
     {
-        $query = \App\Models\District::query()
+        $query = District::query()
             ->with('regency:id,name')
             ->where('is_active', true)
             ->orderBy('name');
@@ -73,7 +81,7 @@ class LookupController extends Controller
         }
 
         $districts = $query->get(['id', 'name', 'code', 'regency_id']);
-        
+
         $mapped = $districts->map(function ($district) {
             return [
                 'id' => $district->id,
@@ -89,7 +97,7 @@ class LookupController extends Controller
 
     public function villages(Request $request)
     {
-        $query = \App\Models\Village::query()
+        $query = Village::query()
             ->with('district.regency:id,name')
             ->where('is_active', true)
             ->orderBy('name');
@@ -117,8 +125,8 @@ class LookupController extends Controller
 
     public function educations(Request $request)
     {
-        $query = \App\Models\Education::query();
-        
+        $query = Education::query();
+
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -137,7 +145,7 @@ class LookupController extends Controller
 
     public function occupations(Request $request)
     {
-        $query = \App\Models\Occupation::where('is_active', true);
+        $query = Occupation::where('is_active', true);
 
         if ($request->has('ids')) {
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);

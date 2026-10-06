@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\MasterData\StoreVillageRequest;
 use App\Http\Requests\MasterData\UpdateVillageRequest;
 use App\Http\Resources\MasterData\VillageResource;
+use App\Models\Employee;
+use App\Models\Patient;
 use App\Models\Village;
 use Illuminate\Http\Request;
 
@@ -19,7 +21,7 @@ class VillageController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
@@ -39,7 +41,9 @@ class VillageController extends Controller
         }
 
         $perPage = $request->input('per_page', 10);
-        if ($perPage > 100) $perPage = 100;
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
 
         return VillageResource::collection($query->paginate($perPage));
     }
@@ -51,8 +55,8 @@ class VillageController extends Controller
             return response()->json([
                 'message' => 'The given data was invalid.',
                 'errors' => [
-                    'name' => ['Nama kelurahan sudah ada di kecamatan ini.']
-                ]
+                    'name' => ['Nama kelurahan sudah ada di kecamatan ini.'],
+                ],
             ], 422);
         }
 
@@ -65,6 +69,7 @@ class VillageController extends Controller
     public function show(Village $village)
     {
         $village->load(['district.regency']);
+
         return new VillageResource($village);
     }
 
@@ -78,8 +83,8 @@ class VillageController extends Controller
             return response()->json([
                 'message' => 'The given data was invalid.',
                 'errors' => [
-                    'name' => ['Nama kelurahan sudah ada di kecamatan ini.']
-                ]
+                    'name' => ['Nama kelurahan sudah ada di kecamatan ini.'],
+                ],
             ], 422);
         }
 
@@ -92,15 +97,15 @@ class VillageController extends Controller
     public function destroy(Village $village)
     {
         // Audit usage before deletion
-        if (class_exists(\App\Models\Employee::class) && \App\Models\Employee::where('village_id', $village->id)->exists()) {
+        if (class_exists(Employee::class) && Employee::where('village_id', $village->id)->exists()) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus kelurahan karena digunakan oleh data pegawai.'
+                'message' => 'Tidak dapat menghapus kelurahan karena digunakan oleh data pegawai.',
             ], 409);
         }
 
-        if (class_exists(\App\Models\Patient::class) && \App\Models\Patient::where('village_id', $village->id)->exists()) {
+        if (class_exists(Patient::class) && Patient::where('village_id', $village->id)->exists()) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus kelurahan karena digunakan oleh data pasien.'
+                'message' => 'Tidak dapat menghapus kelurahan karena digunakan oleh data pasien.',
             ], 409);
         }
 

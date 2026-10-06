@@ -2,8 +2,8 @@
 
 namespace Database\Factories\MasterData;
 
-use App\Models\MasterData\Doctor;
 use App\Models\Employee;
+use App\Models\MasterData\Doctor;
 use App\Models\MasterData\Specialization;
 use Illuminate\Database\Eloquent\Factories\Factory;
 

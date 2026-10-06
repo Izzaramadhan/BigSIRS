@@ -18,7 +18,7 @@ class DistrictResource extends JsonResource
             'id' => $this->id,
             'legacy_id' => $this->legacy_id,
             'regency_id' => $this->regency_id,
-            'regency_name' => $this->whenLoaded('regency', fn() => $this->regency->name),
+            'regency_name' => $this->whenLoaded('regency', fn () => $this->regency->name),
             'code' => $this->code,
             'name' => $this->name,
             'is_active' => (bool) $this->is_active,

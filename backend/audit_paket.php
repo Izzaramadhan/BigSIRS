@@ -1,4 +1,5 @@
 <?php
+
 $pdo = new PDO('mysql:host=127.0.0.1;dbname=simrs_legacy', 'root', '');
 $stmt = $pdo->query("SHOW TABLES LIKE '%paket%'");
 $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);

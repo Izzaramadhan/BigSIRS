@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\MasterData\Icd9Cm;
 use App\Http\Requests\Api\V1\MasterData\StoreIcd9cmCodeRequest;
 use App\Http\Requests\Api\V1\MasterData\UpdateIcd9cmCodeRequest;
 use App\Http\Resources\Api\V1\MasterData\Icd9CmResource;
+use App\Models\MasterData\Icd9Cm;
 use Illuminate\Http\Request;
 
 class Icd9CmController extends Controller
@@ -42,6 +42,7 @@ class Icd9CmController extends Controller
     public function store(StoreIcd9cmCodeRequest $request)
     {
         $code = Icd9Cm::create($request->validated());
+
         return new Icd9CmResource($code);
     }
 
@@ -53,12 +54,14 @@ class Icd9CmController extends Controller
     public function update(UpdateIcd9cmCodeRequest $request, Icd9Cm $icd9Cm)
     {
         $icd9Cm->update($request->validated());
+
         return new Icd9CmResource($icd9Cm);
     }
 
     public function destroy(Icd9Cm $icd9Cm)
     {
         $icd9Cm->delete();
+
         return response()->noContent();
     }
 
@@ -66,6 +69,7 @@ class Icd9CmController extends Controller
     {
         $request->validate(['is_active' => 'required|boolean']);
         $icd9Cm->update(['is_active' => $request->boolean('is_active')]);
+
         return new Icd9CmResource($icd9Cm);
     }
 
@@ -83,11 +87,11 @@ class Icd9CmController extends Controller
         }
 
         $codes = $query->orderBy('name', 'asc')
-                       ->limit(50)
-                       ->get(['id', 'code', 'name', 'is_active']);
+            ->limit(50)
+            ->get(['id', 'code', 'name', 'is_active']);
 
         return response()->json([
-            'data' => $codes
+            'data' => $codes,
         ]);
     }
 }

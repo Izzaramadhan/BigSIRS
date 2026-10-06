@@ -14,8 +14,8 @@ class ProcedurePackageResource extends JsonResource
             'name' => $this->name,
             'total_amount' => $this->total_amount,
             'is_active' => $this->is_active,
-            'items' => $this->whenLoaded('items', function() {
-                return $this->items->map(function($item) {
+            'items' => $this->whenLoaded('items', function () {
+                return $this->items->map(function ($item) {
                     return [
                         'id' => $item->id,
                         'medical_procedure_id' => $item->medical_procedure_id,
@@ -36,8 +36,8 @@ class ProcedurePackageResource extends JsonResource
                             'tariff_type' => $item->tariff->relationLoaded('tariffType') ? [
                                 'id' => $item->tariff->tariffType->id,
                                 'name' => $item->tariff->tariffType->name,
-                            ] : null
-                        ] : null
+                            ] : null,
+                        ] : null,
                     ];
                 });
             }),

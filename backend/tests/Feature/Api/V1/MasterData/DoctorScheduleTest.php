@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use App\Models\MasterData\DoctorSchedule;
 use App\Models\MasterData\Doctor;
+use App\Models\MasterData\DoctorSchedule;
 use App\Models\Polyclinic;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,10 +36,10 @@ class DoctorScheduleTest extends TestCase
             ->assertJsonStructure([
                 'data' => [
                     '*' => [
-                        'id', 'doctor', 'polyclinic', 'day_of_week', 'start_time', 'end_time', 'is_holiday', 'online_quota'
-                    ]
+                        'id', 'doctor', 'polyclinic', 'day_of_week', 'start_time', 'end_time', 'is_holiday', 'online_quota',
+                    ],
                 ],
-                'meta', 'links'
+                'meta', 'links',
             ]);
     }
 
@@ -64,7 +64,7 @@ class DoctorScheduleTest extends TestCase
         $this->assertDatabaseHas('doctor_schedules', [
             'doctor_id' => $doctor->id,
             'start_time' => '08:00',
-            'end_time' => '12:00'
+            'end_time' => '12:00',
         ]);
     }
 
@@ -138,7 +138,7 @@ class DoctorScheduleTest extends TestCase
             'is_holiday' => false,
         ];
 
-        $response = $this->actingAs($this->user)->putJson('/api/v1/master-data/doctor-schedules/' . $schedule->id, $data);
+        $response = $this->actingAs($this->user)->putJson('/api/v1/master-data/doctor-schedules/'.$schedule->id, $data);
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('doctor_schedules', [
@@ -151,7 +151,7 @@ class DoctorScheduleTest extends TestCase
     {
         $schedule = DoctorSchedule::factory()->create();
 
-        $response = $this->actingAs($this->user)->deleteJson('/api/v1/master-data/doctor-schedules/' . $schedule->id);
+        $response = $this->actingAs($this->user)->deleteJson('/api/v1/master-data/doctor-schedules/'.$schedule->id);
 
         $response->assertStatus(204);
         $this->assertSoftDeleted('doctor_schedules', ['id' => $schedule->id]);

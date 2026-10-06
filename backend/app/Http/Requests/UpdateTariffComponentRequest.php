@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateTariffComponentRequest extends FormRequest
@@ -22,7 +21,7 @@ class UpdateTariffComponentRequest extends FormRequest
                 'name' => trim(preg_replace('/\s+/', ' ', $this->name)),
             ]);
         }
-        
+
         if ($this->has('description')) {
             $this->merge([
                 'description' => trim($this->description) !== '' ? trim($this->description) : null,

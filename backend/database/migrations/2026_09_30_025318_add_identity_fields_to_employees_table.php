@@ -37,7 +37,7 @@ return new class extends Migration
                 'national_id', 'ihs_number', 'birth_place', 'birth_date', 'gender',
                 'nationality', 'blood_type', 'religion', 'marital_status',
                 'address', 'postal_code', 'province_id', 'city_id', 'district_id',
-                'village_id', 'phone', 'education_id', 'occupation_id'
+                'village_id', 'phone', 'education_id', 'occupation_id',
             ]);
         });
     }

@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\MasterData\ProcedurePackage;
-use App\Models\MasterData\MedicalProcedure;
 use App\Http\Requests\StoreProcedurePackageRequest;
 use App\Http\Requests\UpdateProcedurePackageRequest;
-use App\Http\Resources\ProcedurePackageResource;
 use App\Http\Resources\ProcedurePackageListResource;
+use App\Http\Resources\ProcedurePackageResource;
+use App\Models\MasterData\MedicalProcedure;
+use App\Models\MasterData\ProcedurePackage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -22,10 +22,10 @@ class ProcedurePackageController extends Controller
         if ($request->has('search')) {
             $search = $request->search;
             $query->where('name', 'like', "%{$search}%")
-                  ->orWhereHas('items.procedure', function($q) use ($search) {
-                      $q->where('name', 'like', "%{$search}%")
+                ->orWhereHas('items.procedure', function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
                         ->orWhere('code', 'like', "%{$search}%");
-                  });
+                });
         }
 
         if ($request->has('is_active')) {
@@ -46,6 +46,7 @@ class ProcedurePackageController extends Controller
     public function show($id)
     {
         $package = ProcedurePackage::with(['items.procedure', 'items.tariff.tariffType'])->findOrFail($id);
+
         return new ProcedurePackageResource($package);
     }
 
@@ -61,16 +62,16 @@ class ProcedurePackageController extends Controller
 
             $total = 0;
             $itemsData = $request->items;
-            
+
             foreach ($itemsData as $index => $itemData) {
                 // Verify procedure exists
                 $procedure = MedicalProcedure::find($itemData['medical_procedure_id']);
-                if (!$procedure) {
+                if (! $procedure) {
                     throw ValidationException::withMessages(["items.{$index}.medical_procedure_id" => ['Procedure not found']]);
                 }
 
                 $subtotal = $itemData['quantity'] * $itemData['unit_amount'];
-                
+
                 $package->items()->create([
                     'medical_procedure_id' => $itemData['medical_procedure_id'],
                     'medical_procedure_tariff_id' => $itemData['medical_procedure_tariff_id'] ?? null,
@@ -88,6 +89,7 @@ class ProcedurePackageController extends Controller
             DB::commit();
 
             $package->load(['items.procedure', 'items.tariff.tariffType']);
+
             return (new ProcedurePackageResource($package))->response()->setStatusCode(201);
 
         } catch (\Exception $e) {
@@ -116,13 +118,13 @@ class ProcedurePackageController extends Controller
 
             foreach ($itemsData as $index => $itemData) {
                 $procedure = MedicalProcedure::find($itemData['medical_procedure_id']);
-                if (!$procedure) {
+                if (! $procedure) {
                     throw ValidationException::withMessages(["items.{$index}.medical_procedure_id" => ['Procedure not found']]);
                 }
 
                 $subtotal = $itemData['quantity'] * $itemData['unit_amount'];
 
-                if (!empty($itemData['id'])) {
+                if (! empty($itemData['id'])) {
                     $item = $package->items()->find($itemData['id']);
                     $item->update([
                         'medical_procedure_id' => $itemData['medical_procedure_id'],
@@ -151,6 +153,7 @@ class ProcedurePackageController extends Controller
             DB::commit();
 
             $package->load(['items.procedure', 'items.tariff.tariffType']);
+
             return new ProcedurePackageResource($package);
 
         } catch (\Exception $e) {
@@ -175,7 +178,7 @@ class ProcedurePackageController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Paket Tindakan berhasil dihapus.'
+            'message' => 'Paket Tindakan berhasil dihapus.',
         ]);
     }
 }

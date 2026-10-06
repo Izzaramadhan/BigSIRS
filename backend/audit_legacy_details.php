@@ -1,12 +1,15 @@
 <?php
+
 require 'vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
-function printTitle($title) {
+function printTitle($title)
+{
     echo "\n=== $title ===\n";
 }
 
@@ -23,7 +26,7 @@ $countReportGroup = $legacy->table('ref_report_group')->count();
 echo "ref_report_group count: $countReportGroup\n";
 
 printTitle('Columns of ref_tarif_tindakan (Tindakan table)');
-$cols = $legacy->select("SHOW COLUMNS FROM `ref_tarif_tindakan`");
+$cols = $legacy->select('SHOW COLUMNS FROM `ref_tarif_tindakan`');
 foreach ($cols as $col) {
     echo " - {$col->Field} ({$col->Type})\n";
 }
@@ -35,16 +38,16 @@ foreach ($cols as $col) {
     if (stripos($col->Field, 'icd') !== false) {
         $hasIcdColumn = true;
         echo "Found ICD column: {$col->Field}\n";
-        
+
         $countHasIcd = $legacy->table('ref_tarif_tindakan')->whereNotNull($col->Field)->where($col->Field, '!=', '')->count();
         $countTotal = $legacy->table('ref_tarif_tindakan')->count();
         echo "Tindakan with ICD: $countHasIcd / $countTotal\n";
-        
+
         $distinctIcds = $legacy->table('ref_tarif_tindakan')->select($col->Field)->distinct()->get();
-        echo "Distinct ICD values used: " . count($distinctIcds) . "\n";
+        echo 'Distinct ICD values used: '.count($distinctIcds)."\n";
     }
 }
-if (!$hasIcdColumn) {
+if (! $hasIcdColumn) {
     echo "No ICD column directly in ref_tarif_tindakan.\n";
 }
 

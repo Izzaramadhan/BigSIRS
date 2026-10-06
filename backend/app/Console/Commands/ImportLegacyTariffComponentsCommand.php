@@ -26,7 +26,8 @@ class ImportLegacyTariffComponentsCommand extends Command
             $legacyDb = DB::connection('legacy');
             $this->info('Connected to legacy database successfully.');
         } catch (\Exception $e) {
-            $this->error('Failed to connect to legacy database: ' . $e->getMessage());
+            $this->error('Failed to connect to legacy database: '.$e->getMessage());
+
             return Command::FAILURE;
         }
 
@@ -40,7 +41,7 @@ class ImportLegacyTariffComponentsCommand extends Command
             'failed' => 0,
         ];
 
-        if (!$isDryRun) {
+        if (! $isDryRun) {
             DB::beginTransaction();
         }
 
@@ -52,7 +53,7 @@ class ImportLegacyTariffComponentsCommand extends Command
             // "0000-00-00", "0000-00-00 00:00:00", "", NULL means active.
             // Actual date means soft deleted.
             $isSoftDeleted = false;
-            if (!empty($record->deleted_at)) {
+            if (! empty($record->deleted_at)) {
                 $deletedAt = trim($record->deleted_at);
                 if ($deletedAt !== '0000-00-00' && $deletedAt !== '0000-00-00 00:00:00') {
                     $isSoftDeleted = true;
@@ -62,17 +63,18 @@ class ImportLegacyTariffComponentsCommand extends Command
             if ($isSoftDeleted) {
                 $stats['skipped_soft_deleted']++;
                 $bar->advance();
+
                 continue;
             }
 
             // Normalization
             $name = trim($record->nama);
-            $description = trim((string)$record->deskripsi);
+            $description = trim((string) $record->deskripsi);
             if ($description === '' || $description === '-') {
                 $description = null;
             }
             $isActive = $record->status == '1';
-            
+
             $legacyId = $record->id;
 
             try {
@@ -80,7 +82,7 @@ class ImportLegacyTariffComponentsCommand extends Command
 
                 if ($existing) {
                     $stats['would_update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $existing->update([
                             'name' => $name,
                             'description' => $description,
@@ -89,7 +91,7 @@ class ImportLegacyTariffComponentsCommand extends Command
                     }
                 } else {
                     $stats['would_create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         TariffComponent::create([
                             'legacy_id' => $legacyId,
                             'name' => $name,
@@ -100,7 +102,7 @@ class ImportLegacyTariffComponentsCommand extends Command
                 }
             } catch (\Exception $e) {
                 $stats['failed']++;
-                $this->error("\nFailed to process record ID {$legacyId}: " . $e->getMessage());
+                $this->error("\nFailed to process record ID {$legacyId}: ".$e->getMessage());
             }
 
             $bar->advance();
@@ -109,7 +111,7 @@ class ImportLegacyTariffComponentsCommand extends Command
         $bar->finish();
         $this->newLine(2);
 
-        if (!$isDryRun) {
+        if (! $isDryRun) {
             DB::commit();
             $this->info('Import completed successfully!');
         } else {

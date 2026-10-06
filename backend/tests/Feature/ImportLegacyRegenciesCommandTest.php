@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Regency;
 use App\Models\Province;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +14,7 @@ class ImportLegacyRegenciesCommandTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Mock legacy database
         DB::connection('legacy')->statement('CREATE TABLE ref_kabupaten (id CHAR(4), id_provinsi CHAR(2), nama VARCHAR(255), status INT, updated_at DATETIME, deleted_at DATETIME)');
     }
@@ -40,7 +39,7 @@ class ImportLegacyRegenciesCommandTest extends TestCase
             ->expectsTable(
                 ['Total Read', 'Valid/Processed', 'Skipped', 'Conflicts', 'Would Create / Created', 'Would Update / Updated', 'Failed'],
                 [
-                    [2, 2, 0, 0, 2, 0, 0]
+                    [2, 2, 0, 0, 2, 0, 0],
                 ]
             );
 
@@ -61,7 +60,7 @@ class ImportLegacyRegenciesCommandTest extends TestCase
             ->expectsTable(
                 ['Total Read', 'Valid/Processed', 'Skipped', 'Conflicts', 'Would Create / Created', 'Would Update / Updated', 'Failed'],
                 [
-                    [1, 0, 1, 0, 0, 0, 0]
+                    [1, 0, 1, 0, 0, 0, 0],
                 ]
             );
 
@@ -80,7 +79,7 @@ class ImportLegacyRegenciesCommandTest extends TestCase
             ->expectsTable(
                 ['Total Read', 'Valid/Processed', 'Skipped', 'Conflicts', 'Would Create / Created', 'Would Update / Updated', 'Failed'],
                 [
-                    [1, 0, 1, 0, 0, 0, 0]
+                    [1, 0, 1, 0, 0, 0, 0],
                 ]
             );
     }

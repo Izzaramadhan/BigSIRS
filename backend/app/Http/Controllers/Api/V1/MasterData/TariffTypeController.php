@@ -21,8 +21,8 @@ class TariffTypeController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -32,7 +32,7 @@ class TariffTypeController extends Controller
 
         $sortBy = $request->input('sort_by', 'created_at');
         $sortDir = $request->input('sort_dir', 'desc');
-        
+
         $allowedSorts = ['id', 'name', 'code', 'created_at', 'updated_at', 'is_active'];
         if (in_array($sortBy, $allowedSorts)) {
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');
@@ -66,10 +66,12 @@ class TariffTypeController extends Controller
             }
 
             DB::commit();
+
             return new TariffTypeResource($tariffType->load('components.component'));
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Failed to create Tariff Type: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Failed to create Tariff Type: '.$e->getMessage()], 500);
         }
     }
 
@@ -85,14 +87,14 @@ class TariffTypeController extends Controller
             $tariffType->update($request->validated());
 
             $componentsData = collect($request->input('components', []));
-            
+
             // Delete removed components (pivots)
             $submittedPivotIds = $componentsData->pluck('id')->filter()->toArray();
             $tariffType->components()->whereNotIn('id', $submittedPivotIds)->delete();
 
             // Update or create components
             foreach ($componentsData as $comp) {
-                if (!empty($comp['id'])) {
+                if (! empty($comp['id'])) {
                     // Update existing
                     $tariffType->components()->where('id', $comp['id'])->update([
                         'tariff_component_id' => $comp['tariff_component_id'],
@@ -120,7 +122,7 @@ class TariffTypeController extends Controller
                         ->groupBy('tariff_component_id')
                         ->havingRaw('COUNT(*) > 1')
                         ->count();
-                    
+
                     if ($duplicates == 0) {
                         $tariffType->update(['needs_review' => false]);
                     }
@@ -128,16 +130,19 @@ class TariffTypeController extends Controller
             }
 
             DB::commit();
+
             return new TariffTypeResource($tariffType->load('components.component'));
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Failed to update Tariff Type: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Failed to update Tariff Type: '.$e->getMessage()], 500);
         }
     }
 
     public function updateStatus(UpdateTariffTypeStatusRequest $request, TariffType $tariffType)
     {
         $tariffType->update($request->validated());
+
         return new TariffTypeResource($tariffType);
     }
 
@@ -150,7 +155,7 @@ class TariffTypeController extends Controller
                 $isUsed = DB::connection('legacy')->table('ref_tarif_tindakan')
                     ->where('id_jenis_tarif', $tariffType->legacy_id)
                     ->exists();
-                
+
                 if ($isUsed) {
                     return response()->json(['message' => 'Data sedang digunakan dan tidak dapat dihapus.'], 409);
                 }
@@ -160,6 +165,7 @@ class TariffTypeController extends Controller
         }
 
         $tariffType->delete();
+
         return response()->noContent();
     }
 }

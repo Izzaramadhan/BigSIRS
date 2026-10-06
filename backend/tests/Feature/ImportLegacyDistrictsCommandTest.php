@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Regency;
-use App\Models\District;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;

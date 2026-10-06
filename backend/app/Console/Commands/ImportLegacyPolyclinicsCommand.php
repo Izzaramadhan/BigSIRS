@@ -20,16 +20,16 @@ class ImportLegacyPolyclinicsCommand extends Command
     protected array $hierarchyWarnings = [];
 
     protected array $stats = [
-        'read'            => 0,
-        'skipped'         => 0,
-        'conflict'        => 0,
-        'valid'           => 0,
-        'would_create'    => 0,
-        'would_update'    => 0,
-        'created'         => 0,
-        'updated'         => 0,
-        'failed'          => 0,
-        'status_active'   => 0,
+        'read' => 0,
+        'skipped' => 0,
+        'conflict' => 0,
+        'valid' => 0,
+        'would_create' => 0,
+        'would_update' => 0,
+        'created' => 0,
+        'updated' => 0,
+        'failed' => 0,
+        'status_active' => 0,
         'status_inactive' => 0,
     ];
 
@@ -53,6 +53,7 @@ class ImportLegacyPolyclinicsCommand extends Command
         } catch (\Exception $e) {
             $this->error('Failed to connect to legacy database or read ref_poliklinik table.');
             $this->error($e->getMessage());
+
             return Command::FAILURE;
         }
 
@@ -60,8 +61,8 @@ class ImportLegacyPolyclinicsCommand extends Command
         $this->info("Read {$this->stats['read']} records from ref_poliklinik.");
 
         $validRecords = [];
-        $codeTracker  = [];
-        $conflicts    = [];
+        $codeTracker = [];
+        $conflicts = [];
 
         // ------------------------------------------------------------------ //
         // Phase 1: Validate and normalize all records
@@ -72,6 +73,7 @@ class ImportLegacyPolyclinicsCommand extends Command
             if ($this->isSoftDeleted($item->deleted_at)) {
                 $this->softDeletedLegacyIds[] = $item->id;
                 $this->stats['skipped']++;
+
                 continue;
             }
 
@@ -85,41 +87,43 @@ class ImportLegacyPolyclinicsCommand extends Command
 
             // --- Code normalization ---
             $legacyId = $item->id;
-            $rawCode  = trim((string) $item->kode);
-            $code     = strtoupper($rawCode);
+            $rawCode = trim((string) $item->kode);
+            $code = strtoupper($rawCode);
 
             if ($code === '') {
                 $conflicts[] = [
                     'legacy_id' => $legacyId, 'issue' => 'Empty code',
-                    'raw_code'  => $rawCode,  'raw_name' => $item->nama,
+                    'raw_code' => $rawCode,  'raw_name' => $item->nama,
                     'conflicts_with_legacy_id' => null,
                 ];
                 $this->stats['conflict']++;
+
                 continue;
             }
 
             if (isset($codeTracker[$code])) {
                 $conflicts[] = [
                     'legacy_id' => $legacyId, 'issue' => 'Duplicate code',
-                    'raw_code'  => $rawCode,  'raw_name' => $item->nama,
+                    'raw_code' => $rawCode,  'raw_name' => $item->nama,
                     'conflicts_with_legacy_id' => $codeTracker[$code],
                 ];
                 $this->stats['conflict']++;
+
                 continue;
             }
 
             $codeTracker[$code] = $legacyId;
 
             // --- Field normalization ---
-            $name             = trim(preg_replace('/\s+/', ' ', (string) $item->nama));
-            $serviceType      = trim((string) ($item->jenis ?? '')) ?: null;
-            $description      = trim((string) ($item->deskripsi ?? '')) ?: null;
-            $isVisible        = $this->normalizeLegacyBool($item->tampil ?? '1');
-            $isOnlineVisible  = $this->normalizeLegacyBool($item->tampil_online ?? '0');
-            $quota            = max(0, (int) ($item->kuota ?? 0));
-            $jknQuota         = max(0, (int) ($item->kuota_jkn ?? 0));
-            $bpjsCode         = trim((string) ($item->kode_bpjs ?? '')) ?: null;
-            $satusehatCode    = trim((string) ($item->ihs_id_location ?? '')) ?: null;
+            $name = trim(preg_replace('/\s+/', ' ', (string) $item->nama));
+            $serviceType = trim((string) ($item->jenis ?? '')) ?: null;
+            $description = trim((string) ($item->deskripsi ?? '')) ?: null;
+            $isVisible = $this->normalizeLegacyBool($item->tampil ?? '1');
+            $isOnlineVisible = $this->normalizeLegacyBool($item->tampil_online ?? '0');
+            $quota = max(0, (int) ($item->kuota ?? 0));
+            $jknQuota = max(0, (int) ($item->kuota_jkn ?? 0));
+            $bpjsCode = trim((string) ($item->kode_bpjs ?? '')) ?: null;
+            $satusehatCode = trim((string) ($item->ihs_id_location ?? '')) ?: null;
 
             // Warehouse: stored as legacy raw ID until Master Gudang is built
             $legacyWarehouseId = isset($item->id_gudang) && (int) $item->id_gudang > 0
@@ -127,25 +131,25 @@ class ImportLegacyPolyclinicsCommand extends Command
                 : null;
 
             // Parent ID: raw legacy reference for Phase 2
-            $legacyParentId = (!empty($item->parent_id) && (int) $item->parent_id > 0)
+            $legacyParentId = (! empty($item->parent_id) && (int) $item->parent_id > 0)
                 ? (int) $item->parent_id
                 : null;
 
             $validRecords[] = [
-                'legacy_id'                  => $legacyId,
-                'code'                       => $code,
-                'name'                       => $name,
-                'service_type'               => $serviceType,
-                'description'                => $description,
-                'is_visible'                 => $isVisible,
-                'is_online_visible'          => $isOnlineVisible,
-                'quota'                      => $quota,
-                'jkn_quota'                  => $jknQuota,
-                'bpjs_code'                  => $bpjsCode,
-                'satusehat_code'             => $satusehatCode,
-                'is_active'                  => $isActive,
+                'legacy_id' => $legacyId,
+                'code' => $code,
+                'name' => $name,
+                'service_type' => $serviceType,
+                'description' => $description,
+                'is_visible' => $isVisible,
+                'is_online_visible' => $isOnlineVisible,
+                'quota' => $quota,
+                'jkn_quota' => $jknQuota,
+                'bpjs_code' => $bpjsCode,
+                'satusehat_code' => $satusehatCode,
+                'is_active' => $isActive,
                 'legacy_default_warehouse_id' => $legacyWarehouseId,
-                'legacy_parent'              => $legacyParentId,
+                'legacy_parent' => $legacyParentId,
             ];
 
             $this->stats['valid']++;
@@ -159,11 +163,11 @@ class ImportLegacyPolyclinicsCommand extends Command
         foreach ($validRecords as &$record) {
             if ($record['legacy_parent'] !== null && isset($softDeletedSet[$record['legacy_parent']])) {
                 $this->hierarchyWarnings[] = [
-                    'child_legacy_id'  => $record['legacy_id'],
-                    'child_code'       => $record['code'],
-                    'child_name'       => $record['name'],
+                    'child_legacy_id' => $record['legacy_id'],
+                    'child_code' => $record['code'],
+                    'child_name' => $record['name'],
                     'parent_legacy_id' => $record['legacy_parent'],
-                    'action'           => 'parent_id set to NULL (parent was soft-deleted in legacy)',
+                    'action' => 'parent_id set to NULL (parent was soft-deleted in legacy)',
                 ];
                 $record['legacy_parent'] = null;
             }
@@ -191,6 +195,7 @@ class ImportLegacyPolyclinicsCommand extends Command
             $this->showConflicts($conflicts);
             $this->showHierarchyWarnings();
             $this->printReport($isDryRun);
+
             return Command::SUCCESS;
         }
 
@@ -205,26 +210,26 @@ class ImportLegacyPolyclinicsCommand extends Command
             // First pass: upsert without parent_id
             foreach ($validRecords as $data) {
                 $polyclinic = Polyclinic::where('legacy_id', $data['legacy_id'])->first();
-                $isNew      = !$polyclinic;
+                $isNew = ! $polyclinic;
 
                 if ($isNew) {
-                    $polyclinic            = new Polyclinic();
+                    $polyclinic = new Polyclinic;
                     $polyclinic->legacy_id = $data['legacy_id'];
                 }
 
-                $polyclinic->code                        = $data['code'];
-                $polyclinic->name                        = $data['name'];
-                $polyclinic->service_type                = $data['service_type'];
-                $polyclinic->description                 = $data['description'];
-                $polyclinic->is_visible                  = $data['is_visible'];
-                $polyclinic->is_online_visible           = $data['is_online_visible'];
-                $polyclinic->quota                       = $data['quota'];
-                $polyclinic->jkn_quota                   = $data['jkn_quota'];
-                $polyclinic->bpjs_code                   = $data['bpjs_code'];
-                $polyclinic->satusehat_code              = $data['satusehat_code'];
-                $polyclinic->is_active                   = $data['is_active'];
+                $polyclinic->code = $data['code'];
+                $polyclinic->name = $data['name'];
+                $polyclinic->service_type = $data['service_type'];
+                $polyclinic->description = $data['description'];
+                $polyclinic->is_visible = $data['is_visible'];
+                $polyclinic->is_online_visible = $data['is_online_visible'];
+                $polyclinic->quota = $data['quota'];
+                $polyclinic->jkn_quota = $data['jkn_quota'];
+                $polyclinic->bpjs_code = $data['bpjs_code'];
+                $polyclinic->satusehat_code = $data['satusehat_code'];
+                $polyclinic->is_active = $data['is_active'];
                 $polyclinic->legacy_default_warehouse_id = $data['legacy_default_warehouse_id'];
-                $polyclinic->parent_id                   = null; // resolve in second pass
+                $polyclinic->parent_id = null; // resolve in second pass
                 $polyclinic->save();
 
                 if ($isNew) {
@@ -237,7 +242,7 @@ class ImportLegacyPolyclinicsCommand extends Command
             // Second pass: resolve parent_id via legacy_id
             foreach ($validRecords as $data) {
                 if ($data['legacy_parent'] !== null) {
-                    $child  = Polyclinic::where('legacy_id', $data['legacy_id'])->first();
+                    $child = Polyclinic::where('legacy_id', $data['legacy_id'])->first();
                     $parent = Polyclinic::where('legacy_id', $data['legacy_parent'])->first();
 
                     if ($child && $parent) {
@@ -250,19 +255,21 @@ class ImportLegacyPolyclinicsCommand extends Command
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Legacy Polyclinics import failed: ' . $e->getMessage(), [
+            Log::error('Legacy Polyclinics import failed: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
             $this->error('Import failed. Transaction rolled back.');
             $this->error($e->getMessage());
-            $this->stats['failed']  = $this->stats['valid'];
+            $this->stats['failed'] = $this->stats['valid'];
             $this->stats['created'] = 0;
             $this->stats['updated'] = 0;
+
             return Command::FAILURE;
         }
 
         $this->printReport($isDryRun);
         $this->info('Import completed successfully.');
+
         return Command::SUCCESS;
     }
 
@@ -281,7 +288,8 @@ class ImportLegacyPolyclinicsCommand extends Command
             return false;
         }
         $str = trim((string) $deletedAt);
-        return !in_array($str, ['', '0000-00-00', '0000-00-00 00:00:00'], true);
+
+        return ! in_array($str, ['', '0000-00-00', '0000-00-00 00:00:00'], true);
     }
 
     /**
@@ -299,7 +307,7 @@ class ImportLegacyPolyclinicsCommand extends Command
             return;
         }
 
-        $this->warn(PHP_EOL . 'Code Conflicts Detected (' . count($conflicts) . '):');
+        $this->warn(PHP_EOL.'Code Conflicts Detected ('.count($conflicts).'):');
         $this->table(
             ['Legacy ID', 'Issue', 'Raw Code', 'Raw Name', 'Conflicts With (ID)'],
             array_map(fn ($c) => [
@@ -315,7 +323,7 @@ class ImportLegacyPolyclinicsCommand extends Command
             return;
         }
 
-        $this->warn(PHP_EOL . 'Hierarchy Warnings (' . count($this->hierarchyWarnings) . '):');
+        $this->warn(PHP_EOL.'Hierarchy Warnings ('.count($this->hierarchyWarnings).'):');
         $this->warn('Policy: parent_id set to NULL for the records below (parent was soft-deleted in legacy).');
         $this->table(
             ['Child Legacy ID', 'Child Code', 'Child Name', 'Soft-Deleted Parent (Legacy ID)', 'Action'],
@@ -329,7 +337,7 @@ class ImportLegacyPolyclinicsCommand extends Command
     protected function printReport(bool $isDryRun): void
     {
         $prefix = $isDryRun ? 'Would ' : '';
-        $this->info(PHP_EOL . ($isDryRun ? '[DRY-RUN] ' : '') . 'Import Report');
+        $this->info(PHP_EOL.($isDryRun ? '[DRY-RUN] ' : '').'Import Report');
         $this->table(
             ['Metric', 'Count'],
             [
@@ -337,8 +345,8 @@ class ImportLegacyPolyclinicsCommand extends Command
                 ['Skipped (Soft Deleted)',                  $this->stats['skipped']],
                 ['Conflicts (Need Action)',                  $this->stats['conflict']],
                 ['Valid for Import',                         $this->stats['valid']],
-                [$prefix . 'Create',                        $isDryRun ? $this->stats['would_create'] : $this->stats['created']],
-                [$prefix . 'Update',                        $isDryRun ? $this->stats['would_update'] : $this->stats['updated']],
+                [$prefix.'Create',                        $isDryRun ? $this->stats['would_create'] : $this->stats['created']],
+                [$prefix.'Update',                        $isDryRun ? $this->stats['would_update'] : $this->stats['updated']],
                 ['Failed',                                   $this->stats['failed']],
                 ['Status Active (is_active=true)',           $this->stats['status_active']],
                 ['Status Inactive (is_active=false)',        $this->stats['status_inactive']],

@@ -20,10 +20,10 @@ class UpdateDoctorRequest extends FormRequest
         return [
             'person' => ['required', 'array'],
             'person.national_id' => [
-                'nullable', 
-                'string', 
-                'max:20', 
-                Rule::unique('employees', 'national_id')->ignore($employeeId)
+                'nullable',
+                'string',
+                'max:20',
+                Rule::unique('employees', 'national_id')->ignore($employeeId),
             ],
             'person.ihs_number' => ['nullable', 'string', 'max:255'],
             'person.name' => ['required', 'string', 'max:255'],
@@ -43,20 +43,20 @@ class UpdateDoctorRequest extends FormRequest
             'person.phone' => ['nullable', 'string', 'max:20'],
             'person.education_id' => ['nullable', 'integer'],
             'person.occupation_id' => ['nullable', 'integer'],
-            
+
             'professional' => ['required', 'array'],
             'professional.specialization_id' => ['required', 'integer', 'exists:specializations,id'],
             'professional.str_number' => ['nullable', 'string', 'max:50'],
             'professional.sip_number' => [
-                'nullable', 
-                'string', 
-                'max:255', 
-                Rule::unique('doctors', 'sip_number')->ignore($doctorId)
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('doctors', 'sip_number')->ignore($doctorId),
             ],
             'professional.sip_valid_until' => ['nullable', 'date'],
             'professional.bpjs_dpjp_code' => ['nullable', 'string', 'max:50'],
             'professional.is_active' => ['boolean'],
-            
+
             'signature' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
             'remove_signature' => ['nullable', 'boolean'],
         ];

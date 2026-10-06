@@ -2,11 +2,10 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use App\Models\User;
-use App\Models\Guarantor;
 use App\Enums\GuarantorType;
+use App\Models\Guarantor;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
 class GuarantorTest extends TestCase
@@ -36,9 +35,9 @@ class GuarantorTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'code', 'name', 'type', 'type_label', 'is_active']
+                    '*' => ['id', 'code', 'name', 'type', 'type_label', 'is_active'],
                 ],
-                'meta' => ['current_page', 'last_page', 'per_page', 'total']
+                'meta' => ['current_page', 'last_page', 'per_page', 'total'],
             ])
             ->assertJsonCount(10, 'data');
     }
@@ -49,7 +48,7 @@ class GuarantorTest extends TestCase
         Guarantor::factory()->create(['name' => 'Asuransi Mandiri', 'code' => 'ASR-02', 'type' => GuarantorType::PrivateInsurance]);
 
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/guarantors?type=bpjs');
-        
+
         $response->assertOk()->assertJsonCount(1, 'data');
         $this->assertEquals('BPJS Kesehatan', $response->json('data.0.name'));
         $this->assertEquals('BPJS', $response->json('data.0.type_label'));
@@ -69,7 +68,7 @@ class GuarantorTest extends TestCase
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/guarantors', $payload);
 
         $response->assertCreated();
-        
+
         $this->assertDatabaseHas('guarantors', [
             'code' => 'ASR-01',
             'name' => 'Asuransi Umum',

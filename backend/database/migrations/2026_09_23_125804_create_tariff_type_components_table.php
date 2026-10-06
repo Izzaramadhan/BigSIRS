@@ -19,8 +19,8 @@ return new class extends Migration
             $table->decimal('percentage', 10, 2);
             $table->boolean('needs_review')->default(false);
             $table->timestamps();
-            
-            // We do not add unique constraint on (tariff_type_id, tariff_component_id) 
+
+            // We do not add unique constraint on (tariff_type_id, tariff_component_id)
             // to allow duplicate relations from legacy data.
         });
     }

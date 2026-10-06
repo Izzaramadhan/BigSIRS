@@ -44,7 +44,7 @@ class ServiceTypeController extends Controller
 
         return response()->json([
             'message' => 'Data jenis layanan berhasil ditambahkan',
-            'data' => new ServiceTypeResource($serviceType)
+            'data' => new ServiceTypeResource($serviceType),
         ], 201);
     }
 
@@ -65,7 +65,7 @@ class ServiceTypeController extends Controller
 
         return response()->json([
             'message' => 'Data jenis layanan berhasil diperbarui',
-            'data' => new ServiceTypeResource($serviceType)
+            'data' => new ServiceTypeResource($serviceType),
         ]);
     }
 
@@ -85,14 +85,14 @@ class ServiceTypeController extends Controller
     public function updateStatus(Request $request, ServiceType $serviceType): JsonResponse
     {
         $validated = $request->validate([
-            'is_active' => 'required|boolean'
+            'is_active' => 'required|boolean',
         ]);
 
         $serviceType = $this->service->update($serviceType, $validated);
 
         return response()->json([
             'message' => 'Status jenis layanan berhasil diperbarui',
-            'data' => new ServiceTypeResource($serviceType)
+            'data' => new ServiceTypeResource($serviceType),
         ]);
     }
 }

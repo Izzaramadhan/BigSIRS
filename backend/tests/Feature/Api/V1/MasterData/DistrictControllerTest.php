@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use App\Models\Regency;
 use App\Models\District;
+use App\Models\Regency;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -15,7 +15,7 @@ class DistrictControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         if (config('database.default') !== 'sqlite') {
             $this->markTestSkipped('Database tests can only be run on SQLite in-memory database.');
         }
@@ -33,11 +33,11 @@ class DistrictControllerTest extends TestCase
             ->assertJsonStructure([
                 'data' => [
                     '*' => [
-                        'id', 'regency_id', 'regency_name', 'code', 'name', 'is_active', 'created_at', 'updated_at'
-                    ]
+                        'id', 'regency_id', 'regency_name', 'code', 'name', 'is_active', 'created_at', 'updated_at',
+                    ],
                 ],
                 'meta',
-                'links'
+                'links',
             ]);
     }
 

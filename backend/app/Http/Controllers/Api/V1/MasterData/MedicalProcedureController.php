@@ -28,11 +28,11 @@ class MedicalProcedureController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhereHas('icd9Cm', function ($q2) use ($search) {
-                      $q2->where('code', 'like', "%{$search}%")
-                         ->orWhere('name', 'like', "%{$search}%");
-                  });
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhereHas('icd9Cm', function ($q2) use ($search) {
+                        $q2->where('code', 'like', "%{$search}%")
+                            ->orWhere('name', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -58,7 +58,7 @@ class MedicalProcedureController extends Controller
 
         $sortBy = $request->input('sort_by', 'created_at');
         $sortDir = $request->input('sort_dir', 'desc');
-        
+
         $allowedSorts = ['id', 'name', 'code', 'created_at', 'is_visible'];
         if (in_array($sortBy, $allowedSorts)) {
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');
@@ -77,7 +77,7 @@ class MedicalProcedureController extends Controller
         DB::beginTransaction();
         try {
             $procedure = MedicalProcedure::create($request->only([
-                'code', 'name', 'procedure_category_id', 'icd9_cm_id', 'is_visible'
+                'code', 'name', 'procedure_category_id', 'icd9_cm_id', 'is_visible',
             ]));
 
             if ($request->has('polyclinics')) {
@@ -98,8 +98,8 @@ class MedicalProcedureController extends Controller
                 $tariffTypeComponents = $tariffType->components->keyBy('tariff_component_id');
 
                 foreach ($tariffData['components'] as $compData) {
-                    $snapshot = $tariffTypeComponents->has($compData['tariff_component_id']) 
-                        ? $tariffTypeComponents[$compData['tariff_component_id']]->percentage 
+                    $snapshot = $tariffTypeComponents->has($compData['tariff_component_id'])
+                        ? $tariffTypeComponents[$compData['tariff_component_id']]->percentage
                         : 0;
 
                     $tariff->components()->create([
@@ -111,10 +111,12 @@ class MedicalProcedureController extends Controller
             }
 
             DB::commit();
+
             return new MedicalProcedureResource($this->loadRelations($procedure));
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Failed to create Medical Procedure: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Failed to create Medical Procedure: '.$e->getMessage()], 500);
         }
     }
 
@@ -130,7 +132,7 @@ class MedicalProcedureController extends Controller
         DB::beginTransaction();
         try {
             $procedure->update($request->only([
-                'code', 'name', 'procedure_category_id', 'icd9_cm_id', 'is_visible'
+                'code', 'name', 'procedure_category_id', 'icd9_cm_id', 'is_visible',
             ]));
 
             if ($request->has('polyclinics')) {
@@ -146,8 +148,8 @@ class MedicalProcedureController extends Controller
 
             foreach ($request->input('tariffs') as $tariffData) {
                 $totalAmount = collect($tariffData['components'])->sum('amount');
-                
-                if (!empty($tariffData['id'])) {
+
+                if (! empty($tariffData['id'])) {
                     $tariff = $procedure->tariffs()->find($tariffData['id']);
                     $tariff->update([
                         'tariff_type_id' => $tariffData['tariff_type_id'],
@@ -169,18 +171,18 @@ class MedicalProcedureController extends Controller
                 foreach ($tariffData['components'] as $compData) {
                     // Retain existing snapshot if updating, otherwise fetch from tariffType
                     $snapshot = 0;
-                    if (!empty($compData['id'])) {
+                    if (! empty($compData['id'])) {
                         $existingComp = $tariff->components()->find($compData['id']);
                         if ($existingComp) {
                             $snapshot = $existingComp->percentage_snapshot;
                         }
                     } else {
-                        $snapshot = $tariffTypeComponents->has($compData['tariff_component_id']) 
-                            ? $tariffTypeComponents[$compData['tariff_component_id']]->percentage 
+                        $snapshot = $tariffTypeComponents->has($compData['tariff_component_id'])
+                            ? $tariffTypeComponents[$compData['tariff_component_id']]->percentage
                             : 0;
                     }
 
-                    if (!empty($compData['id'])) {
+                    if (! empty($compData['id'])) {
                         $tariff->components()->where('id', $compData['id'])->update([
                             'tariff_component_id' => $compData['tariff_component_id'],
                             'amount' => $compData['amount'],
@@ -196,22 +198,26 @@ class MedicalProcedureController extends Controller
             }
 
             DB::commit();
+
             return new MedicalProcedureResource($this->loadRelations($procedure));
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Failed to update Medical Procedure: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Failed to update Medical Procedure: '.$e->getMessage()], 500);
         }
     }
 
     public function updateVisibility(UpdateMedicalProcedureStatusRequest $request, MedicalProcedure $procedure)
     {
         $procedure->update(['is_visible' => $request->is_visible]);
+
         return new MedicalProcedureResource($this->loadRelations($procedure));
     }
 
     public function destroy(MedicalProcedure $procedure)
     {
         $procedure->delete();
+
         return response()->noContent();
     }
 
@@ -234,37 +240,45 @@ class MedicalProcedureController extends Controller
 
         foreach ($tariffsData as $i => $tariffData) {
             $tariffTypeId = $tariffData['tariff_type_id'] ?? null;
-            if (!$tariffTypeId) continue;
+            if (! $tariffTypeId) {
+                continue;
+            }
 
             if (in_array($tariffTypeId, $tariffTypeIds)) {
-                $errors["tariffs.{$i}.tariff_type_id"] = ["Duplicate Tariff Type selected."];
+                $errors["tariffs.{$i}.tariff_type_id"] = ['Duplicate Tariff Type selected.'];
             }
             $tariffTypeIds[] = $tariffTypeId;
 
             $tariffType = TariffType::with('components')->find($tariffTypeId);
-            if (!$tariffType) continue;
+            if (! $tariffType) {
+                continue;
+            }
 
             $allowedComponentIds = $tariffType->components->pluck('tariff_component_id')->toArray();
             $providedComponentIds = [];
 
-            if (empty($tariffData['components'])) continue;
+            if (empty($tariffData['components'])) {
+                continue;
+            }
 
             foreach ($tariffData['components'] as $j => $comp) {
                 $compId = $comp['tariff_component_id'] ?? null;
-                if (!$compId) continue;
+                if (! $compId) {
+                    continue;
+                }
 
-                if (!in_array($compId, $allowedComponentIds)) {
-                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ["Component is not part of the selected Tariff Type."];
+                if (! in_array($compId, $allowedComponentIds)) {
+                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ['Component is not part of the selected Tariff Type.'];
                 }
 
                 if (in_array($compId, $providedComponentIds)) {
-                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ["Duplicate Component in Tariff Type."];
+                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ['Duplicate Component in Tariff Type.'];
                 }
                 $providedComponentIds[] = $compId;
             }
         }
 
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             throw ValidationException::withMessages($errors);
         }
     }

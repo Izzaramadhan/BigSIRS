@@ -2,11 +2,10 @@
 
 namespace Tests\Feature\Console;
 
-use App\Models\Guarantor;
+use App\Enums\GuarantorType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
-use App\Enums\GuarantorType;
 
 class LegacyImportGuarantorsCommandTest extends TestCase
 {
@@ -15,10 +14,10 @@ class LegacyImportGuarantorsCommandTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Mock legacy database connection
         $legacyDb = DB::connection('legacy');
-        
+
         $legacyDb->statement('DROP TABLE IF EXISTS ref_jenis_asuransi');
         $legacyDb->statement('
             CREATE TABLE ref_jenis_asuransi (
@@ -37,7 +36,7 @@ class LegacyImportGuarantorsCommandTest extends TestCase
     public function test_can_import_guarantors_from_legacy_db()
     {
         $legacyDb = DB::connection('legacy');
-        
+
         $legacyDb->insert("
             INSERT INTO ref_jenis_asuransi 
             (id, jenis_asuransi, pemerintah, status, type, id_inacbg, kode, deleted_at) 
@@ -49,12 +48,12 @@ class LegacyImportGuarantorsCommandTest extends TestCase
         ");
 
         $this->artisan('legacy:import-guarantors')
-             ->expectsOutputToContain('Fetching legacy guarantors from ref_jenis_asuransi...')
-             ->expectsOutputToContain('Import completed.')
-             ->assertExitCode(0);
+            ->expectsOutputToContain('Fetching legacy guarantors from ref_jenis_asuransi...')
+            ->expectsOutputToContain('Import completed.')
+            ->assertExitCode(0);
 
         $this->assertDatabaseCount('guarantors', 3);
-        
+
         $this->assertDatabaseHas('guarantors', [
             'legacy_id' => 1,
             'name' => 'BPJS KESEHATAN',
@@ -74,7 +73,7 @@ class LegacyImportGuarantorsCommandTest extends TestCase
             'inacbg_id' => '2',
             'code' => 'GUR-00002',
         ]);
-        
+
         $this->assertDatabaseMissing('guarantors', [
             'legacy_id' => 4,
         ]);
@@ -83,7 +82,7 @@ class LegacyImportGuarantorsCommandTest extends TestCase
     public function test_dry_run_does_not_modify_database()
     {
         $legacyDb = DB::connection('legacy');
-        
+
         $legacyDb->insert("
             INSERT INTO ref_jenis_asuransi 
             (id, jenis_asuransi, pemerintah, status, type, id_inacbg, kode, deleted_at) 
@@ -92,8 +91,8 @@ class LegacyImportGuarantorsCommandTest extends TestCase
         ");
 
         $this->artisan('legacy:import-guarantors', ['--dry-run' => true])
-             ->expectsOutputToContain('Running in DRY-RUN mode. No data will be written.')
-             ->assertExitCode(0);
+            ->expectsOutputToContain('Running in DRY-RUN mode. No data will be written.')
+            ->assertExitCode(0);
 
         $this->assertDatabaseCount('guarantors', 0);
     }

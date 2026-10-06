@@ -2,11 +2,11 @@
 
 namespace Tests\Feature\MasterData;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 use App\Models\Employee;
 use App\Models\MasterData\MedicalProcedure;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class ProcedureUserMappingTest extends TestCase
 {
@@ -25,28 +25,28 @@ class ProcedureUserMappingTest extends TestCase
             'code' => '123',
             'name' => 'Person 1694',
             'profession' => 'Dokter',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $procedure = MedicalProcedure::create([
             'code' => 'KGA031',
             'name' => 'Konsultasi /Pemeriksaan /Medikasi',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $procedure->employees()->attach($employee->id);
 
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->getJson("/api/v1/master-data/procedure-user-mappings");
+        $response = $this->actingAs($user)->getJson('/api/v1/master-data/procedure-user-mappings');
 
         $response->assertStatus(200);
-        
+
         $data = $response->json('data.0');
-        
+
         $this->assertEquals('KGA031', $data['procedure']['code']);
         $this->assertCount(1, $data['employees']);
-        
+
         $empData = $data['employees'][0];
         $this->assertEquals('Person 1694', $empData['name']);
         $this->assertEquals('Dokter', $empData['profession']);
@@ -61,13 +61,13 @@ class ProcedureUserMappingTest extends TestCase
             'code' => '123',
             'name' => 'Person 1694',
             'profession' => 'Dokter',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $procedure = MedicalProcedure::create([
             'code' => 'KGA031',
             'name' => 'Konsultasi /Pemeriksaan /Medikasi',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $procedure->employees()->attach($employee->id);
@@ -80,18 +80,18 @@ class ProcedureUserMappingTest extends TestCase
         // Mapping is deleted
         $this->assertDatabaseMissing('procedure_employee', [
             'procedure_id' => $procedure->id,
-            'employee_id' => $employee->id
+            'employee_id' => $employee->id,
         ]);
 
         // Employee still exists
         $this->assertDatabaseHas('employees', [
             'id' => $employee->id,
-            'name' => 'Person 1694'
+            'name' => 'Person 1694',
         ]);
-        
+
         // Procedure still exists
         $this->assertDatabaseHas('medical_procedures', [
-            'id' => $procedure->id
+            'id' => $procedure->id,
         ]);
     }
 }

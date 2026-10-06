@@ -15,8 +15,8 @@ class StoreProcedureCategoryRequest extends FormRequest
     {
         $this->merge([
             'name' => is_string($this->name) ? preg_replace('/\s+/', ' ', trim($this->name)) : $this->name,
-            'description' => is_string($this->description) && trim($this->description) !== '' 
-                ? preg_replace('/\s+/', ' ', trim($this->description)) 
+            'description' => is_string($this->description) && trim($this->description) !== ''
+                ? preg_replace('/\s+/', ' ', trim($this->description))
                 : null,
         ]);
     }

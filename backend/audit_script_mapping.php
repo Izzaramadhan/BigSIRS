@@ -1,10 +1,11 @@
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
-$app = require_once __DIR__ . '/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+require __DIR__.'/vendor/autoload.php';
+$app = require_once __DIR__.'/bootstrap/app.php';
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
 $legacyDb = DB::connection('legacy');
@@ -37,4 +38,3 @@ print_r($jabatan);
 echo "Checking mappings for id_aktor = 2...\n";
 $mappings = $legacyDb->table('map_ref_tindakan_user')->where('id_aktor', 2)->get();
 print_r($mappings);
-

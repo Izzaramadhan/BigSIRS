@@ -1,9 +1,11 @@
 <?php
+
 require __DIR__.'/vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
 $legacy = DB::connection('legacy');
@@ -23,16 +25,16 @@ $kodeKosong = $legacy->table('ref_jenis_tarif')->whereNull('kode')->orWhere('kod
 echo "Kode kosong: $kodeKosong\n";
 
 // kode duplikat
-$kodeDuplikat = $legacy->table('ref_jenis_tarif')->select(DB::raw("kode, count(*) as count"))->whereNotNull('kode')->where('kode', '!=', '')->groupBy('kode')->havingRaw('count(*) > 1')->get();
-echo "Kode duplikat: " . count($kodeDuplikat) . "\n";
+$kodeDuplikat = $legacy->table('ref_jenis_tarif')->select(DB::raw('kode, count(*) as count'))->whereNotNull('kode')->where('kode', '!=', '')->groupBy('kode')->havingRaw('count(*) > 1')->get();
+echo 'Kode duplikat: '.count($kodeDuplikat)."\n";
 
 // nama duplikat exact
-$namaDuplikatExact = $legacy->table('ref_jenis_tarif')->select(DB::raw("nama, count(*) as count"))->whereNotNull('nama')->where('nama', '!=', '')->groupBy('nama')->havingRaw('count(*) > 1')->get();
-echo "Nama duplikat exact: " . count($namaDuplikatExact) . "\n";
+$namaDuplikatExact = $legacy->table('ref_jenis_tarif')->select(DB::raw('nama, count(*) as count'))->whereNotNull('nama')->where('nama', '!=', '')->groupBy('nama')->havingRaw('count(*) > 1')->get();
+echo 'Nama duplikat exact: '.count($namaDuplikatExact)."\n";
 
 // nama duplikat case-insensitive
-$namaDuplikatCI = $legacy->table('ref_jenis_tarif')->select(DB::raw("LOWER(nama) as lower_nama, count(*) as count"))->whereNotNull('nama')->where('nama', '!=', '')->groupBy(DB::raw("LOWER(nama)"))->havingRaw('count(*) > 1')->get();
-echo "Nama duplikat case-insensitive: " . count($namaDuplikatCI) . "\n";
+$namaDuplikatCI = $legacy->table('ref_jenis_tarif')->select(DB::raw('LOWER(nama) as lower_nama, count(*) as count'))->whereNotNull('nama')->where('nama', '!=', '')->groupBy(DB::raw('LOWER(nama)'))->havingRaw('count(*) > 1')->get();
+echo 'Nama duplikat case-insensitive: '.count($namaDuplikatCI)."\n";
 
 // deskripsi kosong
 $descKosong = $legacy->table('ref_jenis_tarif')->whereNull('deskripsi')->orWhere('deskripsi', '')->count();
@@ -53,7 +55,6 @@ $zeroDate = $legacy->table('ref_jenis_tarif')->where('deleted_at', '0000-00-00 0
 echo "Zero-date deleted_at: $zeroDate\n";
 $nullDate = $legacy->table('ref_jenis_tarif')->whereNull('deleted_at')->count();
 echo "NULL deleted_at: $nullDate\n";
-
 
 echo "\n=== PROFIL RELASI KOMPONEN (map_jenis_tarif_komponen) ===\n";
 
@@ -76,11 +77,11 @@ $orphanKomponen = $legacy->table('map_jenis_tarif_komponen as m')
 echo "Orphan id_komponen: $orphanKomponen\n";
 
 // pasangan duplikat
-$pasanganDuplikat = $legacy->table('map_jenis_tarif_komponen')->select(DB::raw("id_jenis_tarif, id_komponen, count(*) as count"))
+$pasanganDuplikat = $legacy->table('map_jenis_tarif_komponen')->select(DB::raw('id_jenis_tarif, id_komponen, count(*) as count'))
     ->groupBy('id_jenis_tarif', 'id_komponen')
     ->havingRaw('count(*) > 1')
     ->get();
-echo "Pasangan Jenis Tarif-Komponen duplikat: " . count($pasanganDuplikat) . "\n";
+echo 'Pasangan Jenis Tarif-Komponen duplikat: '.count($pasanganDuplikat)."\n";
 if (count($pasanganDuplikat) > 0) {
     foreach ($pasanganDuplikat as $dup) {
         echo "   - JT: {$dup->id_jenis_tarif}, Komp: {$dup->id_komponen} ({$dup->count}x)\n";
@@ -119,7 +120,7 @@ if ($persen5000 > 0 || $persenAbove100 > 0) {
 }
 
 // Total persentase per Jenis Tarif
-$totalPerJT = $legacy->table('map_jenis_tarif_komponen')->select(DB::raw("id_jenis_tarif, SUM(persen) as total_persen"))
+$totalPerJT = $legacy->table('map_jenis_tarif_komponen')->select(DB::raw('id_jenis_tarif, SUM(persen) as total_persen'))
     ->groupBy('id_jenis_tarif')
     ->get();
 
@@ -128,9 +129,13 @@ $samaDengan100 = 0;
 $lebihDari100 = 0;
 
 foreach ($totalPerJT as $row) {
-    if ($row->total_persen < 100) $kurangDari100++;
-    elseif ($row->total_persen == 100) $samaDengan100++;
-    else $lebihDari100++;
+    if ($row->total_persen < 100) {
+        $kurangDari100++;
+    } elseif ($row->total_persen == 100) {
+        $samaDengan100++;
+    } else {
+        $lebihDari100++;
+    }
 }
 
 echo "\nJenis Tarif berdasarkan total persentase:\n";
@@ -153,4 +158,3 @@ $tarifTindakanWithJT = $legacy->table('ref_tarif_tindakan')->whereNotNull('id_je
 echo "\n=== REFERENSI LAIN ===\n";
 echo "Total ref_tarif_tindakan: $tarifTindakanCount\n";
 echo "ref_tarif_tindakan yang mereferensikan id_jenis_tarif: $tarifTindakanWithJT\n";
-

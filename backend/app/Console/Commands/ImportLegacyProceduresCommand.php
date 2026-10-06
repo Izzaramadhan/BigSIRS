@@ -2,26 +2,27 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\Icd9Cm;
+use App\Models\MasterData\MedicalProcedure;
+use App\Models\MasterData\ReportGroup;
+use App\Models\Polyclinic;
+use App\Models\ProcedureCategory;
+use App\Models\TariffComponent;
+use App\Models\TariffType;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\MedicalProcedure;
-use App\Models\MasterData\Icd9Cm;
-use App\Models\MasterData\ReportGroup;
-use App\Models\ProcedureCategory;
-use App\Models\TariffType;
-use App\Models\TariffComponent;
-use App\Models\Polyclinic;
 
 class ImportLegacyProceduresCommand extends Command
 {
     protected $signature = 'legacy:import-procedures {--dry-run : Perform a dry run without saving to the database}';
+
     protected $description = 'Import medical procedures from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
 
-        $this->info("Starting legacy import (Dry Run: " . ($isDryRun ? 'Yes' : 'No') . ")");
+        $this->info('Starting legacy import (Dry Run: '.($isDryRun ? 'Yes' : 'No').')');
 
         DB::beginTransaction();
         try {
@@ -68,6 +69,7 @@ class ImportLegacyProceduresCommand extends Command
             foreach ($legacyProcedures as $row) {
                 if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                     $stats['Skipped Actual Soft Deleted']++;
+
                     continue;
                 }
                 $validProcedures[] = $row;
@@ -77,8 +79,8 @@ class ImportLegacyProceduresCommand extends Command
             $groupedProcedures = [];
             foreach ($validProcedures as $row) {
                 $stats['Valid for Import']++;
-                $groupKey = trim($row->kode) . '_' . trim($row->nama) . '_' . $row->id_kategori;
-                if (!isset($groupedProcedures[$groupKey])) {
+                $groupKey = trim($row->kode).'_'.trim($row->nama).'_'.$row->id_kategori;
+                if (! isset($groupedProcedures[$groupKey])) {
                     $groupedProcedures[$groupKey] = [
                         'legacy_id' => $row->id,
                         'kode' => trim($row->kode),
@@ -86,7 +88,7 @@ class ImportLegacyProceduresCommand extends Command
                         'id_kategori' => $row->id_kategori,
                         'icd9_code' => $row->icd9_code,
                         'status' => $row->status,
-                        'tariffs' => []
+                        'tariffs' => [],
                     ];
                 }
                 $groupedProcedures[$groupKey]['tariffs'][] = $row;
@@ -95,12 +97,12 @@ class ImportLegacyProceduresCommand extends Command
             // Pre-load all legacy mapping data for polyclinics, report groups, and components
             // To save time, we will load them in bulk
             $allTariffIds = collect($validProcedures)->pluck('id')->toArray();
-            
+
             $legacyPolys = [];
-            if (!empty($allTariffIds)) {
+            if (! empty($allTariffIds)) {
                 $legacyPolysRaw = DB::connection('legacy')->table('map_tarif_tindakan_poliklinik')
                     ->whereIn('id_ref_tarif_tindakan', $allTariffIds)
-                    ->where(function($q){
+                    ->where(function ($q) {
                         $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
                     })
                     ->get();
@@ -110,10 +112,10 @@ class ImportLegacyProceduresCommand extends Command
             }
 
             $legacyRGs = [];
-            if (!empty($allTariffIds)) {
+            if (! empty($allTariffIds)) {
                 $legacyRGsRaw = DB::connection('legacy')->table('map_tindakan_kelompok_laporan')
                     ->whereIn('id_ref_tarif_tindakan', $allTariffIds)
-                    ->where(function($q){
+                    ->where(function ($q) {
                         $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
                     })
                     ->get();
@@ -123,11 +125,11 @@ class ImportLegacyProceduresCommand extends Command
             }
 
             $legacyComponentsRaw = [];
-            if (!empty($allTariffIds)) {
+            if (! empty($allTariffIds)) {
                 $legacyComponentsRaw = DB::connection('legacy')->table('map_tarif_tindakan_komponen')
                     ->join('map_jenis_tarif_komponen', 'map_tarif_tindakan_komponen.id_map_jenis_tarif_komponen', '=', 'map_jenis_tarif_komponen.id')
                     ->whereIn('map_tarif_tindakan_komponen.id_tarif_tindakan', $allTariffIds)
-                    ->where(function($q){
+                    ->where(function ($q) {
                         $q->whereNull('map_tarif_tindakan_komponen.deleted_at')->orWhere('map_tarif_tindakan_komponen.deleted_at', '0000-00-00 00:00:00');
                     })
                     ->select('map_tarif_tindakan_komponen.*', 'map_jenis_tarif_komponen.id_komponen', 'map_jenis_tarif_komponen.persen')
@@ -141,8 +143,8 @@ class ImportLegacyProceduresCommand extends Command
             foreach ($groupedProcedures as $groupKey => $headerData) {
                 // Map Category using legacy_id
                 $categoryId = $categoryMap[$headerData['id_kategori']] ?? null;
-                
-                if (!$categoryId && $headerData['id_kategori'] == 0) {
+
+                if (! $categoryId && $headerData['id_kategori'] == 0) {
                     $defaultCat = ProcedureCategory::firstOrCreate(
                         ['name' => 'Tanpa Kategori'],
                         ['description' => 'Kategori otomatis untuk tindakan tanpa kategori di legacy', 'is_active' => true]
@@ -151,30 +153,31 @@ class ImportLegacyProceduresCommand extends Command
                     $categoryMap[0] = $categoryId;
                 }
 
-                if (!$categoryId) {
+                if (! $categoryId) {
                     $stats['Missing Category Mapping']++;
                     $stats['Failed']++;
+
                     continue; // Mandatory relation
                 }
 
                 // Map ICD9 using code
                 $icdId = null;
-                if (!empty($headerData['icd9_code'])) {
+                if (! empty($headerData['icd9_code'])) {
                     $icdId = $icd9Map[$headerData['icd9_code']] ?? null;
-                    if (!$icdId) {
+                    if (! $icdId) {
                         $stats['Missing ICD Mapping']++;
                     }
                 }
 
                 // Find Existing Header
                 $procedure = MedicalProcedure::where('legacy_id', $headerData['legacy_id'])
-                    ->orWhere(function($q) use ($headerData, $categoryId) {
+                    ->orWhere(function ($q) use ($headerData, $categoryId) {
                         $q->where('code', $headerData['kode'])->where('procedure_category_id', $categoryId);
                     })->first();
 
                 if ($procedure) {
                     $stats['Would Update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $procedure->update([
                             'name' => $headerData['nama'],
                             'icd9_cm_id' => $icdId,
@@ -183,7 +186,7 @@ class ImportLegacyProceduresCommand extends Command
                     }
                 } else {
                     $stats['Would Create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $procedure = MedicalProcedure::create([
                             'legacy_id' => $headerData['legacy_id'],
                             'code' => $headerData['kode'],
@@ -225,7 +228,7 @@ class ImportLegacyProceduresCommand extends Command
                 $polyIds = array_unique($polyIds);
                 $rgIds = array_unique($rgIds);
 
-                if (!$isDryRun && $procedure->exists) {
+                if (! $isDryRun && $procedure->exists) {
                     $procedure->polyclinics()->sync($polyIds);
                     $procedure->reportGroups()->sync($rgIds);
                 }
@@ -234,8 +237,8 @@ class ImportLegacyProceduresCommand extends Command
                 foreach ($headerData['tariffs'] as $legacyTariff) {
                     // Map TariffType using legacy_id
                     $tariffTypeId = $tariffTypeMap[$legacyTariff->id_jenis_tarif] ?? null;
-                    
-                    if (!$tariffTypeId && $legacyTariff->id_jenis_tarif == 0) {
+
+                    if (! $tariffTypeId && $legacyTariff->id_jenis_tarif == 0) {
                         $defaultType = TariffType::firstOrCreate(
                             ['name' => 'Tanpa Jenis Tarif'],
                             ['description' => 'Jenis Tarif otomatis', 'is_active' => true]
@@ -244,8 +247,9 @@ class ImportLegacyProceduresCommand extends Command
                         $tariffTypeMap[0] = $tariffTypeId;
                     }
 
-                    if (!$tariffTypeId) {
+                    if (! $tariffTypeId) {
                         $stats['Missing Tariff Type Mapping']++;
+
                         continue;
                     }
 
@@ -254,30 +258,31 @@ class ImportLegacyProceduresCommand extends Command
                     }
 
                     $components = $legacyComponents[$legacyTariff->id] ?? [];
-                    
+
                     if (empty($components)) {
                         $stats['Empty Component Details']++;
                     }
 
                     $calculatedTotal = collect($components)->sum('harga');
-                    if ($calculatedTotal != $legacyTariff->harga && !empty($components)) {
+                    if ($calculatedTotal != $legacyTariff->harga && ! empty($components)) {
                         $stats['Total Mismatches']++;
                     }
 
-                    if (!$isDryRun && $procedure->exists) {
+                    if (! $isDryRun && $procedure->exists) {
                         $tariff = $procedure->tariffs()->updateOrCreate(
                             ['legacy_id' => $legacyTariff->id],
                             [
                                 'tariff_type_id' => $tariffTypeId,
-                                'total_amount' => $calculatedTotal > 0 ? $calculatedTotal : $legacyTariff->harga
+                                'total_amount' => $calculatedTotal > 0 ? $calculatedTotal : $legacyTariff->harga,
                             ]
                         );
 
                         foreach ($components as $comp) {
                             // Map Component using legacy_id
                             $compId = $componentMap[$comp->id_komponen] ?? null;
-                            if (!$compId) {
+                            if (! $compId) {
                                 $stats['Missing Component Mapping']++;
+
                                 continue; // do not replace with null, skip it
                             }
 
@@ -286,14 +291,14 @@ class ImportLegacyProceduresCommand extends Command
                                 [
                                     'tariff_component_id' => $compId,
                                     'percentage_snapshot' => $comp->persen ?? 0,
-                                    'amount' => $comp->harga
+                                    'amount' => $comp->harga,
                                 ]
                             );
                         }
-                    } else if ($isDryRun) {
+                    } elseif ($isDryRun) {
                         // Just check component mapping
                         foreach ($components as $comp) {
-                            if (!isset($componentMap[$comp->id_komponen])) {
+                            if (! isset($componentMap[$comp->id_komponen])) {
                                 $stats['Missing Component Mapping']++;
                             }
                         }
@@ -307,16 +312,18 @@ class ImportLegacyProceduresCommand extends Command
 
             if ($isDryRun) {
                 DB::rollBack();
-                $this->info("Dry run completed. Transactions rolled back.");
+                $this->info('Dry run completed. Transactions rolled back.');
             } else {
                 DB::commit();
-                $this->info("Import completed successfully.");
+                $this->info('Import completed successfully.');
             }
+
             return 0;
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
             return 1;
         }
     }

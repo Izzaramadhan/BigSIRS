@@ -11,26 +11,28 @@ use Illuminate\Support\Str;
 class ImportLegacyVillagesCommand extends Command
 {
     protected $signature = 'legacy:import-villages {--dry-run : Only show what would be done without saving}';
+
     protected $description = 'Import villages from legacy ref_kelurahan table';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
-        
-        $legacyDb = config('database.default') === 'sqlite' 
-            ? 'simrs_legacy_test' 
+
+        $legacyDb = config('database.default') === 'sqlite'
+            ? 'simrs_legacy_test'
             : 'simrs_legacy_restored';
 
         if (config('database.default') === 'sqlite' && config('database.connections.legacy.database') !== 'simrs_legacy_test') {
             $this->error('Safety guard: Test environment must use simrs_legacy_test');
+
             return 1;
         }
 
         $this->info("Reading from: {$legacyDb}");
-        $this->info($isDryRun ? "MODE: DRY-RUN" : "MODE: ACTUAL IMPORT");
+        $this->info($isDryRun ? 'MODE: DRY-RUN' : 'MODE: ACTUAL IMPORT');
 
         $totalRead = DB::connection('legacy')->table('ref_kelurahan')->count();
-        $this->info("Total Read: " . $totalRead);
+        $this->info('Total Read: '.$totalRead);
 
         $legacyVillages = DB::connection('legacy')->table('ref_kelurahan')->cursor();
 
@@ -50,32 +52,34 @@ class ImportLegacyVillagesCommand extends Command
 
         $missingParents = [];
 
-        if (!$isDryRun) {
+        if (! $isDryRun) {
             DB::beginTransaction();
         }
 
         try {
             foreach ($legacyVillages as $row) {
-                $legacyId = trim((string)$row->id);
-                $legacyDistrictId = trim((string)$row->id_kecamatan);
-                
-                $isDeleted = !in_array($row->deleted_at, [null, '', '0000-00-00', '0000-00-00 00:00:00', '2018-05-24 11:43:23'], true);
+                $legacyId = trim((string) $row->id);
+                $legacyDistrictId = trim((string) $row->id_kecamatan);
+
+                $isDeleted = ! in_array($row->deleted_at, [null, '', '0000-00-00', '0000-00-00 00:00:00', '2018-05-24 11:43:23'], true);
                 if ($isDeleted) {
                     $stats['skipped']++;
+
                     continue;
                 }
 
-                if (!isset($districtMap[$legacyDistrictId])) {
+                if (! isset($districtMap[$legacyDistrictId])) {
                     $stats['missing_parent']++;
-                    if (!in_array($legacyDistrictId, $missingParents)) {
+                    if (! in_array($legacyDistrictId, $missingParents)) {
                         $missingParents[] = $legacyDistrictId;
                     }
+
                     continue;
                 }
 
                 $districtId = $districtMap[$legacyDistrictId];
                 $name = $row->nama ? Str::squish(trim($row->nama)) : '-';
-                $code = trim((string)$row->kode_kelurahan); 
+                $code = trim((string) $row->kode_kelurahan);
                 $isActive = in_array($row->status, [1, '1'], true);
 
                 $payload = [
@@ -87,13 +91,13 @@ class ImportLegacyVillagesCommand extends Command
 
                 if (isset($existingVillages[$legacyId])) {
                     $stats['would_update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         Village::where('legacy_id', $legacyId)->update($payload);
                         $stats['updated']++;
                     }
                 } else {
                     $stats['would_create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $payload['legacy_id'] = $legacyId;
                         Village::create($payload);
                         $stats['created']++;
@@ -101,15 +105,15 @@ class ImportLegacyVillagesCommand extends Command
                 }
             }
 
-            if (!$isDryRun) {
+            if (! $isDryRun) {
                 DB::commit();
             }
         } catch (\Exception $e) {
-            if (!$isDryRun) {
+            if (! $isDryRun) {
                 DB::rollBack();
             }
             $stats['failed']++;
-            $this->error("Error: " . $e->getMessage());
+            $this->error('Error: '.$e->getMessage());
         }
 
         $this->table(
@@ -128,7 +132,7 @@ class ImportLegacyVillagesCommand extends Command
         );
 
         if (count($missingParents) > 0) {
-            $this->warn("Missing parents (legacy id_kecamatan) for " . count($missingParents) . " districts. Need to import them first.");
+            $this->warn('Missing parents (legacy id_kecamatan) for '.count($missingParents).' districts. Need to import them first.');
         }
 
         return 0;

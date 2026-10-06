@@ -2,10 +2,11 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
+use App\Models\Education;
+use App\Models\Employee;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use App\Models\User;
-use App\Models\Education;
 
 class EducationTest extends TestCase
 {
@@ -54,7 +55,7 @@ class EducationTest extends TestCase
 
         $this->assertDatabaseHas('educations', [
             'name' => 'S1 Teknik',
-            'is_active' => 1
+            'is_active' => 1,
         ]);
     }
 
@@ -76,7 +77,7 @@ class EducationTest extends TestCase
         $edu = Education::create(['name' => 'SD']);
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/educations/' . $edu->id, [
+            ->putJson('/api/v1/master-data/educations/'.$edu->id, [
                 'name' => 'Sekolah Dasar',
                 'is_active' => false,
             ]);
@@ -91,7 +92,7 @@ class EducationTest extends TestCase
         $edu = Education::create(['name' => 'SD']);
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/educations/' . $edu->id, [
+            ->putJson('/api/v1/master-data/educations/'.$edu->id, [
                 'name' => 'SD',
             ]);
 
@@ -103,19 +104,19 @@ class EducationTest extends TestCase
         $edu = Education::create(['name' => 'SD']);
 
         $response = $this->actingAs($this->user)
-            ->deleteJson('/api/v1/master-data/educations/' . $edu->id);
+            ->deleteJson('/api/v1/master-data/educations/'.$edu->id);
 
         $response->assertNoContent();
         $this->assertSoftDeleted('educations', ['id' => $edu->id]);
     }
-    
+
     public function test_cannot_delete_education_if_used()
     {
         $edu = Education::create(['name' => 'SD']);
-        $employee = \App\Models\Employee::factory()->create(['education_id' => $edu->id]);
-        
+        $employee = Employee::factory()->create(['education_id' => $edu->id]);
+
         $response = $this->actingAs($this->user)
-            ->deleteJson('/api/v1/master-data/educations/' . $edu->id);
+            ->deleteJson('/api/v1/master-data/educations/'.$edu->id);
 
         $response->assertStatus(409);
         $this->assertDatabaseHas('educations', ['id' => $edu->id, 'deleted_at' => null]);

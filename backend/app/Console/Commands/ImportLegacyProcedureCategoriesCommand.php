@@ -9,21 +9,23 @@ use Illuminate\Support\Facades\DB;
 class ImportLegacyProcedureCategoriesCommand extends Command
 {
     protected $signature = 'legacy:import-procedure-categories {--dry-run : Run without making actual database changes}';
+
     protected $description = 'Import procedure categories from legacy database';
 
     public function handle()
     {
         $isDryRun = $this->option('dry-run');
 
-        $this->info("Starting legacy Procedure Categories import..");
+        $this->info('Starting legacy Procedure Categories import..');
         if ($isDryRun) {
-            $this->warn("RUNNING IN DRY-RUN MODE (No data will be saved)");
+            $this->warn('RUNNING IN DRY-RUN MODE (No data will be saved)');
         }
 
         try {
             $legacyCategories = DB::connection('legacy')->table('ref_kategori_tindakan')->get();
         } catch (\Exception $e) {
-            $this->error("Failed to connect or read from legacy database: " . $e->getMessage());
+            $this->error('Failed to connect or read from legacy database: '.$e->getMessage());
+
             return Command::FAILURE;
         }
 
@@ -50,8 +52,8 @@ class ImportLegacyProcedureCategoriesCommand extends Command
                 // Soft delete check
                 $deletedAt = $legacy->deleted_at;
                 $isSoftDeleted = false;
-                
-                if (!is_null($deletedAt) && $deletedAt !== '' && $deletedAt !== '0000-00-00' && $deletedAt !== '0000-00-00 00:00:00') {
+
+                if (! is_null($deletedAt) && $deletedAt !== '' && $deletedAt !== '0000-00-00' && $deletedAt !== '0000-00-00 00:00:00') {
                     $isSoftDeleted = true;
                 }
 
@@ -69,8 +71,8 @@ class ImportLegacyProcedureCategoriesCommand extends Command
                 }
 
                 $name = is_string($legacy->nama) ? preg_replace('/\s+/', ' ', trim($legacy->nama)) : $legacy->nama;
-                $description = is_string($legacy->deskripsi) && trim($legacy->deskripsi) !== '' 
-                    ? preg_replace('/\s+/', ' ', trim($legacy->deskripsi)) 
+                $description = is_string($legacy->deskripsi) && trim($legacy->deskripsi) !== ''
+                    ? preg_replace('/\s+/', ' ', trim($legacy->deskripsi))
                     : null;
 
                 $data = [
@@ -83,13 +85,13 @@ class ImportLegacyProcedureCategoriesCommand extends Command
 
                 if ($existing) {
                     $stats['would_update']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $existing->update($data);
                         $stats['updated']++;
                     }
                 } else {
                     $stats['would_create']++;
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         ProcedureCategory::create(array_merge(['legacy_id' => $legacy->id], $data));
                         $stats['created']++;
                     }
@@ -100,18 +102,19 @@ class ImportLegacyProcedureCategoriesCommand extends Command
                 DB::rollBack();
             } else {
                 DB::commit();
-                $this->info("Import completed successfully.");
+                $this->info('Import completed successfully.');
             }
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
             return Command::FAILURE;
         }
 
         // Print Report
-        $this->line("");
-        $this->info($isDryRun ? "[DRY-RUN] Import Report" : "Final Import Report");
+        $this->line('');
+        $this->info($isDryRun ? '[DRY-RUN] Import Report' : 'Final Import Report');
         $this->table(
             ['Metric', 'Count'],
             [

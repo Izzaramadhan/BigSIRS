@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreTariffComponentRequest extends FormRequest
@@ -19,8 +18,8 @@ class StoreTariffComponentRequest extends FormRequest
     {
         $this->merge([
             'name' => isset($this->name) ? trim(preg_replace('/\s+/', ' ', $this->name)) : null,
-            'description' => isset($this->description) && trim($this->description) !== '' 
-                ? trim($this->description) 
+            'description' => isset($this->description) && trim($this->description) !== ''
+                ? trim($this->description)
                 : null,
         ]);
     }

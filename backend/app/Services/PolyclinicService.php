@@ -17,18 +17,18 @@ class PolyclinicService
         }
 
         $currentParentId = $newParentId;
-        
+
         while ($currentParentId !== null) {
             if ($currentParentId === $polyclinicId) {
                 return true; // Cycle detected
             }
-            
+
             $parent = Polyclinic::find($currentParentId);
-            
-            if (!$parent) {
+
+            if (! $parent) {
                 break;
             }
-            
+
             $currentParentId = $parent->parent_id;
         }
 

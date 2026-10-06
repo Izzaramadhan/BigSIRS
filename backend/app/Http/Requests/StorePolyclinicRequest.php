@@ -29,16 +29,16 @@ class StorePolyclinicRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code'             => ['required', 'string', 'max:30', 'unique:polyclinics,code'],
-            'name'             => ['required', 'string', 'max:150'],
-            'service_type'     => ['required', Rule::enum(ServiceType::class)],
-            'description'      => ['nullable', 'string', 'max:255'],
-            'is_visible'       => ['boolean'],
+            'code' => ['required', 'string', 'max:30', 'unique:polyclinics,code'],
+            'name' => ['required', 'string', 'max:150'],
+            'service_type' => ['required', Rule::enum(ServiceType::class)],
+            'description' => ['nullable', 'string', 'max:255'],
+            'is_visible' => ['boolean'],
             'is_online_visible' => ['boolean'],
-            'quota'            => ['integer', 'min:0'],
-            'jkn_quota'        => ['integer', 'min:0'],
-            'bpjs_code'        => ['nullable', 'string', 'max:50'],
-            'is_active'        => ['boolean'],
+            'quota' => ['integer', 'min:0'],
+            'jkn_quota' => ['integer', 'min:0'],
+            'bpjs_code' => ['nullable', 'string', 'max:50'],
+            'is_active' => ['boolean'],
             // parent_id and satusehat_code not accepted from user form
         ];
     }

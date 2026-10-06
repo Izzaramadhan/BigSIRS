@@ -3,16 +3,17 @@
 namespace App\Models;
 
 use App\Enums\ServiceType;
+use Database\Factories\PolyclinicFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Polyclinic extends Model
 {
-    /** @use HasFactory<\Database\Factories\PolyclinicFactory> */
+    /** @use HasFactory<PolyclinicFactory> */
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
@@ -33,12 +34,12 @@ class Polyclinic extends Model
     ];
 
     protected $casts = [
-        'service_type'      => ServiceType::class,
-        'is_active'         => 'boolean',
-        'is_visible'        => 'boolean',
+        'service_type' => ServiceType::class,
+        'is_active' => 'boolean',
+        'is_visible' => 'boolean',
         'is_online_visible' => 'boolean',
-        'quota'             => 'integer',
-        'jkn_quota'         => 'integer',
+        'quota' => 'integer',
+        'jkn_quota' => 'integer',
     ];
 
     public function parent(): BelongsTo
@@ -59,10 +60,11 @@ class Polyclinic extends Model
     public function scopeSearch(Builder $query, string $term): Builder
     {
         $term = "%{$term}%";
+
         return $query->where(function ($query) use ($term) {
             $query->where('code', 'like', $term)
-                  ->orWhere('name', 'like', $term)
-                  ->orWhere('bpjs_code', 'like', $term);
+                ->orWhere('name', 'like', $term)
+                ->orWhere('bpjs_code', 'like', $term);
         });
     }
 }

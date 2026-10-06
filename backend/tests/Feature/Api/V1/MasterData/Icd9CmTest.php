@@ -28,12 +28,12 @@ class Icd9CmTest extends TestCase
     public function test_can_list_icd9cm()
     {
         Icd9Cm::factory()->count(15)->create();
-        
+
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/icd9-cms');
-        
+
         $response->assertOk()
-                 ->assertJsonCount(10, 'data')
-                 ->assertJsonStructure(['data' => [['id', 'code', 'name']], 'meta', 'links']);
+            ->assertJsonCount(10, 'data')
+            ->assertJsonStructure(['data' => [['id', 'code', 'name']], 'meta', 'links']);
     }
 
     public function test_can_create_icd9cm()
@@ -47,8 +47,8 @@ class Icd9CmTest extends TestCase
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/icd9-cms', $payload);
 
         $response->assertCreated()
-                 ->assertJsonPath('data.code', '99.99');
-                 
+            ->assertJsonPath('data.code', '99.99');
+
         $this->assertDatabaseHas('icd9_cms', ['code' => '99.99']);
     }
 
@@ -62,18 +62,18 @@ class Icd9CmTest extends TestCase
             'is_active' => false,
         ];
 
-        $response = $this->actingAs($this->user)->putJson('/api/v1/master-data/icd9-cms/' . $icd9->id, $payload);
+        $response = $this->actingAs($this->user)->putJson('/api/v1/master-data/icd9-cms/'.$icd9->id, $payload);
 
         $response->assertOk()
-                 ->assertJsonPath('data.name', 'Updated Name')
-                 ->assertJsonPath('data.is_active', false);
+            ->assertJsonPath('data.name', 'Updated Name')
+            ->assertJsonPath('data.is_active', false);
     }
 
     public function test_can_delete_icd9cm()
     {
         $icd9 = Icd9Cm::factory()->create();
 
-        $response = $this->actingAs($this->user)->deleteJson('/api/v1/master-data/icd9-cms/' . $icd9->id);
+        $response = $this->actingAs($this->user)->deleteJson('/api/v1/master-data/icd9-cms/'.$icd9->id);
 
         $response->assertNoContent();
         $this->assertSoftDeleted('icd9_cms', ['id' => $icd9->id]);
@@ -87,8 +87,8 @@ class Icd9CmTest extends TestCase
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/icd9-cms?search=11.11');
 
         $response->assertOk()
-                 ->assertJsonCount(1, 'data')
-                 ->assertJsonPath('data.0.code', '11.11');
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.code', '11.11');
     }
 
     public function test_duplicate_code_is_rejected()
@@ -103,6 +103,6 @@ class Icd9CmTest extends TestCase
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/icd9-cms', $payload);
 
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['code']);
+            ->assertJsonValidationErrors(['code']);
     }
 }

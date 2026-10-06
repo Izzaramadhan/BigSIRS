@@ -2,10 +2,11 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
+use App\Models\Employee;
+use App\Models\Occupation;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use App\Models\User;
-use App\Models\Occupation;
 
 class OccupationTest extends TestCase
 {
@@ -54,7 +55,7 @@ class OccupationTest extends TestCase
 
         $this->assertDatabaseHas('occupations', [
             'name' => 'Pegawai Negeri Sipil',
-            'is_active' => 1
+            'is_active' => 1,
         ]);
     }
 
@@ -76,7 +77,7 @@ class OccupationTest extends TestCase
         $occ = Occupation::create(['name' => 'Petani']);
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/occupations/' . $occ->id, [
+            ->putJson('/api/v1/master-data/occupations/'.$occ->id, [
                 'name' => 'Pekebun',
                 'is_active' => false,
             ]);
@@ -91,7 +92,7 @@ class OccupationTest extends TestCase
         $occ = Occupation::create(['name' => 'Petani']);
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/occupations/' . $occ->id, [
+            ->putJson('/api/v1/master-data/occupations/'.$occ->id, [
                 'name' => 'Petani',
             ]);
 
@@ -103,19 +104,19 @@ class OccupationTest extends TestCase
         $occ = Occupation::create(['name' => 'Petani']);
 
         $response = $this->actingAs($this->user)
-            ->deleteJson('/api/v1/master-data/occupations/' . $occ->id);
+            ->deleteJson('/api/v1/master-data/occupations/'.$occ->id);
 
         $response->assertNoContent();
         $this->assertSoftDeleted('occupations', ['id' => $occ->id]);
     }
-    
+
     public function test_cannot_delete_occupation_if_used()
     {
         $occ = Occupation::create(['name' => 'Petani']);
-        $employee = \App\Models\Employee::factory()->create(['occupation_id' => $occ->id]);
-        
+        $employee = Employee::factory()->create(['occupation_id' => $occ->id]);
+
         $response = $this->actingAs($this->user)
-            ->deleteJson('/api/v1/master-data/occupations/' . $occ->id);
+            ->deleteJson('/api/v1/master-data/occupations/'.$occ->id);
 
         $response->assertStatus(409);
         $this->assertDatabaseHas('occupations', ['id' => $occ->id, 'deleted_at' => null]);

@@ -2,33 +2,37 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
-use Tests\TestCase;
-use App\Models\User;
-use App\Models\ProcedureCategory;
-use App\Models\TariffType;
-use App\Models\TariffComponent;
-use App\Models\Polyclinic;
-use App\Models\MasterData\MedicalProcedure;
 use App\Models\MasterData\Icd9Cm;
+use App\Models\MasterData\MedicalProcedure;
 use App\Models\MasterData\ReportGroup;
+use App\Models\Polyclinic;
+use App\Models\ProcedureCategory;
+use App\Models\TariffComponent;
+use App\Models\TariffType;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class MedicalProcedureTest extends TestCase
 {
     use RefreshDatabase;
 
     protected $user;
+
     protected $category;
+
     protected $tariffType;
+
     protected $component;
+
     protected $polyclinic;
+
     protected $icd;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->user = User::factory()->create();
         $this->category = ProcedureCategory::factory()->create();
         $this->tariffType = TariffType::factory()->create();
@@ -56,8 +60,8 @@ class MedicalProcedureTest extends TestCase
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/procedures');
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.0.code', 'T001')
-                 ->assertJsonPath('data.0.name', 'Test Procedure');
+            ->assertJsonPath('data.0.code', 'T001')
+            ->assertJsonPath('data.0.name', 'Test Procedure');
     }
 
     public function test_can_create_procedure_with_tariffs()
@@ -75,17 +79,17 @@ class MedicalProcedureTest extends TestCase
                     'components' => [
                         [
                             'tariff_component_id' => $this->component->id,
-                            'amount' => 50000
-                        ]
-                    ]
-                ]
-            ]
+                            'amount' => 50000,
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         // Ensure tariff type has this component
         $this->tariffType->components()->create([
             'tariff_component_id' => $this->component->id,
-            'percentage' => 100
+            'percentage' => 100,
         ]);
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedures', $payload);
@@ -100,7 +104,7 @@ class MedicalProcedureTest extends TestCase
     {
         $this->tariffType->components()->create([
             'tariff_component_id' => $this->component->id,
-            'percentage' => 100
+            'percentage' => 100,
         ]);
 
         $payload = [
@@ -115,11 +119,11 @@ class MedicalProcedureTest extends TestCase
                     'components' => [
                         [
                             'tariff_component_id' => $this->component->id,
-                            'amount' => 50000 // Real amount
-                        ]
-                    ]
-                ]
-            ]
+                            'amount' => 50000, // Real amount
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedures', $payload);
@@ -131,7 +135,7 @@ class MedicalProcedureTest extends TestCase
     {
         $this->tariffType->components()->create([
             'tariff_component_id' => $this->component->id,
-            'percentage' => 100
+            'percentage' => 100,
         ]);
 
         $payload = [
@@ -143,16 +147,16 @@ class MedicalProcedureTest extends TestCase
                     'components' => [
                         [
                             'tariff_component_id' => $this->component->id,
-                            'amount' => -100 // Invalid
-                        ]
-                    ]
-                ]
-            ]
+                            'amount' => -100, // Invalid
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedures', $payload);
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['tariffs.0.components.0.amount']);
+            ->assertJsonValidationErrors(['tariffs.0.components.0.amount']);
     }
 
     public function test_rejects_component_not_in_tariff_type()
@@ -168,22 +172,22 @@ class MedicalProcedureTest extends TestCase
                     'components' => [
                         [
                             'tariff_component_id' => $anotherComponent->id, // Not attached to $this->tariffType
-                            'amount' => 50000
-                        ]
-                    ]
-                ]
-            ]
+                            'amount' => 50000,
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/procedures', $payload);
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['tariffs.0.components.0.tariff_component_id']);
+            ->assertJsonValidationErrors(['tariffs.0.components.0.tariff_component_id']);
     }
 
     public function test_update_without_report_groups_retains_existing_relations()
     {
         $reportGroup = ReportGroup::create(['name' => 'Test Report Group']);
-        
+
         $procedure = MedicalProcedure::create([
             'code' => 'T004',
             'name' => 'Preserve RG Procedure',
@@ -196,14 +200,14 @@ class MedicalProcedureTest extends TestCase
 
         $this->tariffType->components()->create([
             'tariff_component_id' => $this->component->id,
-            'percentage' => 100
+            'percentage' => 100,
         ]);
 
         $tariff = $procedure->tariffs()->create([
             'tariff_type_id' => $this->tariffType->id,
             'total_amount' => 50000,
         ]);
-        
+
         $tariffComp = $tariff->components()->create([
             'tariff_component_id' => $this->component->id,
             'amount' => 50000,
@@ -222,11 +226,11 @@ class MedicalProcedureTest extends TestCase
                         [
                             'id' => $tariffComp->id,
                             'tariff_component_id' => $this->component->id,
-                            'amount' => 60000
-                        ]
-                    ]
-                ]
-            ]
+                            'amount' => 60000,
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/procedures/{$procedure->id}", $payload);
@@ -235,13 +239,13 @@ class MedicalProcedureTest extends TestCase
         // Check if name is updated
         $this->assertDatabaseHas('medical_procedures', [
             'id' => $procedure->id,
-            'name' => 'Updated Name'
+            'name' => 'Updated Name',
         ]);
 
         // Check if report_groups relation is retained!
         $this->assertDatabaseHas('medical_procedure_report_group', [
             'medical_procedure_id' => $procedure->id,
-            'report_group_id' => $reportGroup->id
+            'report_group_id' => $reportGroup->id,
         ]);
     }
 
@@ -257,14 +261,14 @@ class MedicalProcedureTest extends TestCase
 
         $this->tariffType->components()->create([
             'tariff_component_id' => $this->component->id,
-            'percentage' => 100
+            'percentage' => 100,
         ]);
 
         $tariff = $procedure->tariffs()->create([
             'tariff_type_id' => $this->tariffType->id,
             'total_amount' => 50000,
         ]);
-        
+
         $tariffComp = $tariff->components()->create([
             'tariff_component_id' => $this->component->id,
             'amount' => 50000,

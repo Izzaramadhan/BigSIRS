@@ -2,10 +2,10 @@
 
 namespace Tests\Feature\MasterData;
 
+use App\Models\MasterData\Icd10Code;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use App\Models\User;
-use App\Models\MasterData\Icd10Code;
 
 class Icd10CodeTest extends TestCase
 {
@@ -27,9 +27,9 @@ class Icd10CodeTest extends TestCase
         $response->assertJsonStructure([
             'data',
             'meta' => ['current_page', 'last_page', 'per_page', 'total'],
-            'links'
+            'links',
         ]);
-        
+
         $this->assertCount(10, $response->json('data')); // Default pagination
     }
 
@@ -40,7 +40,7 @@ class Icd10CodeTest extends TestCase
 
         $user = User::factory()->create();
         $response = $this->actingAs($user)->getJson('/api/v1/master-data/icd10?search=A00');
-        
+
         $response->assertStatus(200);
         $this->assertCount(1, $response->json('data'));
         $this->assertEquals('A00', $response->json('data.0.code'));
@@ -69,13 +69,13 @@ class Icd10CodeTest extends TestCase
     public function test_duplicate_code_is_rejected()
     {
         Icd10Code::factory()->create(['code' => 'A00']);
-        
+
         $user = User::factory()->create();
         $response = $this->actingAs($user)->postJson('/api/v1/master-data/icd10', [
             'code' => 'A00',
             'name' => 'Duplicate',
         ]);
-        
+
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['code']);
     }
@@ -83,13 +83,13 @@ class Icd10CodeTest extends TestCase
     public function test_can_update_icd10()
     {
         $icd10 = Icd10Code::factory()->create(['code' => 'A00', 'name' => 'Old Name']);
-        
+
         $user = User::factory()->create();
         $response = $this->actingAs($user)->putJson("/api/v1/master-data/icd10/{$icd10->id}", [
             'code' => 'a00',
             'name' => 'New Name',
         ]);
-        
+
         $response->assertStatus(200);
         $this->assertEquals('New Name', $response->json('data.name'));
         $this->assertEquals('A00', $response->json('data.code'));
@@ -98,10 +98,10 @@ class Icd10CodeTest extends TestCase
     public function test_soft_delete_works()
     {
         $icd10 = Icd10Code::factory()->create(['code' => 'A00']);
-        
+
         $user = User::factory()->create();
         $response = $this->actingAs($user)->deleteJson("/api/v1/master-data/icd10/{$icd10->id}");
-        
+
         $response->assertStatus(200);
         $this->assertSoftDeleted('icd10_codes', ['id' => $icd10->id]);
     }

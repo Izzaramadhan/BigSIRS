@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
-use App\Models\MasterData\Doctor;
 use App\Models\Employee;
+use App\Models\MasterData\Doctor;
 use App\Models\MasterData\Specialization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,9 +39,9 @@ class DoctorTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'specialization']
+                    '*' => ['id', 'name', 'specialization'],
                 ],
-                'meta' => ['current_page', 'last_page', 'per_page', 'total']
+                'meta' => ['current_page', 'last_page', 'per_page', 'total'],
             ]);
 
         $this->assertCount(10, $response->json('data'));
@@ -96,7 +96,7 @@ class DoctorTest extends TestCase
         Doctor::factory()->create(['specialization_id' => $spec2->id]);
 
         $response = $this->actingAs($this->user)
-            ->getJson('/api/v1/master-data/doctors?specialization_id=' . $spec1->id);
+            ->getJson('/api/v1/master-data/doctors?specialization_id='.$spec1->id);
 
         $response->assertOk()
             ->assertJsonCount(1, 'data')
@@ -127,7 +127,7 @@ class DoctorTest extends TestCase
             'person' => [
                 'name' => $employee->name,
                 'gender' => 'L',
-                'national_id' => '1234567890123456'
+                'national_id' => '1234567890123456',
             ],
             'professional' => [
                 'specialization_id' => $spec->id,
@@ -159,7 +159,7 @@ class DoctorTest extends TestCase
         $data = [
             'employee_id' => $doctor->employee_id,
             'person' => ['name' => 'test', 'gender' => 'L'],
-            'professional' => ['specialization_id' => 1]
+            'professional' => ['specialization_id' => 1],
         ];
 
         $response = $this->actingAs($this->user)
@@ -173,14 +173,14 @@ class DoctorTest extends TestCase
         $doctor = Doctor::factory()->create();
 
         $response = $this->actingAs($this->user)
-            ->getJson('/api/v1/master-data/doctors/' . $doctor->id);
+            ->getJson('/api/v1/master-data/doctors/'.$doctor->id);
 
         $response->assertOk()
             ->assertJsonPath('data.id', $doctor->id)
             ->assertJsonStructure([
                 'data' => [
-                    'str_number', 
-                    'sip_number', 
+                    'str_number',
+                    'sip_number',
                     'has_signature',
                     'employee' => [
                         'id',
@@ -192,8 +192,8 @@ class DoctorTest extends TestCase
                         'regency_id',
                         'district_id',
                         'village_id',
-                    ]
-                ]
+                    ],
+                ],
             ]);
     }
 
@@ -207,26 +207,26 @@ class DoctorTest extends TestCase
             'employee_id' => $doctor->employee_id,
             'person' => [
                 'name' => 'New Name',
-                'gender' => 'P'
+                'gender' => 'P',
             ],
             'professional' => [
                 'specialization_id' => $spec->id,
                 'str_number' => 'NEW_STR',
                 'is_active' => true,
-            ]
+            ],
         ];
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/doctors/' . $doctor->id, $data);
+            ->putJson('/api/v1/master-data/doctors/'.$doctor->id, $data);
 
         $response->assertOk();
         $this->assertDatabaseHas('doctors', [
             'id' => $doctor->id,
-            'str_number' => 'NEW_STR'
+            'str_number' => 'NEW_STR',
         ]);
         $this->assertDatabaseHas('employees', [
             'id' => $employee->id,
-            'name' => 'New Name'
+            'name' => 'New Name',
         ]);
     }
 
@@ -240,17 +240,17 @@ class DoctorTest extends TestCase
             'employee_id' => $doctor->employee_id,
             'person' => [
                 'name' => $employee->name,
-                'gender' => 'L'
+                'gender' => 'L',
             ],
             'professional' => [
                 'specialization_id' => $spec->id,
                 'sip_number' => 'SIP1',
                 'is_active' => true,
-            ]
+            ],
         ];
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/doctors/' . $doctor->id, $data);
+            ->putJson('/api/v1/master-data/doctors/'.$doctor->id, $data);
 
         $response->assertOk(); // No validation error
     }
@@ -286,7 +286,7 @@ class DoctorTest extends TestCase
             'employee_id' => $employee->id,
             'person' => [
                 'name' => $employee->name,
-                'gender' => 'INVALID_GENDER'
+                'gender' => 'INVALID_GENDER',
             ],
             'professional' => [
                 'specialization_id' => $spec->id,
@@ -313,11 +313,11 @@ class DoctorTest extends TestCase
             ],
             'professional' => [
                 'specialization_id' => $spec->id,
-            ]
+            ],
         ];
 
         $response = $this->actingAs($this->user)
-            ->putJson('/api/v1/master-data/doctors/' . $doctor->id, $data);
+            ->putJson('/api/v1/master-data/doctors/'.$doctor->id, $data);
 
         $response->assertJsonValidationErrors(['person.gender']);
     }
@@ -327,14 +327,14 @@ class DoctorTest extends TestCase
         $doctor = Doctor::factory()->create(['is_active' => true]);
 
         $response = $this->actingAs($this->user)
-            ->patchJson('/api/v1/master-data/doctors/' . $doctor->id . '/status', [
-                'is_active' => false
+            ->patchJson('/api/v1/master-data/doctors/'.$doctor->id.'/status', [
+                'is_active' => false,
             ]);
 
         $response->assertOk();
         $this->assertDatabaseHas('doctors', [
             'id' => $doctor->id,
-            'is_active' => false
+            'is_active' => false,
         ]);
     }
 
@@ -344,10 +344,10 @@ class DoctorTest extends TestCase
         $employeeId = $doctor->employee_id;
 
         $response = $this->actingAs($this->user)
-            ->deleteJson('/api/v1/master-data/doctors/' . $doctor->id);
+            ->deleteJson('/api/v1/master-data/doctors/'.$doctor->id);
 
         $response->assertNoContent();
-        
+
         $this->assertSoftDeleted('doctors', ['id' => $doctor->id]);
         $this->assertDatabaseHas('employees', ['id' => $employeeId, 'deleted_at' => null]);
     }
@@ -362,10 +362,10 @@ class DoctorTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'label', 'name', 'specialization_name', 'is_active']
-                ]
+                    '*' => ['id', 'label', 'name', 'specialization_name', 'is_active'],
+                ],
             ]);
-            
+
         // Assert no sensitive fields are present
         $first = $response->json('data.0');
         $this->assertArrayNotHasKey('nik', $first);

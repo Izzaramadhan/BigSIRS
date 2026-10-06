@@ -31,7 +31,7 @@ class LookupTest extends TestCase
         $response = $this->actingAs($user)->getJson('/api/v1/lookups/specializations');
         $response->assertOk();
         $this->assertCount(3, $response->json());
-        
+
         $response = $this->actingAs($user)->getJson('/api/v1/lookups/specializations?is_active=1');
         $response->assertOk();
         $this->assertCount(2, $response->json());

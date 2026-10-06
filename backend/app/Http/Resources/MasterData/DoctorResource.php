@@ -18,7 +18,7 @@ class DoctorResource extends JsonResource
             'full_name' => $this->employee ? $this->employee->name : null,
             'specialization' => $this->specialization ? [
                 'id' => $this->specialization->id,
-                'name' => $this->specialization->name
+                'name' => $this->specialization->name,
             ] : null,
             'is_active' => (bool) $this->is_active,
         ];
@@ -54,7 +54,7 @@ class DoctorResource extends JsonResource
                     'occupation_id' => $this->employee->occupation_id,
                 ] : null,
                 'bpjs_dpjp_code' => $this->bpjs_dpjp_code,
-                'has_signature' => !empty($this->signature_path),
+                'has_signature' => ! empty($this->signature_path),
                 'signature_url' => $this->signature_path ? Storage::disk('public')->url($this->signature_path) : null,
                 'created_at' => $this->created_at,
                 'updated_at' => $this->updated_at,

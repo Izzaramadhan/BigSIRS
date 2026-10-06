@@ -2,14 +2,15 @@
 
 namespace App\Models\MasterData;
 
+use App\Models\Employee;
+use App\Models\Polyclinic;
+use App\Models\ProcedureCategory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use App\Models\ProcedureCategory;
-use App\Models\Polyclinic;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MedicalProcedure extends Model
 {
@@ -49,7 +50,7 @@ class MedicalProcedure extends Model
 
     public function employees(): BelongsToMany
     {
-        return $this->belongsToMany(\App\Models\Employee::class, 'procedure_employee', 'procedure_id', 'employee_id')
-                    ->withTimestamps();
+        return $this->belongsToMany(Employee::class, 'procedure_employee', 'procedure_id', 'employee_id')
+            ->withTimestamps();
     }
 }
