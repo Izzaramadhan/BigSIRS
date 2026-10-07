@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CaptchaController;
 use App\Http\Controllers\Api\V1\LookupController;
+use App\Http\Controllers\Api\V1\MasterData\ActivityTypeController;
 use App\Http\Controllers\Api\V1\MasterData\DietTypeController;
 use App\Http\Controllers\Api\V1\MasterData\DistrictController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorController;
@@ -95,6 +96,10 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('diet-types/{diet_type}/status', [DietTypeController::class, 'updateStatus']);
             Route::apiResource('diet-types', DietTypeController::class);
+
+            Route::get('activity-types/lookup', [ActivityTypeController::class, 'lookup']);
+            Route::patch('activity-types/{activity_type}/status', [ActivityTypeController::class, 'updateStatus']);
+            Route::apiResource('activity-types', ActivityTypeController::class);
         });
 
         Route::prefix('lookups')->group(function () {

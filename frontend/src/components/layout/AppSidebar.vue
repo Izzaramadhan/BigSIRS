@@ -54,7 +54,8 @@ const navigation = [
               { name: 'Pekerjaan', path: '/master-data/basic-data/occupations' },
               { name: 'Jenis Asuransi', path: '/master-data/basic-data/insurance-types' },
               { name: 'Jenis Layanan', path: '/master-data/service-types' },
-              { name: 'Asuhan Gizi', path: '/master-data/nutrition-care' }
+              { name: 'Asuhan Gizi', path: '/master-data/nutrition-care' },
+              { name: 'Jenis Kegiatan', path: '/master-data/activity-types' }
             ]
           },
           {

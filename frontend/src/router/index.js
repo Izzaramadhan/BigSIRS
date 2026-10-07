@@ -87,6 +87,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/activity-types',
+      name: 'master-data.activity-types',
+      component: () => import('../views/master-data/ActivityTypeView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/doctor-schedules',
       name: 'master-data.doctor-schedules',
       component: () => import('../views/master-data/DoctorScheduleView.vue'),
