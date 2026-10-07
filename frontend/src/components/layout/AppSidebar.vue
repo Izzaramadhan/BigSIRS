@@ -69,7 +69,8 @@ const navigation = [
           {
             name: 'Data Pegawai',
             submenu: [
-              { name: 'Pegawai', path: '/master-data/employees' }
+              { name: 'Pegawai', path: '/master-data/employees' },
+              { name: 'Jabatan', path: '/master-data/positions' }
             ]
           },
           { 

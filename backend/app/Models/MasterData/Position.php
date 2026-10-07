@@ -20,4 +20,9 @@ class Position extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function employees()
+    {
+        return $this->hasMany(\App\Models\Employee::class, 'position_id');
+    }
 }

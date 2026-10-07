@@ -172,9 +172,6 @@ class LookupController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
 
-        if ($request->has('is_active')) {
-            $query->where('is_active', $request->boolean('is_active'));
-        }
 
         if ($request->has('ids')) {
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
