@@ -108,6 +108,9 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('employees', App\Http\Controllers\Api\V1\MasterData\EmployeeController::class);
 
             Route::apiResource('positions', App\Http\Controllers\Api\V1\MasterData\PositionController::class);
+
+            Route::patch('laboratory-categories/{laboratory_category}/status', [App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class, 'updateStatus']);
+            Route::apiResource('laboratory-categories', App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -124,6 +127,7 @@ Route::prefix('v1')->group(function () {
             Route::get('educations', [LookupController::class, 'educations']);
             Route::get('occupations', [LookupController::class, 'occupations']);
             Route::get('positions', [LookupController::class, 'positions']);
+            Route::get('laboratory-categories', [LookupController::class, 'laboratoryCategories']);
         });
     });
 });

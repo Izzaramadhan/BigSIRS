@@ -85,6 +85,12 @@ const navigation = [
             ]
           },
           {
+            name: 'Data Lab',
+            submenu: [
+              { name: 'Kategori Lab', path: '/master-data/laboratory-categories' }
+            ]
+          },
+          {
             name: 'Data Diagnosa',
             submenu: [
               { name: 'ICD-10', path: '/master-data/diagnoses/icd10' },
