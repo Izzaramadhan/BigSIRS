@@ -22,8 +22,10 @@ abstract class TestCase extends BaseTestCase
         $defaultConn = config('database.default');
         $primaryDb = config("database.connections.{$defaultConn}.database");
 
-        if ($primaryDb === 'bigsirs_dev' || $primaryDb === env('MYSQL_DATABASE')) {
-            throw new \Exception('Refusing to run tests against development database bigsirs_dev.');
+        if ($defaultConn !== 'sqlite' || $primaryDb !== ':memory:') {
+            throw new \Exception(
+                "Refusing to run tests against non-isolated primary database [{$defaultConn}:{$primaryDb}]."
+            );
         }
 
         $legacyDb = config('database.connections.legacy.database');
