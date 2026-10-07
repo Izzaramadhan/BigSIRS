@@ -106,6 +106,8 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('employees/{employee}/status', [App\Http\Controllers\Api\V1\MasterData\EmployeeController::class, 'updateStatus']);
             Route::apiResource('employees', App\Http\Controllers\Api\V1\MasterData\EmployeeController::class);
+
+            Route::apiResource('positions', App\Http\Controllers\Api\V1\MasterData\PositionController::class);
         });
 
         Route::prefix('lookups')->group(function () {

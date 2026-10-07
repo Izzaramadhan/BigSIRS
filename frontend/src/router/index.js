@@ -147,6 +147,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/positions',
+      name: 'master-data.positions',
+      component: () => import('../views/master-data/PositionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/procedure-user-mappings',
       name: 'master-data.procedure-user-mappings',
       component: () => import('../views/master-data/ProcedureUserMappingView.vue'),
