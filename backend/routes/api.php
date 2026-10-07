@@ -100,6 +100,9 @@ Route::prefix('v1')->group(function () {
             Route::get('activity-types/lookup', [ActivityTypeController::class, 'lookup']);
             Route::patch('activity-types/{activity_type}/status', [ActivityTypeController::class, 'updateStatus']);
             Route::apiResource('activity-types', ActivityTypeController::class);
+
+            Route::patch('letter-types/{letter_type}/status', [App\Http\Controllers\Api\V1\MasterData\LetterTypeController::class, 'updateStatus']);
+            Route::apiResource('letter-types', App\Http\Controllers\Api\V1\MasterData\LetterTypeController::class);
         });
 
         Route::prefix('lookups')->group(function () {

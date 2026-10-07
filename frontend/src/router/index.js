@@ -99,6 +99,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/letter-types',
+      name: 'master-data.letter-types',
+      component: () => import('../views/master-data/LetterTypeView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/procedure-categories',
       name: 'master-data.procedure-categories',
       component: () => import('../views/master-data/ProcedureCategoryView.vue'),
