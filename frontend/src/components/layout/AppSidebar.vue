@@ -66,6 +66,12 @@ const navigation = [
               { name: 'Jadwal Dokter', path: '/master-data/doctor-schedules' }
             ]
           },
+          {
+            name: 'Data Pegawai',
+            submenu: [
+              { name: 'Pegawai', path: '/master-data/employees' }
+            ]
+          },
           { 
             name: 'Master Data Tindakan',
             submenu: [

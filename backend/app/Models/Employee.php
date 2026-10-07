@@ -34,6 +34,7 @@ class Employee extends Model
         'phone',
         'education_id',
         'occupation_id',
+        'position_id',
         'profession',
         'is_active',
     ];
@@ -62,5 +63,10 @@ class Employee extends Model
     public function occupation()
     {
         return $this->belongsTo(Occupation::class);
+    }
+
+    public function position()
+    {
+        return $this->belongsTo(\App\Models\MasterData\Position::class);
     }
 }

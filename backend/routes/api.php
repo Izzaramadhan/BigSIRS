@@ -103,6 +103,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('letter-types/{letter_type}/status', [App\Http\Controllers\Api\V1\MasterData\LetterTypeController::class, 'updateStatus']);
             Route::apiResource('letter-types', App\Http\Controllers\Api\V1\MasterData\LetterTypeController::class);
+
+            Route::patch('employees/{employee}/status', [App\Http\Controllers\Api\V1\MasterData\EmployeeController::class, 'updateStatus']);
+            Route::apiResource('employees', App\Http\Controllers\Api\V1\MasterData\EmployeeController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -118,6 +121,7 @@ Route::prefix('v1')->group(function () {
             Route::get('villages', [LookupController::class, 'villages']);
             Route::get('educations', [LookupController::class, 'educations']);
             Route::get('occupations', [LookupController::class, 'occupations']);
+            Route::get('positions', [LookupController::class, 'positions']);
         });
     });
 });
