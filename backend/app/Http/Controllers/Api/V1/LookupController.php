@@ -106,7 +106,16 @@ class LookupController extends Controller
             $query->where('district_id', $request->district_id);
         }
 
-        $villages = $query->get(['id', 'code', 'name', 'district_id']);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+
+        if ($request->has('id')) {
+            $query->where('id', $request->id);
+        }
+        
+        // Limit to 50 results to prevent massive payloads during search
+        $villages = $query->limit(50)->get(['id', 'code', 'name', 'district_id']);
 
         $mapped = $villages->map(function ($village) {
             return [
@@ -146,6 +155,26 @@ class LookupController extends Controller
     public function occupations(Request $request)
     {
         $query = Occupation::where('is_active', true);
+
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function positions(Request $request)
+    {
+        $query = \App\Models\MasterData\Position::query();
+
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+
+        if ($request->has('is_active')) {
+            $query->where('is_active', $request->boolean('is_active'));
+        }
 
         if ($request->has('ids')) {
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);

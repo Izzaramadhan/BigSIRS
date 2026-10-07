@@ -13,6 +13,14 @@ const props = defineProps({
   placeholder: {
     type: String,
     default: 'Pilih...'
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
+  error: {
+    type: String,
+    default: ''
   }
 });
 
@@ -69,7 +77,8 @@ onUnmounted(() => {
 <template>
   <div class="searchable-select" ref="dropdownRef">
     <div class="selected-box" @click="isOpen = !isOpen">
-      <div v-if="!selectedItem" class="placeholder">{{ placeholder }}</div>
+      <div v-if="loading && !selectedItem" class="placeholder">Memuat...</div>
+      <div v-else-if="!selectedItem" class="placeholder">{{ placeholder }}</div>
       <div v-else class="selected-text">{{ getDisplayName(selectedItem) }}</div>
       <div class="caret">▼</div>
     </div>
@@ -85,7 +94,9 @@ onUnmounted(() => {
         />
       </div>
       <div class="options-list">
-        <div v-if="filteredOptions.length === 0" class="no-options">Tidak ada data ditemukan.</div>
+        <div v-if="loading" class="no-options">Memuat data...</div>
+        <div v-else-if="error" class="no-options text-danger">{{ error }}</div>
+        <div v-else-if="filteredOptions.length === 0" class="no-options">Tidak ada data ditemukan.</div>
         <div 
           v-for="opt in filteredOptions" 
           :key="opt.value !== undefined ? opt.value : opt.id" 
