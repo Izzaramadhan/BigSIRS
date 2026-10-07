@@ -87,7 +87,8 @@ const navigation = [
           {
             name: 'Data Lab',
             submenu: [
-              { name: 'Kategori Lab', path: '/master-data/laboratory-categories' }
+              { name: 'Kategori Lab', path: '/master-data/laboratory-categories' },
+              { name: 'Item Lab', path: '/master-data/laboratory-items' }
             ]
           },
           {

@@ -111,6 +111,8 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('laboratory-categories/{laboratory_category}/status', [App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class, 'updateStatus']);
             Route::apiResource('laboratory-categories', App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class);
+
+            Route::apiResource('laboratory-items', App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController::class);
         });
 
         Route::prefix('lookups')->group(function () {
