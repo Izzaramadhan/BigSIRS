@@ -113,6 +113,8 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('laboratory-categories', App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class);
 
             Route::apiResource('laboratory-items', App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController::class);
+
+            Route::apiResource('laboratory-groups', App\Http\Controllers\Api\V1\MasterData\LaboratoryGroupController::class);
         });
 
         Route::prefix('lookups')->group(function () {

@@ -11,6 +11,7 @@ const router = createRouter({
     { path: '/dashboard', name: 'dashboard', component: { template: '<div>Dashboard</div>' } },
     { path: '/master-data/polyclinics', name: 'polyclinics', component: { template: '<div>Polyclinics</div>' } },
     { path: '/master-data/procedure-categories', name: 'procedure-categories', component: { template: '<div>Procedure Categories</div>' } },
+    { path: '/master-data/laboratory-groups', name: 'laboratory-groups', component: { template: '<div>Laboratory Groups</div>' } },
   ],
 });
 
@@ -156,5 +157,48 @@ describe('AppSidebar.vue', () => {
     
     expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
     expect(nestedGroupBtn.attributes('aria-expanded')).toBe('true');
+  });
+
+  it('renders Data Lab as nested group with 3 submenus including Grup Lab', () => {
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    expect(masterDataBtn).toBeDefined();
+
+    const mdSubmenu = wrapper.find('#submenu-master-data');
+    const dataLabBtn = mdSubmenu.findAll('button.submenu-link--group').find(b => b.text().includes('Data Lab'));
+    expect(dataLabBtn).toBeDefined();
+
+    const dataLabSubmenu = mdSubmenu.find('#submenu-data-lab');
+    expect(dataLabSubmenu.exists()).toBe(true);
+
+    const categories = dataLabSubmenu.findAll('.nested-submenu-link');
+    // Ensure we have 3 links: Kategori, Item, Grup
+    expect(categories.length).toBe(3);
+
+    expect(categories[0].text()).toContain('Kategori Lab');
+    expect(categories[1].text()).toContain('Item Lab');
+    expect(categories[2].text()).toContain('Grup Lab');
+    expect(categories[2].attributes('href')).toBe('/master-data/laboratory-groups');
+  });
+
+  it('automatically expands parents and sets active state for Grup Lab route', async () => {
+    await router.push('/master-data/laboratory-groups');
+    
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataLabBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Lab'));
+    
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataLabBtn.attributes('aria-expanded')).toBe('true');
+
+    const groupLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Grup Lab'));
+    expect(groupLink.classes()).toContain('nested-submenu-link--active');
   });
 });

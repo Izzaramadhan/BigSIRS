@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+
+class UpdateLaboratoryGroupRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'laboratory_category_id' => ['required', 'integer', 'exists:laboratory_categories,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'price' => ['nullable', 'numeric', 'min:0'],
+            'is_active' => ['sometimes', 'boolean'],
+            'laboratory_item_ids' => ['present', 'array'],
+            'laboratory_item_ids.*' => ['required', 'integer', 'distinct', 'exists:laboratory_items,id'],
+        ];
+    }
+}

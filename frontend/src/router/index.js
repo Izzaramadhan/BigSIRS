@@ -171,6 +171,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/laboratory-groups',
+      name: 'master-data.laboratory-groups',
+      component: () => import('../views/master-data/LaboratoryGroupView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/diagnoses/icd10',
       name: 'master-data.icd10',
       component: () => import('../views/master-data/Icd10CodeView.vue'),
