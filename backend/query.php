@@ -1,16 +1,21 @@
 <?php
-
 require 'vendor/autoload.php';
 $app = require_once 'bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-$request = Illuminate\Http\Request::create('/api/v1/master-data/radiology-items', 'GET');
-$controller = app(App\Http\Controllers\Api\V1\MasterData\RadiologyItemController::class);
+echo "Testing map to ref_item_rad:\n";
+$itemTest = \Illuminate\Support\Facades\DB::connection('legacy')
+    ->table('map_grup_kelompok_rad as m')
+    ->join('ref_item_rad as i', 'm.id_kelompok_rad', '=', 'i.id')
+    ->select('m.id_grup_rad', 'i.nama')
+    ->take(5)->get();
+print_r($itemTest->toArray());
 
-try {
-    $response = $controller->index($request);
-    echo json_encode($response->response()->getData(true), JSON_PRETTY_PRINT);
-} catch (\Exception $e) {
-    echo "Exception: " . $e->getMessage() . "\n";
-}
+echo "\nTesting map to ref_kelompok_item_rad:\n";
+$kelompokTest = \Illuminate\Support\Facades\DB::connection('legacy')
+    ->table('map_grup_kelompok_rad as m')
+    ->join('ref_kelompok_item_rad as k', 'm.id_kelompok_rad', '=', 'k.id')
+    ->select('m.id_grup_rad', 'k.nama')
+    ->take(5)->get();
+print_r($kelompokTest->toArray());

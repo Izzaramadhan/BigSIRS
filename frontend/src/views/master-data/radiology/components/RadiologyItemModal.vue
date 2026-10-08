@@ -82,39 +82,35 @@
   </Teleport>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { ref, onMounted, watch } from 'vue'
 import axios from '@/utils/axios'
 import { useRadiologyItems } from '@/composables/master-data/radiology/useRadiologyItems'
-import type { RadiologyItem } from '@/types/radiology'
 
-const props = defineProps<{
-  show: boolean
-  item: RadiologyItem | null
-  isEdit: boolean
-}>()
+const props = defineProps({
+  show: Boolean,
+  item: Object,
+  isEdit: Boolean
+})
 
-const emit = defineEmits<{
-  (e: 'close'): void
-  (e: 'saved', message?: string): void
-}>()
+const emit = defineEmits(['close', 'saved'])
 
 const { createItem, updateItem, error: apiError } = useRadiologyItems()
 
 const form = ref({
   name: '',
-  radiology_item_group_id: '' as number | '',
+  radiology_item_group_id: '',
   is_active: true
 })
 
 const isSubmitting = ref(false)
-const error = ref<string | null>(null)
-const validationErrors = ref<Record<string, string>>({})
+const error = ref(null)
+const validationErrors = ref({})
 
 // Lookups
-const groups = ref<any[]>([])
+const groups = ref([])
 const loadingGroups = ref(false)
-const errorGroups = ref<string | null>(null)
+const errorGroups = ref(null)
 
 const fetchGroups = async () => {
   loadingGroups.value = true
@@ -122,7 +118,7 @@ const fetchGroups = async () => {
   try {
     const response = await axios.get('/lookups/radiology-item-groups')
     groups.value = response.data.data || response.data
-  } catch (e: any) {
+  } catch {
     errorGroups.value = 'Gagal memuat kelompok item radiologi'
   } finally {
     loadingGroups.value = false
@@ -152,7 +148,7 @@ onMounted(() => {
 })
 
 const validateForm = () => {
-  const errors: Record<string, string> = {}
+  const errors = {}
   let isValid = true
 
   if (!form.value.name.trim()) {
@@ -195,7 +191,7 @@ const handleSubmit = async () => {
     } else {
       error.value = apiError.value || 'Terjadi kesalahan saat menyimpan data'
     }
-  } catch (e: any) {
+  } catch (e) {
     if (e.response?.status === 422) {
       const errors = e.response.data.errors
       Object.keys(errors).forEach(key => {

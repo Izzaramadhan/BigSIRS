@@ -98,7 +98,8 @@ const navigation = [
               { name: 'Kategori Rad', path: '/master-data/radiology-categories' },
               { name: 'Tipe Rad', path: '/master-data/radiology-types' },
               { name: 'Kelompok Item Rad', path: '/master-data/radiology-item-groups' },
-              { name: 'Item Rad', path: '/master-data/radiology-items' }
+              { name: 'Item Rad', path: '/master-data/radiology-items' },
+              { name: 'Group Rad', path: '/master-data/radiology-groups' }
             ]
           },
           {
