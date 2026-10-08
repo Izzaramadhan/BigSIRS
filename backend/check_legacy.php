@@ -1,9 +1,13 @@
 <?php
 
-$db = DB::connection('legacy');
-print_r($db->select('SELECT * FROM ref_pendidikan LIMIT 1'));
-print_r($db->select('SELECT * FROM ref_pekerjaan LIMIT 1'));
-print_r($db->select('SELECT * FROM ref_provinsi LIMIT 1'));
-print_r($db->select('SELECT * FROM ref_kabupaten LIMIT 1'));
-print_r($db->select('SELECT * FROM ref_kecamatan LIMIT 1'));
-print_r($db->select('SELECT * FROM ref_kelurahan LIMIT 1'));
+require 'vendor/autoload.php';
+$app = require_once 'bootstrap/app.php';
+$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+
+$columns = \DB::connection('legacy')->select("SHOW COLUMNS FROM ref_tipe_rad");
+echo "COLUMNS:\n";
+print_r($columns);
+
+$data = \DB::connection('legacy')->table('ref_tipe_rad')->get();
+echo "\nDATA:\n";
+print_r($data);
