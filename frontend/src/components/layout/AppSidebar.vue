@@ -96,7 +96,8 @@ const navigation = [
             name: 'Data Radiologi',
             submenu: [
               { name: 'Kategori Rad', path: '/master-data/radiology-categories' },
-              { name: 'Tipe Rad', path: '/master-data/radiology-types' }
+              { name: 'Tipe Rad', path: '/master-data/radiology-types' },
+              { name: 'Kelompok Item Rad', path: '/master-data/radiology-item-groups' }
             ]
           },
           {

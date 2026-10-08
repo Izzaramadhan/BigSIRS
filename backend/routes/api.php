@@ -119,6 +119,8 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('radiology-categories', App\Http\Controllers\Api\V1\MasterData\RadiologyCategoryController::class);
             Route::patch('radiology-types/{radiology_type}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyTypeController::class, 'updateStatus']);
             Route::apiResource('radiology-types', App\Http\Controllers\Api\V1\MasterData\RadiologyTypeController::class);
+            Route::patch('radiology-item-groups/{radiology_item_group}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController::class, 'updateStatus']);
+            Route::apiResource('radiology-item-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -138,6 +140,7 @@ Route::prefix('v1')->group(function () {
             Route::get('laboratory-categories', [LookupController::class, 'laboratoryCategories']);
             Route::get('radiology-categories', [LookupController::class, 'radiologyCategories']);
             Route::get('radiology-types', [LookupController::class, 'radiologyTypes']);
+            Route::get('radiology-item-groups', [LookupController::class, 'radiologyItemGroups']);
         });
     });
 });
