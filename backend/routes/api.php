@@ -126,6 +126,9 @@ Route::prefix('v1')->group(function () {
 
             Route::patch('radiology-groups/{radiology_group}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class, 'updateStatus']);
             Route::apiResource('radiology-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class);
+
+            Route::patch('medicines/{medicine}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineController::class, 'updateStatus']);
+            Route::apiResource('medicines', App\Http\Controllers\Api\V1\MasterData\MedicineController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -146,6 +149,13 @@ Route::prefix('v1')->group(function () {
             Route::get('radiology-categories', [LookupController::class, 'radiologyCategories']);
             Route::get('radiology-types', [LookupController::class, 'radiologyTypes']);
             Route::get('radiology-item-groups', [LookupController::class, 'radiologyItemGroups']);
+            
+            // Logistics Lookups
+            Route::get('medicine-units', [LookupController::class, 'medicineUnits']);
+            Route::get('medicine-categories', [LookupController::class, 'medicineCategories']);
+            Route::get('medicine-classifications', [LookupController::class, 'medicineClassifications']);
+            Route::get('medicine-routes', [LookupController::class, 'medicineRoutes']);
+            Route::get('generic-medicines', [LookupController::class, 'genericMedicines']);
         });
     });
 });

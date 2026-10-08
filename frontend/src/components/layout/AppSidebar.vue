@@ -103,6 +103,12 @@ const navigation = [
             ]
           },
           {
+            name: 'Data Logistik',
+            submenu: [
+              { name: 'Obat', path: '/master-data/medicines' }
+            ]
+          },
+          {
             name: 'Data Diagnosa',
             submenu: [
               { name: 'ICD-10', path: '/master-data/diagnoses/icd10' },
