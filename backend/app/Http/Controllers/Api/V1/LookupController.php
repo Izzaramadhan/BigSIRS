@@ -243,4 +243,69 @@ class LookupController extends Controller
 
         return response()->json($query->orderBy('name')->get());
     }
+
+    public function medicineUnits(Request $request)
+    {
+        $query = \App\Models\MasterData\MedicineUnit::where('is_active', true);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function medicineCategories(Request $request)
+    {
+        $query = \App\Models\MasterData\MedicineCategory::where('is_active', true);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function medicineClassifications(Request $request)
+    {
+        $query = \App\Models\MasterData\MedicineClassification::where('is_active', true);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function medicineRoutes(Request $request)
+    {
+        $query = \App\Models\MasterData\MedicineRoute::where('is_active', true);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function genericMedicines(Request $request)
+    {
+        $query = \App\Models\MasterData\GenericMedicine::where('is_active', true);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+        return response()->json($query->limit(50)->orderBy('name')->get());
+    }
 }
