@@ -93,6 +93,12 @@ const navigation = [
             ]
           },
           {
+            name: 'Data Radiologi',
+            submenu: [
+              { name: 'Kategori Rad', path: '/master-data/radiology-categories' }
+            ]
+          },
+          {
             name: 'Data Diagnosa',
             submenu: [
               { name: 'ICD-10', path: '/master-data/diagnoses/icd10' },
