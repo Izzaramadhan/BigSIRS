@@ -1,10 +1,16 @@
 <?php
 
-$tables = DB::connection('legacy')->select("SHOW TABLES LIKE '%kelurahan%'");
-print_r($tables);
-$tables2 = DB::connection('legacy')->select("SHOW TABLES LIKE '%desa%'");
-print_r($tables2);
-$cols = DB::connection('legacy')->select('SHOW COLUMNS FROM ref_kelurahan');
-print_r($cols);
-$data = DB::connection('legacy')->select('SELECT * FROM ref_kelurahan LIMIT 5');
-print_r($data);
+require 'vendor/autoload.php';
+$app = require_once 'bootstrap/app.php';
+$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel->bootstrap();
+
+$request = Illuminate\Http\Request::create('/api/v1/master-data/radiology-items', 'GET');
+$controller = app(App\Http\Controllers\Api\V1\MasterData\RadiologyItemController::class);
+
+try {
+    $response = $controller->index($request);
+    echo json_encode($response->response()->getData(true), JSON_PRETTY_PRINT);
+} catch (\Exception $e) {
+    echo "Exception: " . $e->getMessage() . "\n";
+}

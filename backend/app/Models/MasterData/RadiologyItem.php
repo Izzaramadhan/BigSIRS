@@ -5,15 +5,16 @@ namespace App\Models\MasterData;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class RadiologyItemGroup extends Model
+class RadiologyItem extends Model
 {
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'legacy_id',
+        'radiology_item_group_id',
         'name',
-        'description',
         'is_active',
     ];
 
@@ -21,8 +22,8 @@ class RadiologyItemGroup extends Model
         'is_active' => 'boolean',
     ];
 
-    public function items()
+    public function group(): BelongsTo
     {
-        return $this->hasMany(RadiologyItem::class, 'radiology_item_group_id');
+        return $this->belongsTo(RadiologyItemGroup::class, 'radiology_item_group_id');
     }
 }

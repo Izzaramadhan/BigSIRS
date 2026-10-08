@@ -195,6 +195,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/radiology-items',
+      name: 'master-data.radiology-items',
+      component: () => import('../views/master-data/radiology/RadiologyItemsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/diagnoses/icd10',
       name: 'master-data.icd10',
       component: () => import('../views/master-data/Icd10CodeView.vue'),
