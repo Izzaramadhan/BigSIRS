@@ -123,6 +123,9 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('radiology-item-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController::class);
             Route::patch('radiology-items/{radiology_item}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyItemController::class, 'updateStatus']);
             Route::apiResource('radiology-items', App\Http\Controllers\Api\V1\MasterData\RadiologyItemController::class);
+
+            Route::patch('radiology-groups/{radiology_group}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class, 'updateStatus']);
+            Route::apiResource('radiology-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class);
         });
 
         Route::prefix('lookups')->group(function () {
