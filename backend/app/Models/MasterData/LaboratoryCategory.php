@@ -25,4 +25,9 @@ class LaboratoryCategory extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function groups()
+    {
+        return $this->hasMany(LaboratoryGroup::class, 'laboratory_category_id');
+    }
 }
