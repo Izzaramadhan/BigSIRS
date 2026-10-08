@@ -115,6 +115,8 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('laboratory-items', App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController::class);
 
             Route::apiResource('laboratory-groups', App\Http\Controllers\Api\V1\MasterData\LaboratoryGroupController::class);
+
+            Route::apiResource('radiology-categories', App\Http\Controllers\Api\V1\MasterData\RadiologyCategoryController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -132,6 +134,7 @@ Route::prefix('v1')->group(function () {
             Route::get('occupations', [LookupController::class, 'occupations']);
             Route::get('positions', [LookupController::class, 'positions']);
             Route::get('laboratory-categories', [LookupController::class, 'laboratoryCategories']);
+            Route::get('radiology-categories', [LookupController::class, 'radiologyCategories']);
         });
     });
 });
