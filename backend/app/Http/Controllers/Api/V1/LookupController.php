@@ -227,4 +227,20 @@ class LookupController extends Controller
 
         return response()->json($query->orderBy('name')->get());
     }
+
+    public function radiologyItemGroups(Request $request)
+    {
+        $query = \App\Models\MasterData\RadiologyItemGroup::where('is_active', true);
+
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
+        return response()->json($query->orderBy('name')->get());
+    }
 }
