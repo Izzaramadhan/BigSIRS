@@ -130,6 +130,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('medicine-categories/{medicine_category}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController::class, 'updateStatus']);
             Route::apiResource('medicine-categories', App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController::class);
             Route::apiResource('medicine-units', App\Http\Controllers\Api\V1\MasterData\MedicineUnitController::class);
+            Route::apiResource('suppliers', App\Http\Controllers\Api\V1\MasterData\SupplierController::class);
 
             Route::patch('medicines/{medicine}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineController::class, 'updateStatus']);
             Route::apiResource('medicines', App\Http\Controllers\Api\V1\MasterData\MedicineController::class);
@@ -156,6 +157,7 @@ Route::prefix('v1')->group(function () {
             
             // Logistics Lookups
             Route::get('medicine-units', [LookupController::class, 'medicineUnits']);
+            Route::get('suppliers', [LookupController::class, 'suppliers']);
             Route::get('medicine-categories', [LookupController::class, 'medicineCategories']);
             Route::get('medicine-classifications', [LookupController::class, 'medicineClassifications']);
             Route::get('medicine-routes', [LookupController::class, 'medicineRoutes']);
