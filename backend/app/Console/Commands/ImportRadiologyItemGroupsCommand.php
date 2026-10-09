@@ -41,6 +41,7 @@ class ImportRadiologyItemGroupsCommand extends Command
             if (empty($name)) {
                 $this->warn("Skipping ID {$legacy->id} due to empty name.");
                 $skipped++;
+
                 continue;
             }
 

@@ -3,17 +3,22 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreRadiologyGroupRequest;
+use App\Http\Requests\UpdateRadiologyGroupRequest;
+use App\Http\Resources\RadiologyGroupResource;
+use App\Models\MasterData\RadiologyGroup;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class RadiologyGroupController extends Controller
 {
     public function index(Request $request)
     {
-        $query = \App\Models\MasterData\RadiologyGroup::with(['category', 'type', 'activityType'])
+        $query = RadiologyGroup::with(['category', 'type', 'activityType'])
             ->withCount('itemGroups')
             ->when($request->search, function ($q, $search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('loinc_code', 'like', "%{$search}%");
+                    ->orWhere('loinc_code', 'like', "%{$search}%");
             })
             ->when($request->category_id, function ($q, $categoryId) {
                 $q->where('radiology_category_id', $categoryId);
@@ -24,17 +29,17 @@ class RadiologyGroupController extends Controller
 
         $sort = $request->sort ?: 'id';
         $direction = $request->direction === 'desc' ? 'desc' : 'asc';
-        
+
         $groups = $query->orderBy($sort, $direction)
             ->paginate($request->per_page ?: 10);
 
-        return \App\Http\Resources\RadiologyGroupResource::collection($groups);
+        return RadiologyGroupResource::collection($groups);
     }
 
-    public function store(\App\Http\Requests\StoreRadiologyGroupRequest $request)
+    public function store(StoreRadiologyGroupRequest $request)
     {
-        $group = \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
-            $group = \App\Models\MasterData\RadiologyGroup::create($request->validated());
+        $group = DB::transaction(function () use ($request) {
+            $group = RadiologyGroup::create($request->validated());
 
             if ($request->has('radiology_item_group_ids')) {
                 $group->itemGroups()->sync($request->radiology_item_group_ids);
@@ -43,17 +48,17 @@ class RadiologyGroupController extends Controller
             return $group->load(['category', 'type', 'activityType', 'itemGroups']);
         });
 
-        return new \App\Http\Resources\RadiologyGroupResource($group);
+        return new RadiologyGroupResource($group);
     }
 
-    public function show(\App\Models\MasterData\RadiologyGroup $radiologyGroup)
+    public function show(RadiologyGroup $radiologyGroup)
     {
-        return new \App\Http\Resources\RadiologyGroupResource($radiologyGroup->load(['category', 'type', 'activityType', 'itemGroups']));
+        return new RadiologyGroupResource($radiologyGroup->load(['category', 'type', 'activityType', 'itemGroups']));
     }
 
-    public function update(\App\Http\Requests\UpdateRadiologyGroupRequest $request, \App\Models\MasterData\RadiologyGroup $radiologyGroup)
+    public function update(UpdateRadiologyGroupRequest $request, RadiologyGroup $radiologyGroup)
     {
-        $group = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $radiologyGroup) {
+        $group = DB::transaction(function () use ($request, $radiologyGroup) {
             $radiologyGroup->update($request->validated());
 
             if ($request->has('radiology_item_group_ids')) {
@@ -63,19 +68,21 @@ class RadiologyGroupController extends Controller
             return $radiologyGroup->load(['category', 'type', 'activityType', 'itemGroups']);
         });
 
-        return new \App\Http\Resources\RadiologyGroupResource($group);
+        return new RadiologyGroupResource($group);
     }
 
-    public function destroy(\App\Models\MasterData\RadiologyGroup $radiologyGroup)
+    public function destroy(RadiologyGroup $radiologyGroup)
     {
         $radiologyGroup->delete();
+
         return response()->noContent();
     }
 
-    public function updateStatus(Request $request, \App\Models\MasterData\RadiologyGroup $radiologyGroup)
+    public function updateStatus(Request $request, RadiologyGroup $radiologyGroup)
     {
         $request->validate(['is_active' => 'required|boolean']);
         $radiologyGroup->update(['is_active' => $request->is_active]);
-        return new \App\Http\Resources\RadiologyGroupResource($radiologyGroup);
+
+        return new RadiologyGroupResource($radiologyGroup);
     }
 }

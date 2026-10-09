@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ServiceType;
+use App\Models\MasterData\Warehouse;
 use Database\Factories\PolyclinicFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -30,6 +31,7 @@ class Polyclinic extends Model
         'bpjs_code',
         'satusehat_code',
         'is_active',
+        'warehouse_id',
         // legacy_default_warehouse_id is managed by importer only
     ];
 
@@ -55,6 +57,11 @@ class Polyclinic extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'warehouse_id');
     }
 
     public function scopeSearch(Builder $query, string $term): Builder

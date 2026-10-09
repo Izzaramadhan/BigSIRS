@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\MasterData\RadiologyItem;
 use App\Http\Requests\StoreRadiologyItemRequest;
 use App\Http\Requests\UpdateRadiologyItemRequest;
 use App\Http\Resources\RadiologyItemResource;
+use App\Models\MasterData\RadiologyItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
@@ -44,9 +44,10 @@ class RadiologyItemController extends Controller
                 ->setStatusCode(Response::HTTP_CREATED);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to create radiology item',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -54,6 +55,7 @@ class RadiologyItemController extends Controller
     public function show(RadiologyItem $radiologyItem)
     {
         $radiologyItem->load('group');
+
         return new RadiologyItemResource($radiologyItem);
     }
 
@@ -67,9 +69,10 @@ class RadiologyItemController extends Controller
             return new RadiologyItemResource($radiologyItem);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to update radiology item',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -84,9 +87,10 @@ class RadiologyItemController extends Controller
             return response()->json(null, Response::HTTP_NO_CONTENT);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to delete radiology item',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -100,13 +104,14 @@ class RadiologyItemController extends Controller
 
             return response()->json([
                 'message' => 'Status updated successfully',
-                'data' => new RadiologyItemResource($radiologyItem)
+                'data' => new RadiologyItemResource($radiologyItem),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to update radiology item status',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 class ImportLegacyLetterTypesCommand extends Command
 {
     protected $signature = 'import:legacy-letter-types';
+
     protected $description = 'Import letter types from legacy database';
 
     public function handle()
@@ -22,6 +23,7 @@ class ImportLegacyLetterTypesCommand extends Command
             $legacyDb->getPdo();
         } catch (\Exception $e) {
             $this->error('Could not connect to legacy database. Make sure it is configured correctly.');
+
             return 1;
         }
 
@@ -30,6 +32,7 @@ class ImportLegacyLetterTypesCommand extends Command
 
         if ($total === 0) {
             $this->info('No records found in legacy database.');
+
             return 0;
         }
 
@@ -41,21 +44,21 @@ class ImportLegacyLetterTypesCommand extends Command
         DB::beginTransaction();
         try {
             foreach ($records as $record) {
-                $isDeleted = !empty($record->deleted_at) && $record->deleted_at !== '0000-00-00 00:00:00';
+                $isDeleted = ! empty($record->deleted_at) && $record->deleted_at !== '0000-00-00 00:00:00';
                 $deletedAt = $isDeleted ? Carbon::parse($record->deleted_at) : null;
 
-                $createdAt = (!empty($record->created_at) && $record->created_at !== '0000-00-00 00:00:00')
+                $createdAt = (! empty($record->created_at) && $record->created_at !== '0000-00-00 00:00:00')
                     ? Carbon::parse($record->created_at)
                     : now();
 
-                $updatedAt = (!empty($record->updated_at) && $record->updated_at !== '0000-00-00 00:00:00')
+                $updatedAt = (! empty($record->updated_at) && $record->updated_at !== '0000-00-00 00:00:00')
                     ? Carbon::parse($record->updated_at)
                     : $createdAt;
 
                 $data = [
                     'name' => trim($record->nama),
-                    'description' => !empty(trim($record->deskripsi)) ? trim($record->deskripsi) : null,
-                    'legacy_resource' => !empty(trim($record->resource)) ? trim($record->resource) : null,
+                    'description' => ! empty(trim($record->deskripsi)) ? trim($record->deskripsi) : null,
+                    'legacy_resource' => ! empty(trim($record->resource)) ? trim($record->resource) : null,
                     'is_active' => (bool) $record->status,
                     'created_at' => $createdAt,
                     'updated_at' => $updatedAt,

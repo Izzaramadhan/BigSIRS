@@ -8,7 +8,6 @@ use App\Http\Requests\MasterData\UpdateLaboratoryCategoryRequest;
 use App\Http\Resources\MasterData\LaboratoryCategoryResource;
 use App\Models\MasterData\LaboratoryCategory;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 
 class LaboratoryCategoryController extends Controller
 {
@@ -19,10 +18,10 @@ class LaboratoryCategoryController extends Controller
     {
         $query = LaboratoryCategory::query();
 
-        if ($request->has('search') && !empty($request->search)) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+        if ($request->has('search') && ! empty($request->search)) {
+            $query->where('name', 'like', '%'.$request->search.'%');
         }
-        
+
         if ($request->has('is_active')) {
             $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
         }
@@ -32,7 +31,7 @@ class LaboratoryCategoryController extends Controller
         $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
 
         $perPage = $request->get('per_page', 10);
-        
+
         if ($perPage === '-1' || $perPage === 'all') {
             return LaboratoryCategoryResource::collection($query->get());
         }
@@ -67,7 +66,7 @@ class LaboratoryCategoryController extends Controller
 
         return new LaboratoryCategoryResource($laboratoryCategory);
     }
-    
+
     /**
      * Update the status of the specified resource.
      */

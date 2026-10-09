@@ -7,13 +7,14 @@ use App\Http\Requests\StoreLaboratoryGroupRequest;
 use App\Http\Requests\UpdateLaboratoryGroupRequest;
 use App\Http\Resources\MasterData\LaboratoryGroupResource;
 use App\Models\MasterData\LaboratoryGroup;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class LaboratoryGroupController extends Controller
 {
-    use \Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+    use AuthorizesRequests;
 
     /**
      * Display a listing of the resource.

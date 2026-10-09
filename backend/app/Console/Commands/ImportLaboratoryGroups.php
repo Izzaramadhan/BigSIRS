@@ -2,14 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\LaboratoryCategory;
+use App\Models\MasterData\LaboratoryGroup;
+use App\Models\MasterData\LaboratoryItem;
+use Carbon\Carbon;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\LaboratoryCategory;
-use App\Models\MasterData\LaboratoryItem;
-use App\Models\MasterData\LaboratoryGroup;
-use Carbon\Carbon;
 
 #[Signature('import:laboratory-groups')]
 #[Description('Import laboratory groups and their items from legacy database')]
@@ -46,12 +46,14 @@ class ImportLaboratoryGroups extends Command
             foreach ($legacyGroups as $legacyGroup) {
                 if (empty($legacyGroup->id_kategori_lab)) {
                     $stats['groups_skipped']++;
+
                     continue;
                 }
 
-                if (!isset($categoriesMap[$legacyGroup->id_kategori_lab])) {
+                if (! isset($categoriesMap[$legacyGroup->id_kategori_lab])) {
                     $stats['missing_category']++;
                     $stats['groups_skipped']++;
+
                     continue;
                 }
 
@@ -78,19 +80,22 @@ class ImportLaboratoryGroups extends Command
             $processedPivots = [];
 
             foreach ($legacyPivots as $legacyPivot) {
-                if (!isset($groupsMap[$legacyPivot->id_grup])) {
+                if (! isset($groupsMap[$legacyPivot->id_grup])) {
                     $stats['missing_group']++;
+
                     continue;
                 }
 
-                if (!isset($itemsMap[$legacyPivot->id_item])) {
+                if (! isset($itemsMap[$legacyPivot->id_item])) {
                     $stats['missing_item']++;
+
                     continue;
                 }
 
-                $pairKey = $groupsMap[$legacyPivot->id_grup] . '-' . $itemsMap[$legacyPivot->id_item];
+                $pairKey = $groupsMap[$legacyPivot->id_grup].'-'.$itemsMap[$legacyPivot->id_item];
                 if (isset($processedPivots[$pairKey])) {
                     $stats['duplicate_pivots']++;
+
                     continue;
                 }
                 $processedPivots[$pairKey] = true;
@@ -112,7 +117,7 @@ class ImportLaboratoryGroups extends Command
 
             DB::commit();
 
-            $this->info("Import completed successfully.");
+            $this->info('Import completed successfully.');
             $this->table(
                 ['Metric', 'Count'],
                 [
@@ -132,7 +137,7 @@ class ImportLaboratoryGroups extends Command
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
         }
     }
 }

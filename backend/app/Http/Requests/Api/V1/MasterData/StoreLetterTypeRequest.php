@@ -2,13 +2,14 @@
 
 namespace App\Http\Requests\Api\V1\MasterData;
 
+use App\Models\LetterType;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreLetterTypeRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\LetterType::class);
+        return $this->user()->can('create', LetterType::class);
     }
 
     public function rules(): array
@@ -19,7 +20,7 @@ class StoreLetterTypeRequest extends FormRequest
             'is_active' => 'boolean',
         ];
     }
-    
+
     public function messages(): array
     {
         return [
@@ -30,7 +31,7 @@ class StoreLetterTypeRequest extends FormRequest
             'is_active.boolean' => 'Status harus berupa true atau false.',
         ];
     }
-    
+
     protected function prepareForValidation()
     {
         if ($this->has('name')) {

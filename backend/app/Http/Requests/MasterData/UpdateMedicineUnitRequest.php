@@ -23,7 +23,7 @@ class UpdateMedicineUnitRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:medicine_units,name,' . $this->medicine_unit->id],
+            'name' => ['required', 'string', 'max:255', 'unique:medicine_units,name,'.$this->medicine_unit->id],
             'description' => ['nullable', 'string'],
         ];
     }

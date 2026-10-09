@@ -7,7 +7,7 @@ use App\Models\MasterData\RadiologyItemGroup;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\MasterData\RadiologyItem>
+ * @extends Factory<RadiologyItem>
  */
 class RadiologyItemFactory extends Factory
 {

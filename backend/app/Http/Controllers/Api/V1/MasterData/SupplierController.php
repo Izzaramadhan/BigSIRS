@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\MasterData\Supplier;
 use App\Http\Requests\MasterData\StoreSupplierRequest;
 use App\Http\Requests\MasterData\UpdateSupplierRequest;
 use App\Http\Resources\MasterData\SupplierResource;
-use Illuminate\Http\Request;
+use App\Models\MasterData\Supplier;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class SupplierController extends Controller
@@ -25,8 +25,8 @@ class SupplierController extends Controller
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhere('address', 'like', "%{$search}%");
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('address', 'like', "%{$search}%");
             });
         }
 
@@ -45,6 +45,7 @@ class SupplierController extends Controller
     public function store(StoreSupplierRequest $request)
     {
         $supplier = Supplier::create($request->validated());
+
         return new SupplierResource($supplier);
     }
 
@@ -54,6 +55,7 @@ class SupplierController extends Controller
     public function show(Supplier $supplier)
     {
         Gate::authorize('view', $supplier);
+
         return new SupplierResource($supplier);
     }
 
@@ -63,6 +65,7 @@ class SupplierController extends Controller
     public function update(UpdateSupplierRequest $request, Supplier $supplier)
     {
         $supplier->update($request->validated());
+
         return new SupplierResource($supplier);
     }
 
@@ -73,6 +76,7 @@ class SupplierController extends Controller
     {
         Gate::authorize('delete', $supplier);
         $supplier->delete();
+
         return response()->json(['message' => 'Supplier deleted successfully']);
     }
 }

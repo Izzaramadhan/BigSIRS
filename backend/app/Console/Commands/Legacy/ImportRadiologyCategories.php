@@ -47,6 +47,7 @@ class ImportRadiologyCategories extends Command
             if (empty(trim($legacy->nama))) {
                 $stats['skipped']++;
                 $bar->advance();
+
                 continue;
             }
 
@@ -78,7 +79,7 @@ class ImportRadiologyCategories extends Command
         $bar->finish();
         $this->newLine(2);
 
-        $this->info("Import completed:");
+        $this->info('Import completed:');
         $this->line("- Total found: {$total}");
         $this->line("- Inserted: {$stats['inserted']}");
         $this->line("- Updated: {$stats['updated']}");

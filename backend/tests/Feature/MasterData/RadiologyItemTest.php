@@ -6,7 +6,6 @@ use App\Models\MasterData\RadiologyItem;
 use App\Models\MasterData\RadiologyItemGroup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
 class RadiologyItemTest extends TestCase
@@ -28,19 +27,19 @@ class RadiologyItemTest extends TestCase
         $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/radiology-items');
 
         $response->assertStatus(200)
-                 ->assertJsonStructure([
-                     'data' => [
-                         '*' => [
-                             'id',
-                             'name',
-                             'radiology_item_group_id',
-                             'is_active',
-                             'group'
-                         ]
-                     ],
-                     'links',
-                     'meta'
-                 ]);
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'name',
+                        'radiology_item_group_id',
+                        'is_active',
+                        'group',
+                    ],
+                ],
+                'links',
+                'meta',
+            ]);
     }
 
     public function test_can_search_radiology_items_by_name()
@@ -49,7 +48,7 @@ class RadiologyItemTest extends TestCase
         RadiologyItem::factory()->count(5)->create();
 
         $response = $this->actingAs($this->user)
-                         ->getJson('/api/v1/master-data/radiology-items?search=Specific Item');
+            ->getJson('/api/v1/master-data/radiology-items?search=Specific Item');
 
         $response->assertStatus(200);
         $this->assertCount(1, $response->json('data'));
@@ -65,7 +64,7 @@ class RadiologyItemTest extends TestCase
         RadiologyItem::factory()->count(2)->create(['radiology_item_group_id' => $group2->id]);
 
         $response = $this->actingAs($this->user)
-                         ->getJson('/api/v1/master-data/radiology-items?radiology_item_group_id=' . $group1->id);
+            ->getJson('/api/v1/master-data/radiology-items?radiology_item_group_id='.$group1->id);
 
         $response->assertStatus(200);
         $this->assertCount(3, $response->json('data'));
@@ -84,7 +83,7 @@ class RadiologyItemTest extends TestCase
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/radiology-items', $payload);
 
         $response->assertStatus(201)
-                 ->assertJsonPath('data.name', 'New Radiology Item');
+            ->assertJsonPath('data.name', 'New Radiology Item');
 
         $this->assertDatabaseHas('radiology_items', [
             'name' => 'New Radiology Item',
@@ -99,8 +98,8 @@ class RadiologyItemTest extends TestCase
         $response = $this->actingAs($this->user)->getJson("/api/v1/master-data/radiology-items/{$item->id}");
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.id', $item->id)
-                 ->assertJsonPath('data.name', $item->name);
+            ->assertJsonPath('data.id', $item->id)
+            ->assertJsonPath('data.name', $item->name);
     }
 
     public function test_can_update_radiology_item()
@@ -117,8 +116,8 @@ class RadiologyItemTest extends TestCase
         $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/radiology-items/{$item->id}", $payload);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.name', 'Updated Radiology Item Name')
-                 ->assertJsonPath('data.is_active', false);
+            ->assertJsonPath('data.name', 'Updated Radiology Item Name')
+            ->assertJsonPath('data.is_active', false);
 
         $this->assertDatabaseHas('radiology_items', [
             'id' => $item->id,
@@ -145,11 +144,11 @@ class RadiologyItemTest extends TestCase
         $item = RadiologyItem::factory()->create(['is_active' => true]);
 
         $response = $this->actingAs($this->user)->patchJson("/api/v1/master-data/radiology-items/{$item->id}/status", [
-            'is_active' => false
+            'is_active' => false,
         ]);
 
         $response->assertStatus(200);
-        
+
         $this->assertDatabaseHas('radiology_items', [
             'id' => $item->id,
             'is_active' => false,

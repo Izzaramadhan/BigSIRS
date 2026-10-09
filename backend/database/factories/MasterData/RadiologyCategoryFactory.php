@@ -12,7 +12,7 @@ class RadiologyCategoryFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => $this->faker->unique()->word() . ' Category',
+            'name' => $this->faker->unique()->word().' Category',
             'description' => $this->faker->sentence(),
             'is_active' => true,
         ];

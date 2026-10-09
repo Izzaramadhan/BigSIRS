@@ -45,6 +45,7 @@ class ImportRadiologyTypesCommand extends Command
             if (empty($name)) {
                 $stats['skipped']++;
                 $this->warn("Skipped row ID {$row->id}: Name is empty");
+
                 continue;
             }
 
@@ -53,11 +54,11 @@ class ImportRadiologyTypesCommand extends Command
             $targetData = [
                 'name' => $name,
                 'description' => $description ?: null,
-                'is_active' => (bool)$row->status,
+                'is_active' => (bool) $row->status,
                 'created_at' => $row->created_at ?: now(),
                 'updated_at' => $row->updated_at ?: now(),
             ];
-            
+
             if ($row->deleted_at && $row->deleted_at !== '0000-00-00 00:00:00') {
                 $targetData['deleted_at'] = $row->deleted_at;
             }
@@ -82,6 +83,7 @@ class ImportRadiologyTypesCommand extends Command
                 if ($duplicateName) {
                     $stats['skipped']++;
                     $this->warn("Skipped row ID {$row->id}: Name '{$name}' already exists with legacy_id {$duplicateName->legacy_id}");
+
                     continue;
                 }
 
@@ -91,7 +93,7 @@ class ImportRadiologyTypesCommand extends Command
             }
         }
 
-        $this->info("Import completed:");
+        $this->info('Import completed:');
         $this->table(
             ['Metric', 'Count'],
             [

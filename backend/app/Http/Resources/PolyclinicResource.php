@@ -30,7 +30,7 @@ class PolyclinicResource extends JsonResource
             'is_active' => $this->is_active,
             // satusehat_code intentionally excluded from user-facing form
             // but still exists in DB for integration modules
-            'warehouse_pending' => true, // Master Gudang belum tersedia
+            'warehouse_id' => $this->warehouse_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

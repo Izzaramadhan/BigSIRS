@@ -8,13 +8,14 @@ use App\Http\Requests\Api\V1\MasterData\UpdateLetterTypeRequest;
 use App\Http\Resources\Api\V1\MasterData\LetterTypeResource;
 use App\Models\LetterType;
 use App\Services\MasterData\LetterTypeService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class LetterTypeController extends Controller
 {
-    use \Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+    use AuthorizesRequests;
 
     protected LetterTypeService $letterTypeService;
 
@@ -47,6 +48,7 @@ class LetterTypeController extends Controller
     public function show(LetterType $letterType): LetterTypeResource
     {
         $this->authorize('view', $letterType);
+
         return new LetterTypeResource($letterType);
     }
 

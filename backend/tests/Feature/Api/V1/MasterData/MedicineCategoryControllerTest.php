@@ -27,8 +27,8 @@ class MedicineCategoryControllerTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'description', 'is_active']
-                ]
+                    '*' => ['id', 'name', 'description', 'is_active'],
+                ],
             ]);
     }
 
@@ -36,14 +36,14 @@ class MedicineCategoryControllerTest extends TestCase
     {
         $data = [
             'name' => 'New Category',
-            'description' => 'Test Desc'
+            'description' => 'Test Desc',
         ];
 
         $response = $this->postJson('/api/v1/master-data/medicine-categories', $data);
 
         $response->assertStatus(201)
             ->assertJsonPath('data.name', 'New Category');
-            
+
         $this->assertDatabaseHas('medicine_categories', $data);
     }
 
@@ -53,14 +53,14 @@ class MedicineCategoryControllerTest extends TestCase
 
         $data = [
             'name' => 'Updated Category',
-            'description' => 'Updated Desc'
+            'description' => 'Updated Desc',
         ];
 
         $response = $this->putJson("/api/v1/master-data/medicine-categories/{$category->id}", $data);
 
         $response->assertStatus(200)
             ->assertJsonPath('data.name', 'Updated Category');
-            
+
         $this->assertDatabaseHas('medicine_categories', $data);
     }
 

@@ -2,11 +2,13 @@
 
 namespace App\Models\MasterData;
 
+use App\Models\ActivityType;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class RadiologyGroup extends Model
 {
-    use \Illuminate\Database\Eloquent\Factories\HasFactory, \Illuminate\Database\Eloquent\SoftDeletes;
+    use HasFactory, \Illuminate\Database\Eloquent\SoftDeletes;
 
     protected $fillable = [
         'legacy_id',
@@ -39,7 +41,7 @@ class RadiologyGroup extends Model
 
     public function activityType()
     {
-        return $this->belongsTo(\App\Models\ActivityType::class, 'activity_type_id');
+        return $this->belongsTo(ActivityType::class, 'activity_type_id');
     }
 
     public function itemGroups()

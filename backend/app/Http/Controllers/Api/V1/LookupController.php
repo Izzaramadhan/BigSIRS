@@ -6,7 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\District;
 use App\Models\Education;
 use App\Models\Employee;
+use App\Models\MasterData\GenericMedicine;
+use App\Models\MasterData\LaboratoryCategory;
+use App\Models\MasterData\MedicineCategory;
+use App\Models\MasterData\MedicineClassification;
+use App\Models\MasterData\MedicineRoute;
+use App\Models\MasterData\MedicineUnit;
+use App\Models\MasterData\Position;
+use App\Models\MasterData\RadiologyCategory;
+use App\Models\MasterData\RadiologyItemGroup;
+use App\Models\MasterData\RadiologyType;
 use App\Models\MasterData\Specialization;
+use App\Models\MasterData\Supplier;
+use App\Models\MasterData\Warehouse;
 use App\Models\Occupation;
 use App\Models\Province;
 use App\Models\Regency;
@@ -113,7 +125,7 @@ class LookupController extends Controller
         if ($request->has('id')) {
             $query->where('id', $request->id);
         }
-        
+
         // Limit to 50 results to prevent massive payloads during search
         $villages = $query->limit(50)->get(['id', 'code', 'name', 'district_id']);
 
@@ -166,12 +178,11 @@ class LookupController extends Controller
 
     public function positions(Request $request)
     {
-        $query = \App\Models\MasterData\Position::query();
+        $query = Position::query();
 
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
-
 
         if ($request->has('ids')) {
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
@@ -183,7 +194,7 @@ class LookupController extends Controller
 
     public function laboratoryCategories(Request $request)
     {
-        $query = \App\Models\MasterData\LaboratoryCategory::where('is_active', true);
+        $query = LaboratoryCategory::where('is_active', true);
 
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
@@ -196,9 +207,10 @@ class LookupController extends Controller
 
         return response()->json($query->orderBy('name')->get());
     }
+
     public function radiologyCategories(Request $request)
     {
-        $query = \App\Models\MasterData\RadiologyCategory::where('is_active', true);
+        $query = RadiologyCategory::where('is_active', true);
 
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
@@ -214,7 +226,7 @@ class LookupController extends Controller
 
     public function radiologyTypes(Request $request)
     {
-        $query = \App\Models\MasterData\RadiologyType::where('is_active', true);
+        $query = RadiologyType::where('is_active', true);
 
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
@@ -230,7 +242,7 @@ class LookupController extends Controller
 
     public function radiologyItemGroups(Request $request)
     {
-        $query = \App\Models\MasterData\RadiologyItemGroup::where('is_active', true);
+        $query = RadiologyItemGroup::where('is_active', true);
 
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
@@ -246,7 +258,7 @@ class LookupController extends Controller
 
     public function medicineUnits(Request $request)
     {
-        $query = \App\Models\MasterData\MedicineUnit::where('is_active', true);
+        $query = MedicineUnit::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -254,12 +266,27 @@ class LookupController extends Controller
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
             $query->orWhereIn('id', $ids);
         }
+
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function warehouses(Request $request)
+    {
+        $query = Warehouse::query();
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
         return response()->json($query->orderBy('name')->get());
     }
 
     public function suppliers(Request $request)
     {
-        $query = \App\Models\MasterData\Supplier::where('is_active', true);
+        $query = Supplier::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -267,12 +294,13 @@ class LookupController extends Controller
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
             $query->orWhereIn('id', $ids);
         }
+
         return response()->json($query->orderBy('name')->limit(50)->get());
     }
 
     public function medicineCategories(Request $request)
     {
-        $query = \App\Models\MasterData\MedicineCategory::where('is_active', true);
+        $query = MedicineCategory::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -280,12 +308,13 @@ class LookupController extends Controller
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
             $query->orWhereIn('id', $ids);
         }
+
         return response()->json($query->orderBy('name')->get());
     }
 
     public function medicineClassifications(Request $request)
     {
-        $query = \App\Models\MasterData\MedicineClassification::where('is_active', true);
+        $query = MedicineClassification::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -293,12 +322,13 @@ class LookupController extends Controller
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
             $query->orWhereIn('id', $ids);
         }
+
         return response()->json($query->orderBy('name')->get());
     }
 
     public function medicineRoutes(Request $request)
     {
-        $query = \App\Models\MasterData\MedicineRoute::where('is_active', true);
+        $query = MedicineRoute::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -306,12 +336,13 @@ class LookupController extends Controller
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
             $query->orWhereIn('id', $ids);
         }
+
         return response()->json($query->orderBy('name')->get());
     }
 
     public function genericMedicines(Request $request)
     {
-        $query = \App\Models\MasterData\GenericMedicine::where('is_active', true);
+        $query = GenericMedicine::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
@@ -319,6 +350,7 @@ class LookupController extends Controller
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
             $query->orWhereIn('id', $ids);
         }
+
         return response()->json($query->limit(50)->orderBy('name')->get());
     }
 }

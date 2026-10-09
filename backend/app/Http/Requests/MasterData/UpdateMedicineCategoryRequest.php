@@ -23,7 +23,7 @@ class UpdateMedicineCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:medicine_categories,name,' . $this->medicine_category->id],
+            'name' => ['required', 'string', 'max:255', 'unique:medicine_categories,name,'.$this->medicine_category->id],
             'description' => ['nullable', 'string'],
         ];
     }

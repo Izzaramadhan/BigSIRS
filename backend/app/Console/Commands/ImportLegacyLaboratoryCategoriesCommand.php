@@ -28,7 +28,7 @@ class ImportLegacyLaboratoryCategoriesCommand extends Command
     public function handle()
     {
         $this->info('Starting legacy laboratory categories import...');
-        
+
         $isDryRun = $this->option('dry-run');
         if ($isDryRun) {
             $this->warn('DRY RUN MODE - No data will be saved to the target database.');
@@ -43,9 +43,10 @@ class ImportLegacyLaboratoryCategoriesCommand extends Command
 
             $total = $legacyCategories->count();
             $this->info("Found {$total} active laboratory categories in legacy database.");
-            
+
             if ($total === 0) {
                 $this->info('Nothing to import.');
+
                 return Command::SUCCESS;
             }
 
@@ -53,7 +54,7 @@ class ImportLegacyLaboratoryCategoriesCommand extends Command
                 'inserted' => 0,
                 'updated' => 0,
                 'skipped' => 0,
-                'failed' => 0
+                'failed' => 0,
             ];
 
             $bar = $this->output->createProgressBar($total);
@@ -62,30 +63,32 @@ class ImportLegacyLaboratoryCategoriesCommand extends Command
             foreach ($legacyCategories as $legacyCategory) {
                 try {
                     $name = trim($legacyCategory->nama);
-                    
+
                     if (empty($name)) {
                         $stats['skipped']++;
                         $bar->advance();
+
                         continue;
                     }
 
                     // For laboratory categories, name should be unique based on our migrations.
                     $existingByName = LaboratoryCategory::where('name', $name)->first();
-                    
+
                     if ($existingByName && $existingByName->legacy_id !== $legacyCategory->id) {
                         $this->newLine();
                         $this->warn("Conflict: Name '{$name}' is already used by category ID {$existingByName->id} (Legacy ID {$existingByName->legacy_id}). Skipping legacy ID {$legacyCategory->id}.");
                         $stats['skipped']++;
                         $bar->advance();
+
                         continue;
                     }
 
                     $isActive = $legacyCategory->status === '1' ? true : false;
-                    $description = !empty(trim($legacyCategory->deskripsi)) ? trim($legacyCategory->deskripsi) : null;
+                    $description = ! empty(trim($legacyCategory->deskripsi)) ? trim($legacyCategory->deskripsi) : null;
 
                     $existingCategory = LaboratoryCategory::where('legacy_id', $legacyCategory->id)->first();
 
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         LaboratoryCategory::updateOrCreate(
                             ['legacy_id' => $legacyCategory->id],
                             [
@@ -110,22 +113,22 @@ class ImportLegacyLaboratoryCategoriesCommand extends Command
                 } catch (\Exception $e) {
                     $stats['failed']++;
                     $this->newLine();
-                    $this->error("Failed to import legacy ID {$legacyCategory->id}: " . $e->getMessage());
+                    $this->error("Failed to import legacy ID {$legacyCategory->id}: ".$e->getMessage());
                 }
-                
+
                 $bar->advance();
             }
 
             $bar->finish();
             $this->newLine(2);
-            
+
             $this->info('Import Summary:');
             $this->line("  Processed : {$total}");
             $this->line("  Inserted  : {$stats['inserted']}");
             $this->line("  Updated   : {$stats['updated']}");
             $this->line("  Skipped   : {$stats['skipped']}");
             $this->line("  Failed    : {$stats['failed']}");
-            
+
             if ($isDryRun) {
                 $this->warn('DRY RUN COMPLETED - Database was not modified.');
             } else {
@@ -137,6 +140,7 @@ class ImportLegacyLaboratoryCategoriesCommand extends Command
         } catch (\Exception $e) {
             $this->error('Failed to connect to legacy database or read data.');
             $this->error($e->getMessage());
+
             return Command::FAILURE;
         }
     }

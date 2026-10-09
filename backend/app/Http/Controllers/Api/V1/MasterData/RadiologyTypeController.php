@@ -7,8 +7,8 @@ use App\Http\Requests\StoreRadiologyTypeRequest;
 use App\Http\Requests\UpdateRadiologyTypeRequest;
 use App\Http\Resources\MasterData\RadiologyTypeResource;
 use App\Models\MasterData\RadiologyType;
-use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\Request;
 
 class RadiologyTypeController extends Controller
 {
@@ -33,7 +33,7 @@ class RadiologyTypeController extends Controller
         }
 
         $perPage = $request->input('per_page', 10);
-        
+
         $types = $query->orderBy('name')->paginate($perPage);
 
         return RadiologyTypeResource::collection($types);

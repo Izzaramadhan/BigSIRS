@@ -7,9 +7,9 @@ use App\Http\Requests\StoreRadiologyItemGroupRequest;
 use App\Http\Requests\UpdateRadiologyItemGroupRequest;
 use App\Http\Resources\MasterData\RadiologyItemGroupResource;
 use App\Models\MasterData\RadiologyItemGroup;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class RadiologyItemGroupController extends Controller
 {

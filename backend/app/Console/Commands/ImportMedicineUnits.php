@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Models\MasterData\MedicineUnit;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class ImportMedicineUnits extends Command
 {
@@ -30,7 +29,7 @@ class ImportMedicineUnits extends Command
     {
         $dryRun = $this->option('dry-run');
 
-        $this->info('Starting import of medicine units' . ($dryRun ? ' (DRY RUN)' : ''));
+        $this->info('Starting import of medicine units'.($dryRun ? ' (DRY RUN)' : ''));
 
         $inserted = 0;
         $updated = 0;
@@ -47,6 +46,7 @@ class ImportMedicineUnits extends Command
                         if (empty($name)) {
                             $this->warn("Skipping record with ID {$category->id} due to empty name.");
                             $skipped++;
+
                             continue;
                         }
 
@@ -56,7 +56,7 @@ class ImportMedicineUnits extends Command
                             'is_active' => $category->status == '1' ? true : false,
                         ];
 
-                        if (!$dryRun) {
+                        if (! $dryRun) {
                             $targetCategory = MedicineUnit::where('legacy_id', $category->id)->first();
 
                             if ($targetCategory) {
@@ -71,7 +71,7 @@ class ImportMedicineUnits extends Command
                             $inserted++;
                         }
                     } catch (\Exception $e) {
-                        $this->error("Failed to import record ID {$category->id}: " . $e->getMessage());
+                        $this->error("Failed to import record ID {$category->id}: ".$e->getMessage());
                         $failed++;
                     }
                 }

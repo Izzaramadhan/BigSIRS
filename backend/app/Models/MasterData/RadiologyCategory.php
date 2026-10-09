@@ -29,8 +29,9 @@ class RadiologyCategory extends Model
     {
         if ($search) {
             $query->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                ->orWhere('description', 'like', "%{$search}%");
         }
+
         return $query;
     }
 }

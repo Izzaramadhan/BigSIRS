@@ -30,7 +30,7 @@ class ImportMedicineCategories extends Command
     {
         $dryRun = $this->option('dry-run');
 
-        $this->info('Starting import of medicine categories' . ($dryRun ? ' (DRY RUN)' : ''));
+        $this->info('Starting import of medicine categories'.($dryRun ? ' (DRY RUN)' : ''));
 
         $inserted = 0;
         $updated = 0;
@@ -47,6 +47,7 @@ class ImportMedicineCategories extends Command
                         if (empty($name)) {
                             $this->warn("Skipping record with ID {$category->id} due to empty name.");
                             $skipped++;
+
                             continue;
                         }
 
@@ -56,7 +57,7 @@ class ImportMedicineCategories extends Command
                             'is_active' => $category->status == '1' ? true : false,
                         ];
 
-                        if (!$dryRun) {
+                        if (! $dryRun) {
                             $targetCategory = MedicineCategory::where('legacy_id', $category->id)->first();
 
                             if ($targetCategory) {
@@ -71,7 +72,7 @@ class ImportMedicineCategories extends Command
                             $inserted++;
                         }
                     } catch (\Exception $e) {
-                        $this->error("Failed to import record ID {$category->id}: " . $e->getMessage());
+                        $this->error("Failed to import record ID {$category->id}: ".$e->getMessage());
                         $failed++;
                     }
                 }

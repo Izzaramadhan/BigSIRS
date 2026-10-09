@@ -25,7 +25,7 @@ class UpdateLetterTypeRequest extends FormRequest
             'is_active' => 'boolean',
         ];
     }
-    
+
     public function messages(): array
     {
         return [
@@ -36,7 +36,7 @@ class UpdateLetterTypeRequest extends FormRequest
             'is_active.boolean' => 'Status harus berupa true atau false.',
         ];
     }
-    
+
     protected function prepareForValidation()
     {
         if ($this->has('name')) {
