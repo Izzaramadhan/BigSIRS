@@ -213,6 +213,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/medicine-units',
+      name: 'master-data.medicine-units',
+      component: () => import('../views/master-data/logistics/MedicineUnitsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/medicines',
       name: 'master-data.medicines',
       component: () => import('../views/master-data/logistics/MedicinesView.vue'),
