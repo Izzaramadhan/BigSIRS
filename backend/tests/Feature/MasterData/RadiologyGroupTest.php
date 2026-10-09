@@ -2,16 +2,14 @@
 
 namespace Tests\Feature\MasterData;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
-use Tests\TestCase;
-
-use App\Models\MasterData\RadiologyGroup;
-use App\Models\MasterData\RadiologyCategory;
-use App\Models\MasterData\RadiologyType;
 use App\Models\ActivityType;
+use App\Models\MasterData\RadiologyCategory;
+use App\Models\MasterData\RadiologyGroup;
 use App\Models\MasterData\RadiologyItemGroup;
+use App\Models\MasterData\RadiologyType;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class RadiologyGroupTest extends TestCase
 {
@@ -105,7 +103,7 @@ class RadiologyGroupTest extends TestCase
             'id' => $group->id,
             'name' => 'Updated Group',
         ]);
-        
+
         $this->assertDatabaseHas('radiology_group_item_groups', [
             'radiology_group_id' => $group->id,
             'radiology_item_group_id' => $itemGroup->id,
@@ -127,7 +125,7 @@ class RadiologyGroupTest extends TestCase
         $group = RadiologyGroup::factory()->create(['is_active' => true]);
 
         $response = $this->actingAs($this->user)->patchJson("/api/v1/master-data/radiology-groups/{$group->id}/status", [
-            'is_active' => false
+            'is_active' => false,
         ]);
 
         $response->assertStatus(200)
@@ -135,7 +133,7 @@ class RadiologyGroupTest extends TestCase
 
         $this->assertDatabaseHas('radiology_groups', [
             'id' => $group->id,
-            'is_active' => false
+            'is_active' => false,
         ]);
     }
 }

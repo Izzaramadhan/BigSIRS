@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateLaboratoryCategoryRequest extends FormRequest
@@ -17,14 +18,14 @@ class UpdateLaboratoryCategoryRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         $id = $this->route('laboratory_category')?->id ?? $this->route('laboratory_category');
 
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:laboratory_categories,name,' . $id],
+            'name' => ['required', 'string', 'max:255', 'unique:laboratory_categories,name,'.$id],
             'description' => ['nullable', 'string', 'max:1000'],
             'type' => ['nullable', 'string', 'in:lab klinik,lab gigi,lab mikrobakteri'],
             'loinc_code' => ['nullable', 'string', 'max:255'],
@@ -34,7 +35,7 @@ class UpdateLaboratoryCategoryRequest extends FormRequest
             'is_active' => ['sometimes', 'boolean'],
         ];
     }
-    
+
     public function prepareForValidation()
     {
         if ($this->has('name')) {

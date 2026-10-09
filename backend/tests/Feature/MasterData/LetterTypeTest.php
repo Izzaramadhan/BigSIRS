@@ -29,9 +29,9 @@ class LetterTypeTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'description', 'legacy_resource', 'is_active', 'created_at']
+                    '*' => ['id', 'name', 'description', 'legacy_resource', 'is_active', 'created_at'],
                 ],
-                'meta' => ['current_page', 'last_page', 'per_page', 'total']
+                'meta' => ['current_page', 'last_page', 'per_page', 'total'],
             ]);
 
         $this->assertCount(10, $response->json('data'));

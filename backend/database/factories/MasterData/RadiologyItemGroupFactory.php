@@ -2,10 +2,11 @@
 
 namespace Database\Factories\MasterData;
 
+use App\Models\MasterData\RadiologyItemGroup;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\MasterData\RadiologyItemGroup>
+ * @extends Factory<RadiologyItemGroup>
  */
 class RadiologyItemGroupFactory extends Factory
 {

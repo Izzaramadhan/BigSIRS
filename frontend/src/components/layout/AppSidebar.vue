@@ -108,7 +108,8 @@ const navigation = [
               { name: 'Kategori Obat', path: '/master-data/medicine-categories' },
               { name: 'Satuan Obat', path: '/master-data/medicine-units' },
               { name: 'Obat', path: '/master-data/medicines' },
-              { name: 'Supplier', path: '/master-data/suppliers' }
+              { name: 'Supplier', path: '/master-data/suppliers' },
+              { name: 'Gudang', path: '/master-data/warehouses' }
             ]
           },
           {

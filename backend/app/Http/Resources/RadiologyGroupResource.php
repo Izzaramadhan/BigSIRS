@@ -20,12 +20,12 @@ class RadiologyGroupResource extends JsonResource
             'radiology_category_id' => $this->radiology_category_id,
             'radiology_type_id' => $this->radiology_type_id,
             'activity_type_id' => $this->activity_type_id,
-            'price' => (float)$this->price,
-            'interpretation_price' => (float)$this->interpretation_price,
+            'price' => (float) $this->price,
+            'interpretation_price' => (float) $this->interpretation_price,
             'loinc_code' => $this->loinc_code,
             'loinc_url' => $this->loinc_url,
             'is_active' => $this->is_active,
-            
+
             'category' => [
                 'id' => $this->category?->id,
                 'name' => $this->category?->name,
@@ -38,12 +38,12 @@ class RadiologyGroupResource extends JsonResource
                 'id' => $this->activityType?->id,
                 'name' => $this->activityType?->name,
             ],
-            
+
             'item_groups' => RadiologyItemGroupResource::collection($this->whenLoaded('itemGroups')),
             'radiology_item_group_ids' => $this->whenLoaded('itemGroups', function () {
                 return $this->itemGroups->pluck('id');
             }),
-            
+
             'item_groups_count' => $this->whenCounted('itemGroups'),
         ];
     }

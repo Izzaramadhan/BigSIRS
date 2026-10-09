@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\MasterData\Doctor;
 use App\Models\MasterData\MedicalProcedure;
+use App\Models\MasterData\Position;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -67,6 +68,6 @@ class Employee extends Model
 
     public function position()
     {
-        return $this->belongsTo(\App\Models\MasterData\Position::class);
+        return $this->belongsTo(Position::class);
     }
 }

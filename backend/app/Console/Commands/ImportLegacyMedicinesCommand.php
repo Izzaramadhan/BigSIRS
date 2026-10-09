@@ -2,18 +2,19 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
+use App\Models\MasterData\GenericMedicine;
 use App\Models\MasterData\Medicine;
 use App\Models\MasterData\MedicineCategory;
-use App\Models\MasterData\MedicineUnit;
 use App\Models\MasterData\MedicineClassification;
 use App\Models\MasterData\MedicineRoute;
-use App\Models\MasterData\GenericMedicine;
+use App\Models\MasterData\MedicineUnit;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class ImportLegacyMedicinesCommand extends Command
 {
     protected $signature = 'import:legacy-medicines';
+
     protected $description = 'Import medicines and minimal dependencies from legacy database';
 
     public function handle()
@@ -30,7 +31,7 @@ class ImportLegacyMedicinesCommand extends Command
                 [
                     'name' => trim($cat->nama ?? 'Tanpa Nama'),
                     'description' => $cat->deskripsi ?? null,
-                    'is_active' => $cat->status == 1
+                    'is_active' => $cat->status == 1,
                 ]
             );
             $insertedCategories++;
@@ -45,7 +46,7 @@ class ImportLegacyMedicinesCommand extends Command
                 ['legacy_id' => $unit->id],
                 [
                     'name' => trim($unit->nama ?? 'Tanpa Nama'),
-                    'is_active' => true
+                    'is_active' => true,
                 ]
             );
             $insertedUnits++;
@@ -60,7 +61,7 @@ class ImportLegacyMedicinesCommand extends Command
                 ['legacy_id' => $class->id],
                 [
                     'name' => trim($class->name ?? 'Tanpa Nama'),
-                    'is_active' => $class->status == 1
+                    'is_active' => $class->status == 1,
                 ]
             );
             $insertedClass++;
@@ -75,21 +76,23 @@ class ImportLegacyMedicinesCommand extends Command
                 ['legacy_id' => $route->id],
                 [
                     'name' => trim($route->rute_obat ?? 'Tanpa Nama'),
-                    'is_active' => $route->status == 1
+                    'is_active' => $route->status == 1,
                 ]
             );
             $insertedRoutes++;
         }
 
         // 5. Generic Medicines (Chunked)
-        $this->info("Importing Generic Medicines...");
+        $this->info('Importing Generic Medicines...');
         $insertedGenerics = 0;
         DB::connection('legacy')->table('ref_generik')->orderBy('id')->chunk(1000, function ($generics) use (&$insertedGenerics) {
             $genericsData = [];
             foreach ($generics as $gen) {
                 $name = trim($gen->nama_objek ?? 'Tanpa Nama');
-                if (empty($name)) continue;
-                
+                if (empty($name)) {
+                    continue;
+                }
+
                 $genericsData[] = [
                     'legacy_id' => $gen->id,
                     'name' => $name,
@@ -114,15 +117,16 @@ class ImportLegacyMedicinesCommand extends Command
         // 6. Medicines
         $legacyMedicines = DB::connection('legacy')->table('ref_obat')->get();
         $this->info("Importing {$legacyMedicines->count()} Medicines...");
-        
+
         $inserted = 0;
         $updated = 0;
         $skipped = 0;
-        
+
         foreach ($legacyMedicines as $med) {
             $name = trim($med->nama ?? '');
             if (empty($name)) {
                 $skipped++;
+
                 continue;
             }
 
@@ -151,7 +155,7 @@ class ImportLegacyMedicinesCommand extends Command
             }
         }
 
-        $this->info("Import Summary:");
+        $this->info('Import Summary:');
         $this->info("Inserted/Updated Categories: {$insertedCategories}");
         $this->info("Inserted/Updated Units: {$insertedUnits}");
         $this->info("Inserted/Updated Classifications: {$insertedClass}");

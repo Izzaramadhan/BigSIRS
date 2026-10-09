@@ -9,21 +9,22 @@ use Illuminate\Support\Facades\DB;
 class ImportLegacyPositionsCommand extends Command
 {
     protected $signature = 'import:legacy-positions';
+
     protected $description = 'Import positions from legacy ref_jabatan table';
 
     public function handle()
     {
         $this->info('Starting positions import...');
-        
+
         try {
             $legacyPositions = DB::connection('legacy')->table('ref_jabatan')->get();
-            
+
             $created = 0;
             $updated = 0;
-            
+
             foreach ($legacyPositions as $legacy) {
-                $status = isset($legacy->status) ? (bool)$legacy->status : true;
-                
+                $status = isset($legacy->status) ? (bool) $legacy->status : true;
+
                 $position = Position::withTrashed()->updateOrCreate(
                     ['legacy_id' => $legacy->id],
                     [
@@ -32,17 +33,17 @@ class ImportLegacyPositionsCommand extends Command
                         'is_active' => $status,
                     ]
                 );
-                
+
                 if ($position->wasRecentlyCreated) {
                     $created++;
                 } else {
                     $updated++;
                 }
             }
-            
+
             $this->info("Import completed! Created: {$created}, Updated: {$updated}");
         } catch (\Exception $e) {
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
         }
     }
 }

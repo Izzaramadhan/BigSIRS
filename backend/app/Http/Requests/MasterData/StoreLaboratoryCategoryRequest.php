@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreLaboratoryCategoryRequest extends FormRequest
@@ -17,7 +18,7 @@ class StoreLaboratoryCategoryRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -32,7 +33,7 @@ class StoreLaboratoryCategoryRequest extends FormRequest
             'is_active' => ['sometimes', 'boolean'],
         ];
     }
-    
+
     public function prepareForValidation()
     {
         if ($this->has('name')) {

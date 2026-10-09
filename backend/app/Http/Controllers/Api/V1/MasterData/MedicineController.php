@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\MasterData\MedicineResource;
 use App\Models\MasterData\Medicine;
 use Illuminate\Http\Request;
-use App\Http\Resources\MasterData\MedicineResource;
-use Illuminate\Support\Facades\DB;
 
 class MedicineController extends Controller
 {
@@ -18,15 +17,15 @@ class MedicineController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhere('kfa_code', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('kfa_code', 'like', "%{$search}%");
             });
         }
-        
+
         if ($request->has('category_id') && $request->category_id != '') {
             $query->where('medicine_category_id', $request->category_id);
         }
-        
+
         if ($request->has('classification_id') && $request->classification_id != '') {
             $query->where('medicine_classification_id', $request->classification_id);
         }
@@ -34,7 +33,7 @@ class MedicineController extends Controller
         $perPage = $request->input('per_page', 10);
         $sortDesc = $request->input('sortDesc', 'false') === 'true';
         $sortBy = $request->input('sortBy', 'created_at');
-        
+
         // Handle sorting for generic 'name' property
         if ($sortBy == 'name' || $sortBy == 'code') {
             $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
@@ -43,6 +42,7 @@ class MedicineController extends Controller
         }
 
         $medicines = $query->paginate($perPage);
+
         return MedicineResource::collection($medicines);
     }
 
@@ -63,12 +63,14 @@ class MedicineController extends Controller
         ]);
 
         $medicine = Medicine::create($validated);
+
         return new MedicineResource($medicine);
     }
 
     public function show(Medicine $medicine)
     {
         $medicine->load(['unit', 'category', 'classification', 'route', 'generic']);
+
         return new MedicineResource($medicine);
     }
 
@@ -89,6 +91,7 @@ class MedicineController extends Controller
         ]);
 
         $medicine->update($validated);
+
         return new MedicineResource($medicine);
     }
 
@@ -96,16 +99,18 @@ class MedicineController extends Controller
     {
         // Add protection logic if medicine is used in transactions later.
         $medicine->delete();
+
         return response()->noContent();
     }
-    
+
     public function updateStatus(Request $request, Medicine $medicine)
     {
         $validated = $request->validate([
-            'is_active' => 'required|boolean'
+            'is_active' => 'required|boolean',
         ]);
 
         $medicine->update($validated);
+
         return new MedicineResource($medicine);
     }
 }

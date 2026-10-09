@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\Supplier;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use App\Models\MasterData\Supplier;
 
 class ImportSuppliers extends Command
 {
@@ -50,10 +50,11 @@ class ImportSuppliers extends Command
             foreach ($suppliers as $legacy) {
                 try {
                     $name = trim($legacy->nama);
-                    
+
                     if (empty($name)) {
                         $this->warn("Skipping legacy ID {$legacy->id}: Name is empty");
                         $skipped++;
+
                         continue;
                     }
 
@@ -69,9 +70,9 @@ class ImportSuppliers extends Command
                         $address = null;
                     }
 
-                    $isActive = (int)$legacy->status === 1;
+                    $isActive = (int) $legacy->status === 1;
 
-                    if (!$isDryRun) {
+                    if (! $isDryRun) {
                         $existing = Supplier::where('legacy_id', $legacy->id)->first();
 
                         if ($existing) {
@@ -82,9 +83,9 @@ class ImportSuppliers extends Command
                                 'is_active' => $isActive,
                             ]);
 
-                            if ($legacy->deleted_at && !$existing->trashed()) {
+                            if ($legacy->deleted_at && ! $existing->trashed()) {
                                 $existing->delete();
-                            } elseif (!$legacy->deleted_at && $existing->trashed()) {
+                            } elseif (! $legacy->deleted_at && $existing->trashed()) {
                                 $existing->restore();
                             }
 
@@ -119,7 +120,7 @@ class ImportSuppliers extends Command
             }
         });
 
-        $this->info("Import completed!");
+        $this->info('Import completed!');
         $this->table(
             ['Inserted', 'Updated', 'Skipped', 'Failed'],
             [[$inserted, $updated, $skipped, $failed]]

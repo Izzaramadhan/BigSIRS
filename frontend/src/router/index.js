@@ -231,6 +231,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/warehouses',
+      name: 'master-data.warehouses',
+      component: () => import('../views/master-data/logistics/WarehousesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/diagnoses/icd10',
       name: 'master-data.icd10',
       component: () => import('../views/master-data/Icd10CodeView.vue'),

@@ -26,9 +26,9 @@ class LaboratoryCategoryControllerTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'description', 'type', 'loinc_code', 'loinc_url', 'snomed_code', 'snomed_url', 'is_active']
+                    '*' => ['id', 'name', 'description', 'type', 'loinc_code', 'loinc_url', 'snomed_code', 'snomed_url', 'is_active'],
                 ],
-                'meta' => ['current_page', 'last_page', 'total']
+                'meta' => ['current_page', 'last_page', 'total'],
             ]);
     }
 
@@ -76,7 +76,7 @@ class LaboratoryCategoryControllerTest extends TestCase
 
         $this->assertDatabaseHas('laboratory_categories', ['name' => 'New Name']);
     }
-    
+
     public function test_can_update_status()
     {
         $category = LaboratoryCategory::factory()->create(['is_active' => true]);
@@ -90,7 +90,7 @@ class LaboratoryCategoryControllerTest extends TestCase
 
         $this->assertDatabaseHas('laboratory_categories', [
             'id' => $category->id,
-            'is_active' => false
+            'is_active' => false,
         ]);
     }
 

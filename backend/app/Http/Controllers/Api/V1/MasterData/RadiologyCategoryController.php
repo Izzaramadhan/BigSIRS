@@ -7,11 +7,12 @@ use App\Http\Requests\StoreRadiologyCategoryRequest;
 use App\Http\Requests\UpdateRadiologyCategoryRequest;
 use App\Http\Resources\MasterData\RadiologyCategoryResource;
 use App\Models\MasterData\RadiologyCategory;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
 class RadiologyCategoryController extends Controller
 {
-    use \Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+    use AuthorizesRequests;
 
     /**
      * Display a listing of the resource.

@@ -4,7 +4,6 @@ namespace App\Policies\MasterData;
 
 use App\Models\MasterData\RadiologyItemGroup;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class RadiologyItemGroupPolicy
 {

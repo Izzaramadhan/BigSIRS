@@ -20,7 +20,6 @@ class PositionController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
 
-
         $perPage = $request->get('per_page', 10);
         $positions = $query->orderBy('name')->paginate($perPage);
 
@@ -33,7 +32,7 @@ class PositionController extends Controller
 
         return response()->json([
             'message' => 'Data jabatan berhasil ditambahkan',
-            'data' => new PositionResource($position)
+            'data' => new PositionResource($position),
         ], Response::HTTP_CREATED);
     }
 
@@ -48,23 +47,22 @@ class PositionController extends Controller
 
         return response()->json([
             'message' => 'Data jabatan berhasil diperbarui',
-            'data' => new PositionResource($position)
+            'data' => new PositionResource($position),
         ]);
     }
-
 
     public function destroy(Position $position)
     {
         if ($position->employees()->exists()) {
             return response()->json([
-                'message' => 'Data jabatan tidak dapat dihapus karena sedang digunakan oleh data pegawai.'
+                'message' => 'Data jabatan tidak dapat dihapus karena sedang digunakan oleh data pegawai.',
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $position->delete();
 
         return response()->json([
-            'message' => 'Data jabatan berhasil dihapus'
+            'message' => 'Data jabatan berhasil dihapus',
         ]);
     }
 }

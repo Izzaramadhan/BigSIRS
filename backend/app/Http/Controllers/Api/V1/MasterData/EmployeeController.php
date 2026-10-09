@@ -3,16 +3,16 @@
 namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
-use App\Models\Employee;
-use Illuminate\Http\Request;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
+use App\Models\Employee;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class EmployeeController extends Controller
 {
-    use \Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-
+    use AuthorizesRequests;
 
     public function index(Request $request)
     {
@@ -22,16 +22,16 @@ class EmployeeController extends Controller
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('national_id', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('national_id', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
-        if ($request->has('position_id') && !is_null($request->get('position_id'))) {
+        if ($request->has('position_id') && ! is_null($request->get('position_id'))) {
             $query->where('position_id', $request->get('position_id'));
         }
 
-        if ($request->has('is_active') && !is_null($request->get('is_active'))) {
+        if ($request->has('is_active') && ! is_null($request->get('is_active'))) {
             $query->where('is_active', $request->boolean('is_active'));
         }
 
@@ -54,6 +54,7 @@ class EmployeeController extends Controller
     public function show(Employee $employee)
     {
         $this->authorize('view', $employee);
+
         return response()->json($employee->load(['education', 'occupation', 'position']));
     }
 
@@ -62,6 +63,7 @@ class EmployeeController extends Controller
         $this->authorize('update', $employee);
         $employee = DB::transaction(function () use ($request, $employee) {
             $employee->update($request->validated());
+
             return $employee;
         });
 

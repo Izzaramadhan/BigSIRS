@@ -18,20 +18,20 @@ class MedicineUnitController extends Controller
     {
         $query = MedicineUnit::query();
 
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', '%' . $search . '%')
-                  ->orWhere('description', 'like', '%' . $search . '%');
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('description', 'like', '%'.$search.'%');
             });
         }
-        
+
         $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
         $sortBy = $request->get('sortBy', 'created_at');
         $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
 
         $perPage = $request->get('per_page', 10);
-        
+
         if ($perPage === '-1' || $perPage === 'all') {
             return MedicineUnitResource::collection($query->get());
         }

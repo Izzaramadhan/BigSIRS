@@ -29,9 +29,9 @@ class PositionControllerTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name']
+                    '*' => ['id', 'name'],
                 ],
-                'meta' => ['current_page', 'last_page', 'total']
+                'meta' => ['current_page', 'last_page', 'total'],
             ]);
     }
 
@@ -50,7 +50,7 @@ class PositionControllerTest extends TestCase
     public function test_can_create_position()
     {
         $payload = [
-            'name' => 'Direktur'
+            'name' => 'Direktur',
         ];
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/positions', $payload);
@@ -66,7 +66,7 @@ class PositionControllerTest extends TestCase
         Position::factory()->create(['name' => 'Dokter']);
 
         $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/positions', [
-            'name' => 'Dokter'
+            'name' => 'Dokter',
         ]);
 
         $response->assertStatus(422)
@@ -78,13 +78,12 @@ class PositionControllerTest extends TestCase
         $position = Position::factory()->create(['name' => 'Dokter']);
 
         $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/positions/{$position->id}", [
-            'name' => 'Dokter Spesialis'
+            'name' => 'Dokter Spesialis',
         ]);
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('positions', ['id' => $position->id, 'name' => 'Dokter Spesialis']);
     }
-
 
     public function test_can_delete_position()
     {

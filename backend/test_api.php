@@ -1,7 +1,11 @@
 <?php
+
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
+
 require __DIR__.'/vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
-$request = Illuminate\Http\Request::create('/api/v1/master-data/employees', 'GET');
+$kernel = $app->make(Kernel::class);
+$request = Request::create('/api/v1/master-data/employees', 'GET');
 $response = $kernel->handle($request);
 echo $response->getContent();

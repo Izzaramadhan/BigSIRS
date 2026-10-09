@@ -9,21 +9,37 @@ use App\Http\Controllers\Api\V1\MasterData\DistrictController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorScheduleController;
 use App\Http\Controllers\Api\V1\MasterData\EducationController;
+use App\Http\Controllers\Api\V1\MasterData\EmployeeController;
 use App\Http\Controllers\Api\V1\MasterData\GuarantorController;
 use App\Http\Controllers\Api\V1\MasterData\Icd10CodeController;
 use App\Http\Controllers\Api\V1\MasterData\Icd9CmController;
+use App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController;
+use App\Http\Controllers\Api\V1\MasterData\LaboratoryGroupController;
+use App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController;
+use App\Http\Controllers\Api\V1\MasterData\LetterTypeController;
 use App\Http\Controllers\Api\V1\MasterData\MedicalProcedureController;
+use App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController;
+use App\Http\Controllers\Api\V1\MasterData\MedicineController;
+use App\Http\Controllers\Api\V1\MasterData\MedicineUnitController;
 use App\Http\Controllers\Api\V1\MasterData\OccupationController;
 use App\Http\Controllers\Api\V1\MasterData\PolyclinicController;
+use App\Http\Controllers\Api\V1\MasterData\PositionController;
 use App\Http\Controllers\Api\V1\MasterData\ProcedureCategoryController;
 use App\Http\Controllers\Api\V1\MasterData\ProcedurePackageController;
 use App\Http\Controllers\Api\V1\MasterData\ProcedureUserMappingController;
+use App\Http\Controllers\Api\V1\MasterData\RadiologyCategoryController;
+use App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController;
+use App\Http\Controllers\Api\V1\MasterData\RadiologyItemController;
+use App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController;
+use App\Http\Controllers\Api\V1\MasterData\RadiologyTypeController;
 use App\Http\Controllers\Api\V1\MasterData\RegencyController;
 use App\Http\Controllers\Api\V1\MasterData\ReportGroupController;
 use App\Http\Controllers\Api\V1\MasterData\ServiceTypeController;
+use App\Http\Controllers\Api\V1\MasterData\SupplierController;
 use App\Http\Controllers\Api\V1\MasterData\TariffComponentController;
 use App\Http\Controllers\Api\V1\MasterData\TariffTypeController;
 use App\Http\Controllers\Api\V1\MasterData\VillageController;
+use App\Http\Controllers\Api\V1\MasterData\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -101,39 +117,40 @@ Route::prefix('v1')->group(function () {
             Route::patch('activity-types/{activity_type}/status', [ActivityTypeController::class, 'updateStatus']);
             Route::apiResource('activity-types', ActivityTypeController::class);
 
-            Route::patch('letter-types/{letter_type}/status', [App\Http\Controllers\Api\V1\MasterData\LetterTypeController::class, 'updateStatus']);
-            Route::apiResource('letter-types', App\Http\Controllers\Api\V1\MasterData\LetterTypeController::class);
+            Route::patch('letter-types/{letter_type}/status', [LetterTypeController::class, 'updateStatus']);
+            Route::apiResource('letter-types', LetterTypeController::class);
 
-            Route::patch('employees/{employee}/status', [App\Http\Controllers\Api\V1\MasterData\EmployeeController::class, 'updateStatus']);
-            Route::apiResource('employees', App\Http\Controllers\Api\V1\MasterData\EmployeeController::class);
+            Route::patch('employees/{employee}/status', [EmployeeController::class, 'updateStatus']);
+            Route::apiResource('employees', EmployeeController::class);
 
-            Route::apiResource('positions', App\Http\Controllers\Api\V1\MasterData\PositionController::class);
+            Route::apiResource('positions', PositionController::class);
 
-            Route::patch('laboratory-categories/{laboratory_category}/status', [App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class, 'updateStatus']);
-            Route::apiResource('laboratory-categories', App\Http\Controllers\Api\V1\MasterData\LaboratoryCategoryController::class);
+            Route::patch('laboratory-categories/{laboratory_category}/status', [LaboratoryCategoryController::class, 'updateStatus']);
+            Route::apiResource('laboratory-categories', LaboratoryCategoryController::class);
 
-            Route::apiResource('laboratory-items', App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController::class);
+            Route::apiResource('laboratory-items', LaboratoryItemController::class);
 
-            Route::apiResource('laboratory-groups', App\Http\Controllers\Api\V1\MasterData\LaboratoryGroupController::class);
+            Route::apiResource('laboratory-groups', LaboratoryGroupController::class);
 
-            Route::apiResource('radiology-categories', App\Http\Controllers\Api\V1\MasterData\RadiologyCategoryController::class);
-            Route::patch('radiology-types/{radiology_type}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyTypeController::class, 'updateStatus']);
-            Route::apiResource('radiology-types', App\Http\Controllers\Api\V1\MasterData\RadiologyTypeController::class);
-            Route::patch('radiology-item-groups/{radiology_item_group}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController::class, 'updateStatus']);
-            Route::apiResource('radiology-item-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController::class);
-            Route::patch('radiology-items/{radiology_item}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyItemController::class, 'updateStatus']);
-            Route::apiResource('radiology-items', App\Http\Controllers\Api\V1\MasterData\RadiologyItemController::class);
+            Route::apiResource('radiology-categories', RadiologyCategoryController::class);
+            Route::patch('radiology-types/{radiology_type}/status', [RadiologyTypeController::class, 'updateStatus']);
+            Route::apiResource('radiology-types', RadiologyTypeController::class);
+            Route::patch('radiology-item-groups/{radiology_item_group}/status', [RadiologyItemGroupController::class, 'updateStatus']);
+            Route::apiResource('radiology-item-groups', RadiologyItemGroupController::class);
+            Route::patch('radiology-items/{radiology_item}/status', [RadiologyItemController::class, 'updateStatus']);
+            Route::apiResource('radiology-items', RadiologyItemController::class);
 
-            Route::patch('radiology-groups/{radiology_group}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class, 'updateStatus']);
-            Route::apiResource('radiology-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class);
+            Route::patch('radiology-groups/{radiology_group}/status', [RadiologyGroupController::class, 'updateStatus']);
+            Route::apiResource('radiology-groups', RadiologyGroupController::class);
 
-            Route::patch('medicine-categories/{medicine_category}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController::class, 'updateStatus']);
-            Route::apiResource('medicine-categories', App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController::class);
-            Route::apiResource('medicine-units', App\Http\Controllers\Api\V1\MasterData\MedicineUnitController::class);
-            Route::apiResource('suppliers', App\Http\Controllers\Api\V1\MasterData\SupplierController::class);
+            Route::patch('medicine-categories/{medicine_category}/status', [MedicineCategoryController::class, 'updateStatus']);
+            Route::apiResource('medicine-categories', MedicineCategoryController::class);
+            Route::apiResource('medicine-units', MedicineUnitController::class);
+            Route::apiResource('suppliers', SupplierController::class);
+            Route::apiResource('warehouses', WarehouseController::class);
 
-            Route::patch('medicines/{medicine}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineController::class, 'updateStatus']);
-            Route::apiResource('medicines', App\Http\Controllers\Api\V1\MasterData\MedicineController::class);
+            Route::patch('medicines/{medicine}/status', [MedicineController::class, 'updateStatus']);
+            Route::apiResource('medicines', MedicineController::class);
         });
 
         Route::prefix('lookups')->group(function () {
@@ -154,10 +171,11 @@ Route::prefix('v1')->group(function () {
             Route::get('radiology-categories', [LookupController::class, 'radiologyCategories']);
             Route::get('radiology-types', [LookupController::class, 'radiologyTypes']);
             Route::get('radiology-item-groups', [LookupController::class, 'radiologyItemGroups']);
-            
+
             // Logistics Lookups
             Route::get('medicine-units', [LookupController::class, 'medicineUnits']);
             Route::get('suppliers', [LookupController::class, 'suppliers']);
+            Route::get('warehouses', [LookupController::class, 'warehouses']);
             Route::get('medicine-categories', [LookupController::class, 'medicineCategories']);
             Route::get('medicine-classifications', [LookupController::class, 'medicineClassifications']);
             Route::get('medicine-routes', [LookupController::class, 'medicineRoutes']);

@@ -2,23 +2,24 @@
 
 require __DIR__.'/vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
 $legacy = DB::connection('legacy');
 $target = DB::connection('mysql');
 
 echo "=== Legacy ref_grup_lab Columns ===\n";
-$columns = $legacy->select("SHOW COLUMNS FROM ref_grup_lab");
-foreach($columns as $col) {
+$columns = $legacy->select('SHOW COLUMNS FROM ref_grup_lab');
+foreach ($columns as $col) {
     echo "{$col->Field} - {$col->Type} - Null: {$col->Null} - Key: {$col->Key}\n";
 }
 
 echo "\n=== Legacy map_grup_item_lab Columns ===\n";
-$columns = $legacy->select("SHOW COLUMNS FROM map_grup_item_lab");
-foreach($columns as $col) {
+$columns = $legacy->select('SHOW COLUMNS FROM map_grup_item_lab');
+foreach ($columns as $col) {
     echo "{$col->Field} - {$col->Type} - Null: {$col->Null} - Key: {$col->Key}\n";
 }
 
@@ -46,26 +47,26 @@ $totalPivots = $legacy->table('map_grup_item_lab')->count();
 echo "Total map_grup_item_lab records: $totalPivots\n";
 
 $duplicatePairs = $legacy->table('map_grup_item_lab')
-    ->select('id_grup', 'id_item', DB::raw("count(*) as c"))
+    ->select('id_grup', 'id_item', DB::raw('count(*) as c'))
     ->groupBy('id_grup', 'id_item')
     ->having('c', '>', 1)
     ->get();
-echo "Duplicate pairs in map_grup_item_lab: " . count($duplicatePairs) . "\n";
+echo 'Duplicate pairs in map_grup_item_lab: '.count($duplicatePairs)."\n";
 
 $orphanGroups = $legacy->table('map_grup_item_lab')
-    ->whereNotIn('id_grup', function($q) {
+    ->whereNotIn('id_grup', function ($q) {
         $q->select('id')->from('ref_grup_lab');
     })->count();
 echo "Orphan pivots (invalid group_id): $orphanGroups\n";
 
 $orphanItems = $legacy->table('map_grup_item_lab')
-    ->whereNotIn('id_item', function($q) {
+    ->whereNotIn('id_item', function ($q) {
         $q->select('id')->from('ref_item_lab');
     })->count();
 echo "Orphan pivots (invalid item_id): $orphanItems\n";
 
 $groupsWithoutItem = $legacy->table('ref_grup_lab')
-    ->whereNotIn('id', function($q) {
+    ->whereNotIn('id', function ($q) {
         $q->select('id_grup')->from('map_grup_item_lab');
     })->count();
 echo "Groups without items: $groupsWithoutItem\n";

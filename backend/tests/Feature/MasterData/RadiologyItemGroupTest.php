@@ -5,7 +5,6 @@ namespace Tests\Feature\MasterData;
 use App\Models\MasterData\RadiologyItemGroup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
 class RadiologyItemGroupTest extends TestCase
@@ -17,7 +16,7 @@ class RadiologyItemGroupTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->user = User::factory()->create();
     }
 
@@ -30,9 +29,9 @@ class RadiologyItemGroupTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+                    '*' => ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at'],
                 ],
-                'meta' => ['current_page', 'last_page', 'per_page', 'total']
+                'meta' => ['current_page', 'last_page', 'per_page', 'total'],
             ])
             ->assertJsonCount(10, 'data'); // default per_page is 10
     }

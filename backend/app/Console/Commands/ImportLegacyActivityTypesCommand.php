@@ -48,6 +48,7 @@ class ImportLegacyActivityTypesCommand extends Command
             if ($record->id == 57 || $record->parent_id == 57) {
                 return false;
             }
+
             return true;
         })->values();
 

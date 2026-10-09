@@ -5,8 +5,8 @@ namespace Tests\Feature\Api\V1\MasterData;
 use App\Models\MasterData\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
 
 class SupplierControllerTest extends TestCase
 {
@@ -27,10 +27,10 @@ class SupplierControllerTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'phone', 'address', 'is_active']
+                    '*' => ['id', 'name', 'phone', 'address', 'is_active'],
                 ],
                 'meta',
-                'links'
+                'links',
             ]);
     }
 
@@ -62,7 +62,7 @@ class SupplierControllerTest extends TestCase
 
         $this->assertDatabaseHas('suppliers', [
             'name' => 'PT BARU JAYA',
-            'phone' => '08123456789'
+            'phone' => '08123456789',
         ]);
     }
 
@@ -85,7 +85,7 @@ class SupplierControllerTest extends TestCase
         $this->assertDatabaseHas('suppliers', [
             'id' => $supplier->id,
             'name' => 'New Name',
-            'is_active' => 0
+            'is_active' => 0,
         ]);
     }
 
@@ -98,7 +98,7 @@ class SupplierControllerTest extends TestCase
         $response->assertStatus(200);
 
         $this->assertSoftDeleted('suppliers', [
-            'id' => $supplier->id
+            'id' => $supplier->id,
         ]);
     }
 }

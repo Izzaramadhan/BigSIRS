@@ -2,9 +2,15 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MasterData\ActivityType;
+use App\Models\MasterData\RadiologyCategory;
+use App\Models\MasterData\RadiologyGroup;
+use App\Models\MasterData\RadiologyItemGroup;
+use App\Models\MasterData\RadiologyType;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 #[Signature('legacy:import-radiology-groups')]
 #[Description('Import radiology groups and their item group mappings from legacy database')]
@@ -17,8 +23,8 @@ class ImportLegacyRadiologyGroupsCommand extends Command
     {
         $this->info('Starting import of radiology groups...');
 
-        $legacyGroups = \Illuminate\Support\Facades\DB::connection('legacy')->table('ref_grup_rad')->get();
-        $legacyMappings = \Illuminate\Support\Facades\DB::connection('legacy')->table('map_grup_kelompok_rad')->get();
+        $legacyGroups = DB::connection('legacy')->table('ref_grup_rad')->get();
+        $legacyMappings = DB::connection('legacy')->table('map_grup_kelompok_rad')->get();
 
         $inserted = 0;
         $updated = 0;
@@ -38,13 +44,14 @@ class ImportLegacyRadiologyGroupsCommand extends Command
             $name = trim($legacyGroup->nama);
             if (empty($name)) {
                 $skipped++;
+
                 continue;
             }
 
             // Resolve parents
             $categoryId = null;
             if ($legacyGroup->id_kategori_rad) {
-                $category = \App\Models\MasterData\RadiologyCategory::where('legacy_id', $legacyGroup->id_kategori_rad)->first();
+                $category = RadiologyCategory::where('legacy_id', $legacyGroup->id_kategori_rad)->first();
                 if ($category) {
                     $categoryId = $category->id;
                 } else {
@@ -55,7 +62,7 @@ class ImportLegacyRadiologyGroupsCommand extends Command
 
             $typeId = null;
             if ($legacyGroup->id_tipe_rad) {
-                $type = \App\Models\MasterData\RadiologyType::where('legacy_id', $legacyGroup->id_tipe_rad)->first();
+                $type = RadiologyType::where('legacy_id', $legacyGroup->id_tipe_rad)->first();
                 if ($type) {
                     $typeId = $type->id;
                 } else {
@@ -66,7 +73,7 @@ class ImportLegacyRadiologyGroupsCommand extends Command
 
             $activityTypeId = null;
             if ($legacyGroup->id_ref_jenis_kegiatan) {
-                $activityType = \App\Models\MasterData\ActivityType::where('legacy_id', $legacyGroup->id_ref_jenis_kegiatan)->first();
+                $activityType = ActivityType::where('legacy_id', $legacyGroup->id_ref_jenis_kegiatan)->first();
                 if ($activityType) {
                     $activityTypeId = $activityType->id;
                 } else {
@@ -84,7 +91,7 @@ class ImportLegacyRadiologyGroupsCommand extends Command
                 'interpretation_price' => $legacyGroup->harga_interpretasi ?: 0,
                 'loinc_code' => $legacyGroup->loinc_code,
                 'loinc_url' => $legacyGroup->loinc_url,
-                'is_active' => (bool)$legacyGroup->status,
+                'is_active' => (bool) $legacyGroup->status,
             ];
 
             if ($legacyGroup->deleted_at && $legacyGroup->deleted_at !== '0000-00-00 00:00:00') {
@@ -93,14 +100,14 @@ class ImportLegacyRadiologyGroupsCommand extends Command
                 $data['deleted_at'] = null;
             }
 
-            $group = \App\Models\MasterData\RadiologyGroup::where('legacy_id', $legacyGroup->id)->first();
-            
+            $group = RadiologyGroup::where('legacy_id', $legacyGroup->id)->first();
+
             if ($group) {
                 $group->update($data);
                 $updated++;
             } else {
                 $data['legacy_id'] = $legacyGroup->id;
-                $group = \App\Models\MasterData\RadiologyGroup::create($data);
+                $group = RadiologyGroup::create($data);
                 $inserted++;
             }
 
@@ -110,7 +117,7 @@ class ImportLegacyRadiologyGroupsCommand extends Command
                 $itemGroupIdsToSync = [];
 
                 foreach ($itemGroupLegacyIds as $itemGroupLegacyId) {
-                    $itemGroup = \App\Models\MasterData\RadiologyItemGroup::where('legacy_id', $itemGroupLegacyId)->first();
+                    $itemGroup = RadiologyItemGroup::where('legacy_id', $itemGroupLegacyId)->first();
                     if ($itemGroup) {
                         $itemGroupIdsToSync[] = $itemGroup->id;
                     } else {
@@ -127,13 +134,13 @@ class ImportLegacyRadiologyGroupsCommand extends Command
             }
         }
 
-        $this->info("Import completed!");
+        $this->info('Import completed!');
         $this->info("Total legacy groups: {$legacyGroups->count()}");
         $this->info("Groups Inserted: {$inserted}");
         $this->info("Groups Updated: {$updated}");
         $this->info("Groups Skipped: {$skipped}");
         $this->info("Missing Parents: {$missingParent}");
-        
+
         $this->info("Total legacy mappings: {$legacyMappings->count()}");
         $this->info("Pivot Inserted: {$pivotInserted}");
         $this->info("Pivot Duplicate/Unchanged: {$duplicatePivot}");
