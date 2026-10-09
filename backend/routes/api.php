@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\MasterData\LetterTypeController;
 use App\Http\Controllers\Api\V1\MasterData\MedicalProcedureController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineController;
+use App\Http\Controllers\Api\V1\MasterData\MedicationSignaController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineRouteController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineUnitController;
 use App\Http\Controllers\Api\V1\MasterData\OccupationController;
@@ -150,6 +151,8 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('medicine-units', MedicineUnitController::class);
             Route::patch('medicine-routes/{medicine_route}/status', [MedicineRouteController::class, 'updateStatus']);
             Route::apiResource('medicine-routes', MedicineRouteController::class);
+            Route::patch('medication-signas/{medication_signa}/status', [MedicationSignaController::class, 'updateStatus']);
+            Route::apiResource('medication-signas', MedicationSignaController::class);
             Route::apiResource('suppliers', SupplierController::class);
             Route::apiResource('warehouses', WarehouseController::class);
 
@@ -182,6 +185,7 @@ Route::prefix('v1')->group(function () {
             Route::get('warehouses', [LookupController::class, 'warehouses']);
             Route::get('medicine-categories', [LookupController::class, 'medicineCategories']);
             Route::get('medicine-routes', [LookupController::class, 'medicineRoutes']);
+            Route::get('medication-signas', [LookupController::class, 'medicationSignas']);
             Route::get('medicine-classifications', [LookupController::class, 'medicineClassifications']);
             Route::get('generic-medicines', [LookupController::class, 'genericMedicines']);
         });
