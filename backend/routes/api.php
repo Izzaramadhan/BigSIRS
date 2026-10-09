@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\MasterData\MedicationSignaController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineRouteController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineUnitController;
 use App\Http\Controllers\Api\V1\MasterData\MedicinePackageController;
+use App\Http\Controllers\Api\V1\MasterData\FollowUpHandlingController;
 use App\Http\Controllers\Api\V1\MasterData\OccupationController;
 use App\Http\Controllers\Api\V1\MasterData\PolyclinicController;
 use App\Http\Controllers\Api\V1\MasterData\PositionController;
@@ -160,6 +161,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('medicines/{medicine}/status', [MedicineController::class, 'updateStatus']);
             Route::apiResource('medicines', MedicineController::class);
             Route::apiResource('medicine-packages', MedicinePackageController::class);
+            Route::apiResource('follow-up-handlings', FollowUpHandlingController::class);
         });
 
         Route::prefix('lookups')->group(function () {

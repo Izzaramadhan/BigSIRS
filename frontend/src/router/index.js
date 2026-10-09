@@ -231,6 +231,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/follow-up-handlings',
+      name: 'master-data.follow-up-handlings',
+      component: () => import('../views/master-data/FollowUpHandlingsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/medicine-units',
       name: 'master-data.medicine-units',
       component: () => import('../views/master-data/logistics/MedicineUnitsView.vue'),
