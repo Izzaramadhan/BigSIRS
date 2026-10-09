@@ -13,6 +13,7 @@ class MedicineCategory extends Model
     protected $fillable = [
         'legacy_id',
         'name',
+        'description',
         'is_active',
     ];
 

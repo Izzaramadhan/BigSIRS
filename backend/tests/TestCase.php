@@ -29,12 +29,12 @@ abstract class TestCase extends BaseTestCase
         }
 
         $legacyDb = config('database.connections.legacy.database');
-        if ($legacyDb === 'simrs_legacy_full' || $legacyDb === 'simrs_legacy_restored') {
+        if ($legacyDb === 'simrs_legacy_full' || $legacyDb === 'simrs_legacy_restored' || $legacyDb === 'simrs_legacy' || $legacyDb === 'bigsirs_dev') {
             throw new \Exception("Refusing to run tests against production-like legacy database {$legacyDb}.");
         }
 
-        if ($legacyDb !== 'simrs_legacy_test') {
-            throw new \Exception('Refusing destructive legacy test outside simrs_legacy_test.');
+        if ($legacyDb !== 'simrs_legacy_test' && $legacyDb !== ':memory:') {
+            throw new \Exception('Refusing destructive legacy test outside simrs_legacy_test or :memory:.');
         }
     }
 }

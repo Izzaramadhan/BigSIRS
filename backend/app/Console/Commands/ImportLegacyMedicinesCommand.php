@@ -29,6 +29,7 @@ class ImportLegacyMedicinesCommand extends Command
                 ['legacy_id' => $cat->id],
                 [
                     'name' => trim($cat->nama ?? 'Tanpa Nama'),
+                    'description' => $cat->deskripsi ?? null,
                     'is_active' => $cat->status == 1
                 ]
             );

@@ -105,6 +105,7 @@ const navigation = [
           {
             name: 'Data Logistik',
             submenu: [
+              { name: 'Kategori Obat', path: '/master-data/medicine-categories' },
               { name: 'Obat', path: '/master-data/medicines' }
             ]
           },

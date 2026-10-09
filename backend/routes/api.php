@@ -127,6 +127,9 @@ Route::prefix('v1')->group(function () {
             Route::patch('radiology-groups/{radiology_group}/status', [App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class, 'updateStatus']);
             Route::apiResource('radiology-groups', App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController::class);
 
+            Route::patch('medicine-categories/{medicine_category}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController::class, 'updateStatus']);
+            Route::apiResource('medicine-categories', App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController::class);
+
             Route::patch('medicines/{medicine}/status', [App\Http\Controllers\Api\V1\MasterData\MedicineController::class, 'updateStatus']);
             Route::apiResource('medicines', App\Http\Controllers\Api\V1\MasterData\MedicineController::class);
         });
