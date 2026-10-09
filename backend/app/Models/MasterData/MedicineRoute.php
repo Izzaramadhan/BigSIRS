@@ -13,6 +13,7 @@ class MedicineRoute extends Model
     protected $fillable = [
         'legacy_id',
         'name',
+        'object_code',
         'is_active',
     ];
 

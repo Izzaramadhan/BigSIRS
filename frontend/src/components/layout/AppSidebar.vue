@@ -109,7 +109,8 @@ const navigation = [
               { name: 'Satuan Obat', path: '/master-data/medicine-units' },
               { name: 'Obat', path: '/master-data/medicines' },
               { name: 'Supplier', path: '/master-data/suppliers' },
-              { name: 'Gudang', path: '/master-data/warehouses' }
+              { name: 'Gudang', path: '/master-data/warehouses' },
+              { name: 'Jalur Masuk Obat', path: '/master-data/medication-routes' }
             ]
           },
           {
