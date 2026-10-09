@@ -111,7 +111,8 @@ const navigation = [
               { name: 'Supplier', path: '/master-data/suppliers' },
               { name: 'Gudang', path: '/master-data/warehouses' },
               { name: 'Jalur Masuk Obat', path: '/master-data/medication-routes' },
-              { name: 'Signa Obat', path: '/master-data/medication-signas' }
+              { name: 'Signa Obat', path: '/master-data/medication-signas' },
+              { name: 'Master Paket Obat', path: '/master-data/medicine-packages' }
             ]
           },
           {
