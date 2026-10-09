@@ -8,6 +8,7 @@ use App\Models\Education;
 use App\Models\Employee;
 use App\Models\MasterData\GenericMedicine;
 use App\Models\MasterData\LaboratoryCategory;
+use App\Models\MasterData\MedicationSigna;
 use App\Models\MasterData\MedicineCategory;
 use App\Models\MasterData\MedicineClassification;
 use App\Models\MasterData\MedicineRoute;
@@ -329,6 +330,20 @@ class LookupController extends Controller
     public function medicineRoutes(Request $request)
     {
         $query = MedicineRoute::where('is_active', true);
+        if ($search = $request->get('search')) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
+        return response()->json($query->orderBy('name')->get());
+    }
+
+    public function medicationSignas(Request $request)
+    {
+        $query = MedicationSigna::where('is_active', true);
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
