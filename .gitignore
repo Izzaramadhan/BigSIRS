@@ -2,3 +2,4 @@
 .env.docker.backup
 docker-compose.yml.backup
 backups/
+.env
