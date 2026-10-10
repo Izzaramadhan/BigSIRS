@@ -41,7 +41,10 @@ const filteredOptions = computed(() => {
 });
 
 const selectedItem = computed(() => {
-  return props.options.find(o => o.id === props.modelValue || o.value === props.modelValue);
+  return props.options.find(o => 
+    String(o.id) === String(props.modelValue) || 
+    String(o.value) === String(props.modelValue)
+  );
 });
 
 const getDisplayName = (opt) => {
@@ -101,7 +104,7 @@ onUnmounted(() => {
           v-for="opt in filteredOptions" 
           :key="opt.value !== undefined ? opt.value : opt.id" 
           class="option-item"
-          :class="{ 'is-selected': props.modelValue === (opt.value !== undefined ? opt.value : opt.id) }"
+          :class="{ 'is-selected': String(props.modelValue) === String(opt.value !== undefined ? opt.value : opt.id) }"
           @click.stop="selectOption(opt)"
         >
           {{ getDisplayName(opt) }}
