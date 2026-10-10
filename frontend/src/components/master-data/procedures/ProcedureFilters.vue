@@ -1,0 +1,149 @@
+<script setup>
+import { ref, watch } from 'vue';
+import MasterDataSearchInput from '@/components/master-data/shared/MasterDataSearchInput.vue';
+
+const props = defineProps({
+  filters: {
+    type: Object,
+    required: true
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const emit = defineEmits(['filter', 'refresh']);
+
+const localSearch = ref(props.filters.search);
+let searchTimeout = null;
+
+watch(localSearch, (newVal) => {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    emit('filter', { key: 'search', value: newVal });
+  }, 400);
+});
+
+watch(() => props.filters.search, (newVal) => {
+  if (localSearch.value !== newVal) {
+    localSearch.value = newVal;
+  }
+});
+</script>
+
+<template>
+  <div class="filters-container">
+    <MasterDataSearchInput 
+      v-model="localSearch" 
+      placeholder="Cari nama, kode atau ICD-9..." 
+    />
+    <div class="filter-controls">
+      <select 
+        :value="filters.is_visible === null ? '' : String(filters.is_visible)" 
+        @change="emit('filter', { 
+          key: 'is_visible', 
+          value: $event.target.value === '' ? null : $event.target.value === 'true' 
+        })"
+        class="filter-select"
+        :disabled="loading"
+        aria-label="Filter status aktif"
+      >
+        <option value="">Semua Status</option>
+        <option value="true">Aktif</option>
+        <option value="false">Nonaktif</option>
+      </select>
+      <button 
+        type="button" 
+        class="btn-icon" 
+        @click="emit('refresh')" 
+        title="Refresh Data"
+        :disabled="loading"
+        aria-label="Refresh data"
+      >
+        <svg :class="{ 'spin': loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.filters-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.filter-select {
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--color-text-navy);
+  background-color: #fff;
+  cursor: pointer;
+  appearance: none;
+  min-width: 180px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover:not(:disabled) {
+  background: var(--color-page-bg);
+  color: var(--color-text-navy);
+}
+
+.btn-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+button:disabled, select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+</style>
