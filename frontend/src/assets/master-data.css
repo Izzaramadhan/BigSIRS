@@ -390,10 +390,16 @@
   height: 16px;
 }
 
-.text-center { text-align: center; }
-.text-right { text-align: right; }
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
 .text-muted { color: var(--color-text-secondary); }
 .font-medium { font-weight: 500; }
+
+/* Common Table Column Widths */
+.col-no { width: 48px; text-align: center; }
+.col-name { width: auto; } /* Let name column expand */
+.col-actions { width: 120px; text-align: center; }
+.actions-cell { text-align: center; }
 
 /* Shared filter actions and button icon */
 .filters-actions {
