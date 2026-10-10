@@ -98,7 +98,6 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('educations', EducationController::class);
 
-            Route::patch('occupations/{occupation}/status', [OccupationController::class, 'updateStatus']);
             Route::apiResource('occupations', OccupationController::class);
 
             Route::apiResource('regencies', RegencyController::class);

@@ -69,18 +69,7 @@ export function useOccupations() {
     }
   }
 
-  const updateStatus = async (id, isActive) => {
-    loading.value = true
-    error.value = null
-    try {
-      return await occupationsService.updateStatus(id, isActive)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
+
 
   return {
     occupations,
@@ -90,7 +79,6 @@ export function useOccupations() {
     fetchOccupations,
     createOccupation,
     updateOccupation,
-    deleteOccupation,
-    updateStatus
+    deleteOccupation
   }
 }

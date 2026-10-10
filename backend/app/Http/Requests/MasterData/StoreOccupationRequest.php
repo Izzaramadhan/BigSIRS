@@ -24,7 +24,6 @@ class StoreOccupationRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255', 'unique:occupations,name'],
-            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 
