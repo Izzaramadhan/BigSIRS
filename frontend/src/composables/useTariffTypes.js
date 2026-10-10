@@ -57,21 +57,6 @@ export function useTariffTypes() {
         }
     };
 
-    const updateTariffTypeStatus = async (id, isActive) => {
-        error.value = null;
-        try {
-            const response = await tariffTypeService.updateTariffTypeStatus(id, isActive);
-            const index = tariffTypes.value.findIndex(item => item.id === id);
-            if (index !== -1) {
-                tariffTypes.value[index].is_active = isActive;
-            }
-            return response.data;
-        } catch (err) {
-            error.value = err.response?.data?.message || err.message || 'Gagal memperbarui status jenis tarif';
-            throw err;
-        }
-    };
-
     const deleteTariffType = async (id) => {
         error.value = null;
         loading.value = true;
@@ -99,7 +84,6 @@ export function useTariffTypes() {
         fetchTariffTypes,
         createTariffType,
         updateTariffType,
-        updateTariffTypeStatus,
         deleteTariffType
     };
 }
