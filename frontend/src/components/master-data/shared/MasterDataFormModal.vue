@@ -39,7 +39,7 @@ defineEmits(['close', 'submit']);
           </button>
         </div>
         
-        <form @submit.prevent="$emit('submit')">
+        <form @submit.prevent="$emit('submit')" class="modal-form-wrapper">
           <div class="modal-body">
             <slot></slot>
           </div>
@@ -54,3 +54,12 @@ defineEmits(['close', 'submit']);
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+.modal-form-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+</style>

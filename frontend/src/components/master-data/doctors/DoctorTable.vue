@@ -16,18 +16,11 @@ defineProps({
     type: Boolean,
     default: false
   },
-  statusLoadingId: {
-    type: [Number, String],
-    default: null
-  }
+
 });
 
-const emit = defineEmits(['sort', 'view', 'edit', 'toggle-status', 'delete']);
+const emit = defineEmits(['sort', 'view', 'edit', 'delete']);
 
-const isDoctorActive = (doctor) => {
-  const value = doctor.is_active;
-  return value === true || value === 1 || value === '1' || value === 'true';
-};
 </script>
 
 <template>
@@ -67,23 +60,7 @@ const isDoctorActive = (doctor) => {
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                 </svg>
               </button>
-              <button
-                type="button"
-                class="status-pill"
-                :class="isDoctorActive(item) ? 'status-pill--active' : 'status-pill--inactive'"
-                :disabled="statusLoadingId === item.id"
-                :aria-label="isDoctorActive(item) ? `Nonaktifkan ${item.name}` : `Aktifkan ${item.name}`"
-                :title="isDoctorActive(item) ? 'Klik untuk menonaktifkan Dokter' : 'Klik untuk mengaktifkan Dokter'"
-                @click="emit('toggle-status', item)"
-              >
-                {{
-                  statusLoadingId === item.id
-                    ? 'Memproses...'
-                    : isDoctorActive(item)
-                      ? 'Aktif'
-                      : 'Nonaktif'
-                }}
-              </button>
+              
               <button class="btn-icon btn-icon-danger" @click="emit('delete', item)" title="Hapus" aria-label="Hapus Dokter">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"></polyline>
@@ -184,34 +161,6 @@ const isDoctorActive = (doctor) => {
 
 .text-secondary {
   color: var(--color-text-secondary);
-}
-
-.status-toggle {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.status-toggle.is-active {
-  background: #d1fae5;
-  color: #059669;
-}
-
-.status-toggle.is-active:hover {
-  background: #a7f3d0;
-}
-
-.status-toggle.is-inactive {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.status-toggle.is-inactive:hover {
-  background: #fecaca;
 }
 
 .actions-cell {
