@@ -25,7 +25,7 @@ class ServiceTypeController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $filters = $request->only(['search', 'is_active']);
+        $filters = $request->only(['search']);
         $perPage = $request->integer('per_page', 10);
         $sort = $request->string('sort', 'name')->toString();
         $order = $request->string('order', 'asc')->toString();
@@ -79,20 +79,5 @@ class ServiceTypeController extends Controller
         return response()->json(null, 204);
     }
 
-    /**
-     * Update the active status of the specified resource.
-     */
-    public function updateStatus(Request $request, ServiceType $serviceType): JsonResponse
-    {
-        $validated = $request->validate([
-            'is_active' => 'required|boolean',
-        ]);
 
-        $serviceType = $this->service->update($serviceType, $validated);
-
-        return response()->json([
-            'message' => 'Status jenis layanan berhasil diperbarui',
-            'data' => new ServiceTypeResource($serviceType),
-        ]);
-    }
 }
