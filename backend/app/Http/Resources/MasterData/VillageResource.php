@@ -19,7 +19,6 @@ class VillageResource extends JsonResource
             'legacy_id' => $this->legacy_id,
             'code' => $this->code,
             'name' => $this->name,
-            'is_active' => (bool) $this->is_active,
             'district_id' => $this->district_id,
             'district_name' => $this->whenLoaded('district', fn () => $this->district->name),
             'regency_id' => $this->whenLoaded('district', fn () => $this->district->regency_id),
