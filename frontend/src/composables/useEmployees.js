@@ -1,94 +1,123 @@
-import { ref } from 'vue';
+import { ref, reactive } from 'vue';
 import employeeService from '../services/employee.service';
 
 export function useEmployees() {
-  const employees = ref([]);
+  const items = ref([]);
+  const pagination = reactive({
+    current_page: 1,
+    last_page: 1,
+    per_page: 15,
+    total: 0
+  });
+  const filters = reactive({
+    search: '',
+  });
+  const sort = reactive({
+    column: 'created_at',
+    direction: 'desc'
+  });
+
   const loading = ref(false);
+  const submitting = ref(false);
   const error = ref(null);
-  const meta = ref(null);
 
-  const fetchEmployees = async (params = {}) => {
+  const fetchEmployees = async () => {
     loading.value = true;
     error.value = null;
+
     try {
+      const params = {
+        page: pagination.current_page,
+        per_page: pagination.per_page,
+        sort_by: sort.column,
+        sort_desc: sort.direction === 'desc' ? 1 : 0
+      };
+
+      if (filters.search) params.search = filters.search;
+
       const response = await employeeService.getEmployees(params);
-      // Laravel paginate returns items in .data and pagination info in root (if not wrapped in API Resource)
-      employees.value = response.data || [];
-      meta.value = response.meta || response;
+
+      // The Employee API returns a raw Laravel paginator:
+      // { current_page, data: [...], last_page, per_page, total, ... }
+      // NOT wrapped in Resource format { data: [...], meta: {...} }
+      items.value = response.data || [];
+
+      // Read pagination from top-level keys (raw paginator)
+      // with fallback to meta (Resource format) for forward-compatibility
+      const meta = response.meta || response;
+      if (meta) {
+        pagination.current_page = meta.current_page ?? pagination.current_page;
+        pagination.last_page = meta.last_page ?? pagination.last_page;
+        pagination.per_page = meta.per_page ?? pagination.per_page;
+        pagination.total = meta.total ?? pagination.total;
+      }
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memuat data pegawai';
+      error.value = err.response?.data?.message || 'Data Pegawai gagal dimuat.';
     } finally {
       loading.value = false;
     }
   };
 
-  const createEmployee = async (data) => {
-    loading.value = true;
-    error.value = null;
+
+  const createEmployee = async (payload) => {
+    submitting.value = true;
     try {
-      await employeeService.createEmployee(data);
-      return true;
+      await employeeService.createEmployee(payload);
+      return { success: true };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menambahkan pegawai';
-      if (err.response?.data?.errors) {
-        throw err.response.data.errors;
-      }
-      return false;
+      return { success: false, error: err };
     } finally {
-      loading.value = false;
+      submitting.value = false;
     }
   };
 
-  const updateEmployee = async (id, data) => {
-    loading.value = true;
-    error.value = null;
+  const updateEmployee = async (id, payload) => {
+    submitting.value = true;
     try {
-      await employeeService.updateEmployee(id, data);
-      return true;
+      await employeeService.updateEmployee(id, payload);
+      return { success: true };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui pegawai';
-      if (err.response?.data?.errors) {
-        throw err.response.data.errors;
-      }
-      return false;
+      return { success: false, error: err };
     } finally {
-      loading.value = false;
+      submitting.value = false;
     }
   };
 
   const deleteEmployee = async (id) => {
-    loading.value = true;
-    error.value = null;
     try {
       await employeeService.deleteEmployee(id);
-      return true;
+      return { success: true };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menghapus pegawai';
-      return false;
-    } finally {
-      loading.value = false;
+      return { success: false, error: err };
     }
   };
 
-  const updateStatus = async (id, isActive) => {
-    try {
-      await employeeService.updateStatus(id, isActive);
-      return true;
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status pegawai';
-      return false;
+  const setPage = (page) => {
+    if (page >= 1 && page <= pagination.last_page) {
+      pagination.current_page = page;
+      fetchEmployees();
     }
+  };
+
+  const setSort = ({ column, direction }) => {
+    sort.column = column;
+    sort.direction = direction;
+    fetchEmployees();
   };
 
   return {
-    employees,
+    items,
+    pagination,
+    filters,
+    sort,
     loading,
+    submitting,
     error,
-    meta,
     fetchEmployees,
     createEmployee,
     updateEmployee,
     deleteEmployee,
-    updateStatus,
+    setPage,
+    setSort
   };
 }
