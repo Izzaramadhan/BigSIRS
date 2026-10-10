@@ -59,14 +59,11 @@ const handleSubmit = async () => {
   try {
     if (props.serviceType) {
       await updateServiceType(props.serviceType.id, {
-        name: form.value.name,
-        // Default to active if the status has been removed from UI
-        is_active: true
+        name: form.value.name
       })
     } else {
       await createServiceType({
-        name: form.value.name,
-        is_active: true
+        name: form.value.name
       })
     }
     emit('success')

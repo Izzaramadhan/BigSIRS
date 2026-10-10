@@ -32,7 +32,6 @@ class ServiceTypeRequest extends FormRequest
                 'max:255',
                 Rule::unique('service_types', 'name')->ignore($id)->whereNull('deleted_at'),
             ],
-            'is_active' => 'boolean',
         ];
     }
 
@@ -45,7 +44,6 @@ class ServiceTypeRequest extends FormRequest
     {
         return [
             'name' => 'nama jenis layanan',
-            'is_active' => 'status aktif',
         ];
     }
 

@@ -106,7 +106,6 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('villages', VillageController::class);
 
-            Route::patch('service-types/{service_type}/status', [ServiceTypeController::class, 'updateStatus']);
             Route::apiResource('service-types', ServiceTypeController::class);
 
             Route::patch('diet-types/{diet_type}/status', [DietTypeController::class, 'updateStatus']);
