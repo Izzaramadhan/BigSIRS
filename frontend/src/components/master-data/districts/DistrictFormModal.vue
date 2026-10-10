@@ -21,8 +21,7 @@ const { createDistrict, updateDistrict, loading } = useDistricts()
 const form = ref({
   code: '',
   name: '',
-  regency_id: '',
-  is_active: true
+  regency_id: ''
 })
 
 const errors = ref({})
@@ -52,15 +51,13 @@ watch(() => props.isOpen, (newVal) => {
       form.value = { 
         code: props.district.code || '',
         name: props.district.name,
-        regency_id: props.district.regency_id,
-        is_active: props.district.is_active ?? true
+        regency_id: props.district.regency_id
       }
     } else {
       form.value = {
         code: '',
         name: '',
-        regency_id: '',
-        is_active: true
+        regency_id: ''
       }
     }
     errors.value = {}
@@ -176,16 +173,7 @@ const handleSubmit = async () => {
               </span>
             </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  v-model="form.is_active"
-                  class="form-checkbox"
-                />
-                Status Aktif
-              </label>
-            </div>
+
           </div>
 
           <div class="modal-footer">
@@ -320,19 +308,6 @@ const handleSubmit = async () => {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-weight: normal;
-}
-
-.form-checkbox {
-  width: 1rem;
-  height: 1rem;
-  cursor: pointer;
-}
 
 .error-text {
   display: block;

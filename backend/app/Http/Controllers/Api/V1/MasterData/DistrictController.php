@@ -64,15 +64,6 @@ class DistrictController extends Controller
         return new DistrictResource($district);
     }
 
-    public function updateStatus(Request $request, District $district)
-    {
-        $request->validate(['is_active' => 'required|boolean']);
-
-        $district->update(['is_active' => $request->is_active]);
-        $district->load('regency');
-
-        return new DistrictResource($district);
-    }
 
     public function destroy(District $district)
     {
