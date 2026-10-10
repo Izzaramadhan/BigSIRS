@@ -29,8 +29,8 @@ export function useLetterTypes() {
       return true;
     } catch (err) {
       error.value = err.response?.data?.message || 'Gagal menambahkan surat';
-      if (err.response?.data?.errors) {
-        throw err.response.data.errors;
+      if (err.response?.data?.errors || err.response?.status === 422 || err.response?.status === 409) {
+        throw err;
       }
       return false;
     } finally {
@@ -46,8 +46,8 @@ export function useLetterTypes() {
       return true;
     } catch (err) {
       error.value = err.response?.data?.message || 'Gagal memperbarui surat';
-      if (err.response?.data?.errors) {
-        throw err.response.data.errors;
+      if (err.response?.data?.errors || err.response?.status === 422 || err.response?.status === 409) {
+        throw err;
       }
       return false;
     } finally {
@@ -63,21 +63,15 @@ export function useLetterTypes() {
       return true;
     } catch (err) {
       error.value = err.response?.data?.message || 'Gagal menghapus surat';
+      if (err.response?.status === 409 || err.response?.data?.message) {
+        throw err;
+      }
       return false;
     } finally {
       loading.value = false;
     }
   };
 
-  const updateStatus = async (id, isActive) => {
-    try {
-      await letterTypeService.updateStatus(id, isActive);
-      return true;
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status surat';
-      return false;
-    }
-  };
 
   return {
     letterTypes,
@@ -87,7 +81,6 @@ export function useLetterTypes() {
     fetchLetterTypes,
     createLetterType,
     updateLetterType,
-    deleteLetterType,
-    updateStatus,
+    deleteLetterType
   };
 }

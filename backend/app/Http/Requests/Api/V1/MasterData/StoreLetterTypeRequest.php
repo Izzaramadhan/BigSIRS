@@ -17,6 +17,7 @@ class StoreLetterTypeRequest extends FormRequest
         return [
             'name' => 'required|string|max:255|unique:letter_types,name',
             'description' => 'nullable|string',
+            'legacy_resource' => 'nullable|string|max:255',
             'is_active' => 'boolean',
         ];
     }
@@ -28,6 +29,8 @@ class StoreLetterTypeRequest extends FormRequest
             'name.string' => 'Nama surat harus berupa teks.',
             'name.max' => 'Nama surat maksimal 255 karakter.',
             'name.unique' => 'Nama surat sudah digunakan.',
+            'legacy_resource.string' => 'Resource harus berupa teks.',
+            'legacy_resource.max' => 'Resource maksimal 255 karakter.',
             'is_active.boolean' => 'Status harus berupa true atau false.',
         ];
     }
