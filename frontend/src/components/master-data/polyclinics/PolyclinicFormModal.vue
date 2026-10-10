@@ -1,6 +1,8 @@
 <script setup>
-import { reactive, watch } from 'vue';
+import { reactive, watch, ref } from 'vue';
 import { polyclinicService } from '@/services/polyclinic';
+import lookupService from '@/services/lookup.service';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -21,8 +23,11 @@ const form = reactive({
   is_online_visible: false,
   quota: 0,
   jkn_quota: 0,
-  bpjs_code: '',
+  warehouse_id: '',
 });
+
+const warehouses = ref([]);
+const loadingWarehouses = ref(false);
 
 const populateForm = (data) => {
   form.code = data.code || '';
@@ -33,7 +38,7 @@ const populateForm = (data) => {
   form.is_online_visible = data.is_online_visible !== undefined ? data.is_online_visible : false;
   form.quota = data.quota ?? 0;
   form.jkn_quota = data.jkn_quota ?? 0;
-  form.bpjs_code = data.bpjs_code || '';
+  form.warehouse_id = data.warehouse_id || '';
 };
 
 const resetForm = () => {
@@ -45,7 +50,7 @@ const resetForm = () => {
   form.is_online_visible = false;
   form.quota = 0;
   form.jkn_quota = 0;
-  form.bpjs_code = '';
+  form.warehouse_id = '';
 };
 
 watch(() => props.isOpen, async (isOpen) => {
@@ -63,7 +68,17 @@ watch(() => props.isOpen, async (isOpen) => {
   } else {
     resetForm();
   }
-});
+
+  // Load warehouses
+  loadingWarehouses.value = true;
+  try {
+    warehouses.value = await lookupService.getWarehouses();
+  } catch (err) {
+    console.error('Failed to load warehouses', err);
+  } finally {
+    loadingWarehouses.value = false;
+  }
+}, { immediate: true });
 
 const handleSubmit = () => {
   const payload = {
@@ -75,7 +90,7 @@ const handleSubmit = () => {
     is_online_visible: form.is_online_visible,
     quota: parseInt(form.quota) || 0,
     jkn_quota: parseInt(form.jkn_quota) || 0,
-    bpjs_code: form.bpjs_code.trim() || null,
+    warehouse_id: form.warehouse_id || null,
   };
   emit('submit', payload);
 };
@@ -84,20 +99,15 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-overlay" @click.self="$emit('close')" role="dialog" aria-modal="true">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>{{ polyclinic ? 'Edit Poliklinik' : 'Tambah Poliklinik' }}</h3>
-          <button type="button" class="btn-close" @click="$emit('close')" aria-label="Tutup modal">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        
-        <form @submit.prevent="handleSubmit" class="modal-form">
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="polyclinic ? 'Edit Poliklinik' : 'Tambah Poliklinik'"
+    :is-submitting="isSubmitting"
+    size="md"
+    @close="$emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form">
           <!-- General error -->
           <div v-if="errors.general" class="alert-error">
             {{ errors.general }}
@@ -187,18 +197,23 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
               </div>
             </div>
 
-            <!-- 6. Gudang Default (pending) -->
+            <!-- 6. Gudang Default -->
             <div class="form-group">
-              <label class="form-label">Gudang Default</label>
-              <input
-                type="text"
-                class="form-control"
-                disabled
-                value=""
-                placeholder="Master Gudang belum tersedia"
-                title="Field ini akan aktif setelah Master Gudang diimplementasikan"
+              <label for="warehouse_id" class="form-label">Gudang Default</label>
+              <select
+                id="warehouse_id"
+                v-model="form.warehouse_id"
+                class="form-control form-select"
+                :class="{ 'is-invalid': fieldError('warehouse_id') }"
+                :disabled="loadingWarehouses"
               >
-              <p class="field-note">Menunggu implementasi Master Gudang.</p>
+                <option value="">Pilih Gudang Default</option>
+                <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">
+                  {{ wh.code ? `${wh.code} — ${wh.name}` : wh.name }}
+                </option>
+              </select>
+              <div v-if="loadingWarehouses" class="text-xs text-muted mt-1">Memuat daftar gudang...</div>
+              <div v-else-if="fieldError('warehouse_id')" class="invalid-feedback">{{ fieldError('warehouse_id') }}</div>
             </div>
 
             <!-- 7. Kuota -->
@@ -230,99 +245,13 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
               >
               <div v-if="fieldError('jkn_quota')" class="invalid-feedback">{{ fieldError('jkn_quota') }}</div>
             </div>
-
-            <!-- 9. Kode BPJS -->
-            <div class="form-group form-group--full">
-              <label for="bpjs_code" class="form-label">Kode BPJS</label>
-              <input
-                id="bpjs_code"
-                v-model="form.bpjs_code"
-                type="text"
-                class="form-control"
-                :class="{ 'is-invalid': fieldError('bpjs_code') }"
-                placeholder="Kode bridging BPJS (opsional)"
-                maxlength="50"
-              >
-              <div v-if="fieldError('bpjs_code')" class="invalid-feedback">{{ fieldError('bpjs_code') }}</div>
-            </div>
           </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn-cancel" @click="$emit('close')" :disabled="isSubmitting">
-              Batal
-            </button>
-            <button type="submit" class="btn-submit" :disabled="isSubmitting">
-              <span v-if="isSubmitting" class="spinner"></span>
-              {{ isSubmitting ? 'Menyimpan...' : (polyclinic ? 'Simpan Perubahan' : 'Tambah Poliklinik') }}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
-  </Teleport>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
-  padding: 1rem;
-  backdrop-filter: blur(2px);
-}
 
-.modal-content {
-  background: #ffffff;
-  border-radius: 12px;
-  width: 100%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  z-index: 1;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  padding: 0.25rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s;
-}
-
-.btn-close:hover { color: var(--color-text-navy); background: var(--color-page-bg); }
-
-.btn-close svg { width: 20px; height: 20px; }
-
-.modal-form {
-  padding: 1.5rem;
-}
 
 .alert-error {
   background: #fef2f2;
@@ -340,79 +269,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
   gap: 1.25rem;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
 
-.form-group--full {
-  grid-column: 1 / -1;
-}
-
-.form-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-navy);
-}
-
-.form-label.required::after {
-  content: ' *';
-  color: #ef4444;
-}
-
-.form-control {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
-  transition: all 0.2s;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.form-control.is-invalid {
-  border-color: #ef4444;
-}
-
-.form-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-right: 2.5rem;
-  cursor: pointer;
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.form-control:disabled {
-  background: #f8fafc;
-  color: #94a3b8;
-  cursor: not-allowed;
-}
-
-.invalid-feedback {
-  font-size: 0.8rem;
-  color: #ef4444;
-}
-
-.field-note {
-  font-size: 0.78rem;
-  color: var(--color-text-secondary);
-  margin: 0;
-  font-style: italic;
-}
 
 /* Toggle styles */
 .toggle-group {
@@ -469,62 +326,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
   color: var(--color-text-navy);
 }
 
-/* Footer */
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding-top: 1.5rem;
-  margin-top: 0.5rem;
-  border-top: 1px solid var(--color-border-soft);
-}
 
-.btn-cancel {
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-soft);
-  padding: 0.55rem 1.25rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-cancel:hover:not(:disabled) {
-  background: var(--color-page-bg);
-}
-
-.btn-submit {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  padding: 0.55rem 1.5rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-submit:hover:not(:disabled) { opacity: 0.9; }
-.btn-submit:disabled, .btn-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 
 @media (max-width: 600px) {
   .form-grid {

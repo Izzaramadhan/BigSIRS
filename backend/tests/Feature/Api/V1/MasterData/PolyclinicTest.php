@@ -30,7 +30,6 @@ class PolyclinicTest extends TestCase
             'is_online_visible' => false,
             'quota' => 20,
             'jkn_quota' => 10,
-            'bpjs_code' => 'B001',
         ], $overrides);
     }
 
@@ -109,7 +108,6 @@ class PolyclinicTest extends TestCase
             'service_type' => 'rawat-jalan',
             'quota' => 20,
             'jkn_quota' => 10,
-            'bpjs_code' => 'B001',
             'is_visible' => true,
             'is_online_visible' => false,
         ]);
@@ -291,13 +289,4 @@ class PolyclinicTest extends TestCase
         $this->assertDatabaseCount('polyclinics', 6);
     }
 
-    public function test_bpjs_code_trimmed_and_nullified_when_empty(): void
-    {
-        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $this->validPayload([
-            'bpjs_code' => '   ',
-        ]));
-
-        $response->assertCreated();
-        $this->assertDatabaseHas('polyclinics', ['code' => 'POLI-01', 'bpjs_code' => null]);
-    }
 }

@@ -87,19 +87,16 @@ class WarehouseController extends Controller
             $isUsedInPolyclinic = Polyclinic::where('legacy_default_warehouse_id', $warehouse->legacy_id)->exists();
             if ($isUsedInPolyclinic) {
                 return response()->json([
-                    'message' => 'Gudang tidak dapat dihapus karena masih digunakan oleh unit pelayanan atau transaksi logistik.',
-                ], 403);
+                    'message' => 'Gudang tidak dapat dihapus karena masih digunakan sebagai gudang default pada poliklinik.',
+                ], 409);
             }
         }
 
-        // As a safeguard if we added warehouse_id to Polyclinic table in the future
-        if (Schema::hasColumn('polyclinics', 'warehouse_id')) {
-            $isUsedInPolyclinicDirectly = Polyclinic::where('warehouse_id', $warehouse->id)->exists();
-            if ($isUsedInPolyclinicDirectly) {
-                return response()->json([
-                    'message' => 'Gudang tidak dapat dihapus karena masih digunakan oleh unit pelayanan atau transaksi logistik.',
-                ], 403);
-            }
+        $isUsedInPolyclinicDirectly = Polyclinic::where('warehouse_id', $warehouse->id)->exists();
+        if ($isUsedInPolyclinicDirectly) {
+            return response()->json([
+                'message' => 'Gudang tidak dapat dihapus karena masih digunakan sebagai gudang default pada poliklinik.',
+            ], 409);
         }
 
         $warehouse->delete();

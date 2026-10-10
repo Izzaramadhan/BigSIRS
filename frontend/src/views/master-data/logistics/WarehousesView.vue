@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useWarehouses } from '@/composables/useWarehouses'
-import warehouseFormModal from '@/views/master-data/logistics/components/warehouseFormModal.vue'
+import WarehouseFormModal from '@/views/master-data/logistics/components/WarehouseFormModal.vue'
 
 const {
   warehouses,
@@ -295,7 +295,7 @@ const getRowNumber = (index) => {
       </template>
     </div>
     
-    <warehouseFormModal 
+    <WarehouseFormModal 
       :is-open="isFormModalOpen"
       :warehouse="selectedwarehouse"
       @close="isFormModalOpen = false"

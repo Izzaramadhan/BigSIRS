@@ -130,7 +130,7 @@ class WarehouseControllerTest extends TestCase
 
         $response = $this->deleteJson('/api/v1/master-data/warehouses/'.$warehouse->id);
 
-        $response->assertStatus(403);
+        $response->assertStatus(409);
         $this->assertDatabaseHas('warehouses', ['id' => $warehouse->id, 'deleted_at' => null]);
     }
 }

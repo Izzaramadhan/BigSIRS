@@ -70,8 +70,7 @@ class Polyclinic extends Model
 
         return $query->where(function ($query) use ($term) {
             $query->where('code', 'like', $term)
-                ->orWhere('name', 'like', $term)
-                ->orWhere('bpjs_code', 'like', $term);
+                ->orWhere('name', 'like', $term);
         });
     }
 }

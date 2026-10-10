@@ -4,8 +4,12 @@ import { usePolyclinics } from '@/composables/usePolyclinics';
 import PolyclinicTable from '@/components/master-data/polyclinics/PolyclinicTable.vue';
 import PolyclinicFilters from '@/components/master-data/polyclinics/PolyclinicFilters.vue';
 import PolyclinicFormModal from '@/components/master-data/polyclinics/PolyclinicFormModal.vue';
-import PolyclinicDeleteDialog from '@/components/master-data/polyclinics/PolyclinicDeleteDialog.vue';
-import PolyclinicEmptyState from '@/components/master-data/polyclinics/PolyclinicEmptyState.vue';
+import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
+import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
+import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
+import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
+import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
+import AppToast from '@/components/common/AppToast.vue';
 
 const {
   items,
@@ -20,7 +24,6 @@ const {
   fetchServiceTypes,
   createPolyclinic,
   updatePolyclinic,
-  toggleStatus,
   archivePolyclinic,
   setPage,
   setSort
@@ -30,13 +33,19 @@ const formModalOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const selectedPolyclinic = ref(null);
 const formErrors = ref({});
-const notification = ref(null);
+const toast = ref({
+  show: false,
+  type: 'success',
+  title: '',
+  message: ''
+});
 
-const showNotification = (message, type = 'success') => {
-  notification.value = { message, type };
-  setTimeout(() => {
-    notification.value = null;
-  }, 3000);
+const showToast = ({ type = 'success', title, message }) => {
+  toast.value = { show: true, type, title, message };
+};
+
+const closeToast = () => {
+  toast.value.show = false;
 };
 
 const openAddModal = () => {
@@ -62,19 +71,13 @@ const handleFilter = ({ key, value }) => {
   fetchPolyclinics();
 };
 
-const handleResetFilters = () => {
-  filters.search = '';
-  filters.is_active = null;
-  filters.service_type = null;
-  pagination.current_page = 1;
-  fetchPolyclinics();
-};
-
 const handleFormSubmit = async (payload) => {
   formErrors.value = {};
   
+  const isEditing = Boolean(selectedPolyclinic.value);
   let result;
-  if (selectedPolyclinic.value) {
+  
+  if (isEditing) {
     result = await updatePolyclinic(selectedPolyclinic.value.id, payload);
   } else {
     result = await createPolyclinic(payload);
@@ -82,35 +85,55 @@ const handleFormSubmit = async (payload) => {
   
   if (result.success) {
     formModalOpen.value = false;
-    showNotification(`Poliklinik berhasil ${selectedPolyclinic.value ? 'diperbarui' : 'ditambahkan'}.`);
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: isEditing 
+        ? 'Data Poliklinik berhasil diperbarui.' 
+        : 'Data Poliklinik berhasil ditambahkan.'
+    });
     fetchPolyclinics();
   } else {
     if (result.error.response?.status === 422) {
       formErrors.value = result.error.response.data.errors || {};
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: isEditing 
+          ? 'Data Poliklinik gagal diperbarui. Silakan coba lagi.' 
+          : 'Data Poliklinik gagal ditambahkan. Silakan periksa kembali data yang dimasukkan.'
+      });
     } else if (result.error.response?.status === 409) {
       formErrors.value = { general: 'Terdapat poliklinik turunan, periksa konfigurasi induk.' };
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: 'Terdapat poliklinik turunan, periksa konfigurasi induk.'
+      });
     } else {
       formErrors.value = { general: 'Terjadi kesalahan sistem. Silakan coba lagi.' };
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: isEditing 
+          ? 'Data Poliklinik gagal diperbarui. Silakan coba lagi.' 
+          : 'Data Poliklinik gagal ditambahkan. Silakan coba lagi.'
+      });
     }
   }
 };
 
-const handleToggleStatus = async (item) => {
-  const result = await toggleStatus(item.id, !item.is_active);
-  if (result.success) {
-    showNotification('Status Poliklinik berhasil diubah.');
-    fetchPolyclinics();
-  } else {
-    showNotification('Gagal mengubah status Poliklinik.', 'error');
-  }
-};
 
 const handleDeleteConfirm = async () => {
   const result = await archivePolyclinic(selectedPolyclinic.value.id);
   
   if (result.success) {
     deleteDialogOpen.value = false;
-    showNotification('Poliklinik berhasil diarsipkan.');
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: 'Data Poliklinik berhasil diarsipkan.'
+    });
     
     // Adjust pagination if needed
     if (items.value.length === 1 && pagination.current_page > 1) {
@@ -119,11 +142,19 @@ const handleDeleteConfirm = async () => {
     
     fetchPolyclinics();
   } else {
+    let errorMessage = 'Data Poliklinik gagal diarsipkan. Silakan coba lagi.';
+    
     if (result.error.response?.status === 409) {
-      showNotification('Poliklinik tidak dapat diarsipkan karena masih memiliki poliklinik turunan.', 'error');
-    } else {
-      showNotification('Terjadi kesalahan saat mengarsipkan data.', 'error');
+      errorMessage = result.error.response.data.message || 'Poliklinik tidak dapat diarsipkan karena masih memiliki poliklinik turunan.';
+    } else if (result.error.response?.data?.message) {
+      errorMessage = result.error.response.data.message;
     }
+    
+    showToast({
+      type: 'error',
+      title: 'Gagal Mengarsipkan',
+      message: errorMessage
+    });
     deleteDialogOpen.value = false;
   }
 };
@@ -136,26 +167,25 @@ onMounted(() => {
 
 <template>
   <div class="page-container">
-    <!-- Notification Toast -->
-    <div v-if="notification" class="notification-toast" :class="`toast-${notification.type}`">
-      {{ notification.message }}
-    </div>
+    <AppToast 
+      :show="toast.show"
+      :type="toast.type"
+      :title="toast.title"
+      :message="toast.message"
+      @close="closeToast"
+    />
 
     <!-- Header -->
-    <div class="page-header">
-      <div class="header-content">
-        <div class="breadcrumbs">
-          <span>Dashboard</span>
-          <span class="separator">/</span>
-          <span>Master Data</span>
-          <span class="separator">/</span>
-          <span class="current">Poliklinik</span>
-        </div>
-        <h1 class="page-title">Poliklinik</h1>
-        <p class="page-subtitle">Kelola data poliklinik dan kode integrasi pelayanan.</p>
-      </div>
-      
-      <div class="header-actions">
+    <MasterDataPageHeader 
+      title="Poliklinik"
+      subtitle="Kelola data poliklinik dan kode integrasi pelayanan."
+      :breadcrumbs="[
+        { label: 'Dashboard', active: false },
+        { label: 'Master Data', active: false },
+        { label: 'Poliklinik', active: true }
+      ]"
+    >
+      <template #actions>
         <button type="button" class="btn-primary" @click="openAddModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -163,8 +193,8 @@ onMounted(() => {
           </svg>
           Tambah Poliklinik
         </button>
-      </div>
-    </div>
+      </template>
+    </MasterDataPageHeader>
 
     <!-- Content -->
     <div class="page-content">
@@ -172,29 +202,24 @@ onMounted(() => {
         :filters="filters"
         :loading="loading"
         @filter="handleFilter"
-        @reset="handleResetFilters"
         @refresh="fetchPolyclinics"
       />
       
-      <div v-if="error" class="error-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-        <p>{{ error }}</p>
-        <button class="btn-outline" @click="fetchPolyclinics">Coba Lagi</button>
-      </div>
+      <MasterDataErrorState 
+        v-if="error" 
+        :error="error" 
+        @retry="fetchPolyclinics" 
+      />
       
       <template v-else>
-        <PolyclinicEmptyState 
+        <MasterDataEmptyState 
           v-if="!loading && items.length === 0" 
-          :is-search="!!filters.search || filters.is_active !== null || !!filters.service_type"
+          :is-search="!!filters.search || filters.is_active !== null"
         >
-          <template #action v-if="!filters.search && filters.is_active === null && !filters.service_type">
+          <template #action v-if="!filters.search && filters.is_active === null">
             <button class="btn-primary" @click="openAddModal">Tambah Poliklinik</button>
           </template>
-        </PolyclinicEmptyState>
+        </MasterDataEmptyState>
         
         <template v-else>
           <PolyclinicTable 
@@ -204,50 +229,15 @@ onMounted(() => {
             :loading="loading"
             @sort="setSort"
             @edit="openEditModal"
-            @toggle-status="handleToggleStatus"
             @delete="openDeleteDialog"
           />
           
-          <!-- Pagination -->
-          <div class="pagination-container" v-if="pagination.last_page > 1">
-            <div class="pagination-info">
-              Menampilkan {{ (pagination.current_page - 1) * pagination.per_page + (items.length > 0 ? 1 : 0) }} 
-              sampai {{ (pagination.current_page - 1) * pagination.per_page + items.length }} 
-              dari {{ pagination.total }} entri
-            </div>
-            
-            <div class="pagination-controls">
-              <button 
-                class="page-btn" 
-                :disabled="pagination.current_page === 1 || loading"
-                @click="setPage(pagination.current_page - 1)"
-              >
-                Sebelumnya
-              </button>
-              
-              <div class="page-numbers">
-                <button 
-                  v-for="p in pagination.last_page" 
-                  :key="p"
-                  class="page-btn page-number"
-                  :class="{ 'active': p === pagination.current_page }"
-                  @click="setPage(p)"
-                  :disabled="loading"
-                  v-show="p === 1 || p === pagination.last_page || Math.abs(p - pagination.current_page) <= 1"
-                >
-                  {{ p }}
-                </button>
-              </div>
-              
-              <button 
-                class="page-btn" 
-                :disabled="pagination.current_page === pagination.last_page || loading"
-                @click="setPage(pagination.current_page + 1)"
-              >
-                Selanjutnya
-              </button>
-            </div>
-          </div>
+          <MasterDataPagination 
+            :pagination="pagination"
+            :loading="loading"
+            :item-count="items.length"
+            @page-change="setPage"
+          />
         </template>
       </template>
     </div>
@@ -263,9 +253,11 @@ onMounted(() => {
       @submit="handleFormSubmit"
     />
     
-    <PolyclinicDeleteDialog 
+    <MasterDataDeleteDialog 
       :is-open="deleteDialogOpen"
-      :polyclinic="selectedPolyclinic"
+      title="Arsipkan Poliklinik?"
+      :item-name="selectedPolyclinic ? `${selectedPolyclinic.code} - ${selectedPolyclinic.name}` : ''"
+      warning-message="Poliklinik yang diarsipkan tidak akan tampil pada daftar aktif. Data ini tidak dihapus permanen."
       :is-submitting="submitting"
       @close="deleteDialogOpen = false"
       @confirm="handleDeleteConfirm"
@@ -274,207 +266,5 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.page-container {
-  max-width: 100%;
-  position: relative;
-}
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.breadcrumbs {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.75rem;
-}
-
-.separator {
-  color: var(--color-border-soft);
-}
-
-.current {
-  color: var(--color-primary);
-  font-weight: 500;
-}
-
-.page-title {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-}
-
-.page-subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
-}
-
-.btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  padding: 0.6rem 1.25rem;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-
-.btn-outline {
-  background: transparent;
-  color: var(--color-primary);
-  border: 1px solid var(--color-primary);
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.btn-outline:hover {
-  background: var(--color-primary-light);
-}
-
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem;
-  background: #fef2f2;
-  border-radius: 8px;
-  color: #991b1b;
-  text-align: center;
-}
-
-.error-state svg {
-  width: 48px;
-  height: 48px;
-  color: #ef4444;
-  margin-bottom: 1rem;
-}
-
-.error-state p {
-  margin: 0 0 1rem 0;
-  font-weight: 500;
-}
-
-.pagination-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 1.5rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.pagination-info {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.page-numbers {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.page-btn {
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-navy);
-  padding: 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.page-btn:hover:not(:disabled) {
-  background: var(--color-page-bg);
-}
-
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.page-number {
-  min-width: 32px;
-  text-align: center;
-}
-
-.page-number.active {
-  background: var(--color-primary);
-  color: #ffffff;
-  border-color: var(--color-primary);
-}
-
-.notification-toast {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  color: #ffffff;
-  font-weight: 500;
-  font-size: 0.9rem;
-  z-index: 1000;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  animation: slideIn 0.3s ease-out forwards;
-}
-
-.toast-success {
-  background-color: #10b981;
-}
-
-.toast-error {
-  background-color: #ef4444;
-}
-
-@keyframes slideIn {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-@media (max-width: 640px) {
-  .page-header {
-    flex-direction: column;
-  }
-  
-  .pagination-container {
-    flex-direction: column;
-    align-items: center;
-  }
-}
 </style>

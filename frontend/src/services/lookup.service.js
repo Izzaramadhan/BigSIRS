@@ -49,6 +49,11 @@ class LookupService {
     const response = await axios.get('/lookups/occupations', { params })
     return extractCollection(response)
   }
+
+  async getWarehouses(params = {}) {
+    const response = await axios.get('/lookups/warehouses', { params })
+    return extractCollection(response)
+  }
 }
 
 export default new LookupService()
