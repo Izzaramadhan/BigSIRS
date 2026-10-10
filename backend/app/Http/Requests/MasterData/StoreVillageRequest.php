@@ -19,12 +19,11 @@ class StoreVillageRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists('districts', 'id')->where(function ($query) {
-                    $query->where('is_active', true)->whereNull('deleted_at');
+                    $query->whereNull('deleted_at');
                 }),
             ],
             'code' => ['nullable', 'string', 'max:50', 'unique:villages,code'],
             'name' => ['required', 'string', 'max:255'],
-            'is_active' => ['boolean'],
         ];
     }
 
