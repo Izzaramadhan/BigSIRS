@@ -24,7 +24,7 @@ class MedicalProcedureController extends Controller
             'tariffs.tariffType',
         ]);
 
-        if ($request->has('search') && $request->search !== '') {
+        if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -36,23 +36,23 @@ class MedicalProcedureController extends Controller
             });
         }
 
-        if ($request->has('procedure_category_id') && $request->procedure_category_id !== '') {
+        if ($request->filled('procedure_category_id')) {
             $query->where('procedure_category_id', $request->procedure_category_id);
         }
 
-        if ($request->has('tariff_type_id') && $request->tariff_type_id !== '') {
+        if ($request->filled('tariff_type_id')) {
             $query->whereHas('tariffs', function ($q) use ($request) {
                 $q->where('tariff_type_id', $request->tariff_type_id);
             });
         }
 
-        if ($request->has('polyclinic_id') && $request->polyclinic_id !== '') {
+        if ($request->filled('polyclinic_id')) {
             $query->whereHas('polyclinics', function ($q) use ($request) {
                 $q->where('polyclinics.id', $request->polyclinic_id);
             });
         }
 
-        if ($request->has('is_visible') && $request->is_visible !== '') {
+        if ($request->has('is_visible') && $request->is_visible !== null) {
             $query->where('is_visible', $request->is_visible === 'true' || $request->is_visible === '1');
         }
 
@@ -268,11 +268,11 @@ class MedicalProcedureController extends Controller
                 }
 
                 if (! in_array($compId, $allowedComponentIds)) {
-                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ['Component is not part of the selected Tariff Type.'];
+                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ['Komponen tidak termasuk dalam jenis tarif yang dipilih.'];
                 }
 
                 if (in_array($compId, $providedComponentIds)) {
-                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ['Duplicate Component in Tariff Type.'];
+                    $errors["tariffs.{$i}.components.{$j}.tariff_component_id"] = ['Komponen duplikat dalam Jenis Tarif.'];
                 }
                 $providedComponentIds[] = $compId;
             }

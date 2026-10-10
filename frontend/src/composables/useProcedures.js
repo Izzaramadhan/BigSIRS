@@ -1,11 +1,18 @@
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import procedureService from '@/services/procedure';
 
 export function useProcedures() {
     const procedures = ref([]);
-    const totalItems = ref(0);
-    const currentPage = ref(1);
-    const perPage = ref(10);
+    
+    const pagination = reactive({
+      current_page: 1,
+      last_page: 1,
+      per_page: 10,
+      total: 0,
+      from: 0,
+      to: 0
+    });
+
     const loading = ref(false);
     const error = ref(null);
 
@@ -14,13 +21,19 @@ export function useProcedures() {
         error.value = null;
         try {
             const response = await procedureService.getProcedures({
-                page: currentPage.value,
-                per_page: perPage.value,
+                page: pagination.current_page,
+                per_page: pagination.per_page,
                 ...params
             });
             procedures.value = response.data.data;
-            totalItems.value = response.data.meta.total;
-            currentPage.value = response.data.meta.current_page;
+            if (response.data.meta) {
+              pagination.current_page = response.data.meta.current_page;
+              pagination.last_page = response.data.meta.last_page;
+              pagination.per_page = response.data.meta.per_page;
+              pagination.total = response.data.meta.total;
+              pagination.from = response.data.meta.from;
+              pagination.to = response.data.meta.to;
+            }
         } catch (err) {
             error.value = err.response?.data?.message || err.message || 'Gagal mengambil data tindakan';
             console.error('Error fetching procedures:', err);
@@ -98,9 +111,7 @@ export function useProcedures() {
 
     return {
         procedures,
-        totalItems,
-        currentPage,
-        perPage,
+        pagination,
         loading,
         error,
         fetchProcedures,

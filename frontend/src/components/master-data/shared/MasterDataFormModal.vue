@@ -12,6 +12,10 @@ defineProps({
     type: Boolean,
     default: false
   },
+  isSubmitDisabled: {
+    type: Boolean,
+    default: false
+  },
   submitText: {
     type: String,
     default: 'Simpan'
@@ -45,7 +49,7 @@ defineEmits(['close', 'submit']);
           </div>
           <div class="modal-footer">
             <button type="button" class="btn-cancel" @click="$emit('close')" :disabled="isSubmitting">Batal</button>
-            <button type="submit" class="btn-primary" :disabled="isSubmitting">
+            <button type="submit" class="btn-primary" :disabled="isSubmitting || isSubmitDisabled">
               {{ isSubmitting ? 'Menyimpan...' : submitText }}
             </button>
           </div>
