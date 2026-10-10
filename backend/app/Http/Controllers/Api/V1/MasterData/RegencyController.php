@@ -84,15 +84,4 @@ class RegencyController extends Controller
 
         return response()->noContent();
     }
-
-    public function updateStatus(Request $request, Regency $regency)
-    {
-        $request->validate([
-            'is_active' => ['required', 'boolean'],
-        ]);
-
-        $regency->update(['is_active' => $request->is_active]);
-
-        return new RegencyResource($regency);
-    }
 }

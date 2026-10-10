@@ -21,8 +21,7 @@ const { createRegency, updateRegency, loading } = useRegencies()
 const form = ref({
   code: '',
   name: '',
-  province_id: '',
-  is_active: true
+  province_id: ''
 })
 
 const errors = ref({})
@@ -52,15 +51,13 @@ watch(() => props.isOpen, (newVal) => {
       form.value = { 
         code: props.regency.code || '',
         name: props.regency.name,
-        province_id: props.regency.province_id,
-        is_active: props.regency.is_active ?? true
+        province_id: props.regency.province_id
       }
     } else {
       form.value = {
         code: '',
         name: '',
-        province_id: '',
-        is_active: true
+        province_id: ''
       }
     }
     errors.value = {}
@@ -176,16 +173,7 @@ const handleSubmit = async () => {
               </span>
             </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  v-model="form.is_active"
-                  class="form-checkbox"
-                />
-                Status Aktif
-              </label>
-            </div>
+
           </div>
 
           <div class="modal-footer">
