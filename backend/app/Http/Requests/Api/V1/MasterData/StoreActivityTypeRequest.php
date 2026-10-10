@@ -35,7 +35,6 @@ class StoreActivityTypeRequest extends FormRequest
                 'integer',
                 Rule::exists('activity_types', 'id')->whereNull('deleted_at'),
             ],
-            'is_active' => 'nullable|boolean',
         ];
     }
 

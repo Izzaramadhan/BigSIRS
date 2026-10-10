@@ -23,12 +23,7 @@ class ActivityTypeService {
     return response.data
   }
 
-  async updateStatus(id, isActive) {
-    const response = await axios.patch(`${API_URL}/${id}/status`, {
-      is_active: isActive
-    })
-    return response.data
-  }
+
 
   async delete(id) {
     const response = await axios.delete(`${API_URL}/${id}`)

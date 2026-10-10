@@ -44,7 +44,6 @@ class UpdateActivityTypeRequest extends FormRequest
                     }
                 },
             ],
-            'is_active' => 'nullable|boolean',
         ];
     }
 

@@ -30,7 +30,7 @@ class ActivityTypeTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'parent_id', 'is_active', 'created_at', 'updated_at'],
+                    '*' => ['id', 'name', 'parent_id', 'created_at', 'updated_at'],
                 ],
                 'links',
                 'meta',
@@ -50,24 +50,13 @@ class ActivityTypeTest extends TestCase
             ->assertJsonPath('data.0.name', 'Diet Jantung');
     }
 
-    public function test_can_filter_by_status()
-    {
-        ActivityType::factory()->create(['is_active' => true]);
-        ActivityType::factory()->create(['is_active' => false]);
 
-        $response = $this->actingAs($this->admin)->getJson($this->endpoint.'?is_active=1');
-
-        $response->assertStatus(200)
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.is_active', true);
-    }
 
     public function test_can_create_activity_type()
     {
         $data = [
             'name' => 'Diet Diabetes',
             'parent_id' => null,
-            'is_active' => true,
         ];
 
         $response = $this->actingAs($this->admin)->postJson($this->endpoint, $data);
@@ -110,22 +99,7 @@ class ActivityTypeTest extends TestCase
         ]);
     }
 
-    public function test_can_update_status()
-    {
-        $activityType = ActivityType::factory()->create(['is_active' => true]);
 
-        $response = $this->actingAs($this->admin)->patchJson("{$this->endpoint}/{$activityType->id}/status", [
-            'is_active' => false,
-        ]);
-
-        $response->assertStatus(200)
-            ->assertJsonPath('data.is_active', false);
-
-        $this->assertDatabaseHas('activity_types', [
-            'id' => $activityType->id,
-            'is_active' => false,
-        ]);
-    }
 
     public function test_can_soft_delete_activity_type()
     {
