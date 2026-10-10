@@ -27,7 +27,7 @@ class DietTypeController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = (int) $request->input('per_page', 10);
-        $filters = $request->only(['search', 'is_active']);
+        $filters = $request->only(['search']);
 
         $dietTypes = $this->dietTypeService->getPaginated($filters, $perPage);
 
@@ -68,22 +68,7 @@ class DietTypeController extends Controller
         ]);
     }
 
-    /**
-     * Update the status of the specified resource.
-     */
-    public function updateStatus(Request $request, DietType $dietType): JsonResponse
-    {
-        $request->validate([
-            'is_active' => 'required|boolean',
-        ]);
 
-        $dietType = $this->dietTypeService->updateStatus($dietType, $request->is_active);
-
-        return response()->json([
-            'message' => 'Status asuhan gizi berhasil diperbarui',
-            'data' => new DietTypeResource($dietType),
-        ]);
-    }
 
     /**
      * Remove the specified resource from storage.

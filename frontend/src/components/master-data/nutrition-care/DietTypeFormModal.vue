@@ -7,7 +7,7 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  DietType: {
+  dietType: {
     type: Object,
     default: null
   }
@@ -27,10 +27,10 @@ const submitError = ref(null)
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
-    if (props.DietType) {
+    if (props.dietType) {
       form.value = { 
-        name: props.DietType.name,
-        description: props.DietType.description || ''
+        name: props.dietType.name,
+        description: props.dietType.description || ''
       }
     } else {
       form.value = {
@@ -62,12 +62,11 @@ const handleSubmit = async () => {
   try {
     const payload = {
       name: form.value.name,
-      description: form.value.description,
-      is_active: true // Default to active on backend if not sent or send true to be safe
+      description: form.value.description
     }
     
-    if (props.DietType) {
-      await updateDietType(props.DietType.id, payload)
+    if (props.dietType) {
+      await updateDietType(props.dietType.id, payload)
     } else {
       await createDietType(payload)
     }
@@ -88,7 +87,7 @@ const handleSubmit = async () => {
       <div class="modal-content">
         <div class="modal-header">
           <h2 class="modal-title">
-            {{ DietType ? 'Edit Asuhan Gizi' : 'Tambah Asuhan Gizi' }}
+            {{ dietType ? 'Edit Asuhan Gizi' : 'Tambah Asuhan Gizi' }}
           </h2>
           <button class="btn-close" @click="emit('close')" aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -141,7 +140,7 @@ const handleSubmit = async () => {
             </button>
             <button type="submit" class="btn-submit" :disabled="loading">
               <span v-if="loading" class="spinner"></span>
-              {{ loading ? 'Menyimpan...' : (DietType ? 'Simpan Perubahan' : 'Simpan') }}
+              {{ loading ? 'Menyimpan...' : (dietType ? 'Simpan Perubahan' : 'Simpan') }}
             </button>
           </div>
         </form>

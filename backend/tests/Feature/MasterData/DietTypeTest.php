@@ -30,7 +30,7 @@ class DietTypeTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at'],
+                    '*' => ['id', 'name', 'description', 'created_at', 'updated_at'],
                 ],
                 'links',
                 'meta',
@@ -50,24 +50,13 @@ class DietTypeTest extends TestCase
             ->assertJsonPath('data.0.name', 'Diet Jantung');
     }
 
-    public function test_can_filter_by_status()
-    {
-        DietType::factory()->create(['is_active' => true]);
-        DietType::factory()->create(['is_active' => false]);
 
-        $response = $this->actingAs($this->admin)->getJson($this->endpoint.'?is_active=1');
-
-        $response->assertStatus(200)
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.is_active', true);
-    }
 
     public function test_can_create_diet_type()
     {
         $data = [
             'name' => 'Diet Diabetes',
             'description' => 'Diet untuk pasien diabetes',
-            'is_active' => true,
         ];
 
         $response = $this->actingAs($this->admin)->postJson($this->endpoint, $data);
@@ -112,22 +101,7 @@ class DietTypeTest extends TestCase
         ]);
     }
 
-    public function test_can_update_status()
-    {
-        $dietType = DietType::factory()->create(['is_active' => true]);
 
-        $response = $this->actingAs($this->admin)->patchJson("{$this->endpoint}/{$dietType->id}/status", [
-            'is_active' => false,
-        ]);
-
-        $response->assertStatus(200)
-            ->assertJsonPath('data.is_active', false);
-
-        $this->assertDatabaseHas('diet_types', [
-            'id' => $dietType->id,
-            'is_active' => false,
-        ]);
-    }
 
     public function test_can_soft_delete_diet_type()
     {
