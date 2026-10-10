@@ -108,7 +108,6 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('service-types', ServiceTypeController::class);
 
-            Route::patch('diet-types/{diet_type}/status', [DietTypeController::class, 'updateStatus']);
             Route::apiResource('diet-types', DietTypeController::class);
 
             Route::get('activity-types/lookup', [ActivityTypeController::class, 'lookup']);

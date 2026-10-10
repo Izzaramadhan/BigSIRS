@@ -33,7 +33,6 @@ class UpdateDietTypeRequest extends FormRequest
                     ->ignore($this->route('diet_type')),
             ],
             'description' => 'nullable|string|max:1000',
-            'is_active' => 'nullable|boolean',
         ];
     }
 

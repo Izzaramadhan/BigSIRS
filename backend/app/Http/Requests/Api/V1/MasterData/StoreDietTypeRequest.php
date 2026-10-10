@@ -31,7 +31,6 @@ class StoreDietTypeRequest extends FormRequest
                 Rule::unique('diet_types', 'name')->whereNull('deleted_at'),
             ],
             'description' => 'nullable|string|max:1000',
-            'is_active' => 'nullable|boolean',
         ];
     }
 
