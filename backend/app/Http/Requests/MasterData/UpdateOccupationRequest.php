@@ -26,7 +26,6 @@ class UpdateOccupationRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:255', 'unique:occupations,name,'.$occupationId],
-            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 

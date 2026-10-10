@@ -21,14 +21,12 @@ class OccupationController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
 
-        if ($request->has('status')) {
-            $query->where('is_active', $request->boolean('status'));
-        }
+
 
         $sortBy = $request->get('sort_by', 'id');
         $sortDesc = $request->boolean('sort_desc', false);
 
-        $allowedSorts = ['id', 'name', 'is_active'];
+        $allowedSorts = ['id', 'name'];
         if (in_array($sortBy, $allowedSorts)) {
             $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
         }
@@ -89,14 +87,5 @@ class OccupationController extends Controller
         return response()->noContent();
     }
 
-    public function updateStatus(Request $request, Occupation $occupation)
-    {
-        $validated = $request->validate([
-            'is_active' => 'required|boolean',
-        ]);
 
-        $occupation->update(['is_active' => $validated['is_active']]);
-
-        return new OccupationResource($occupation);
-    }
 }

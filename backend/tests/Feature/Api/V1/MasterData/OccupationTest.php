@@ -46,16 +46,13 @@ class OccupationTest extends TestCase
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/master-data/occupations', [
                 'name' => '  Pegawai Negeri Sipil  ',
-                'is_active' => true,
             ]);
 
         $response->assertCreated()
-            ->assertJsonPath('data.name', 'Pegawai Negeri Sipil')
-            ->assertJsonPath('data.is_active', true);
+            ->assertJsonPath('data.name', 'Pegawai Negeri Sipil');
 
         $this->assertDatabaseHas('occupations', [
             'name' => 'Pegawai Negeri Sipil',
-            'is_active' => 1,
         ]);
     }
 
@@ -79,12 +76,10 @@ class OccupationTest extends TestCase
         $response = $this->actingAs($this->user)
             ->putJson('/api/v1/master-data/occupations/'.$occ->id, [
                 'name' => 'Pekebun',
-                'is_active' => false,
             ]);
 
         $response->assertOk()
-            ->assertJsonPath('data.name', 'Pekebun')
-            ->assertJsonPath('data.is_active', false);
+            ->assertJsonPath('data.name', 'Pekebun');
     }
 
     public function test_allows_update_with_same_name()

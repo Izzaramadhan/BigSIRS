@@ -16,8 +16,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'success'])
 
 const form = reactive({
-  name: '',
-  is_active: true
+  name: ''
 })
 
 const loading = reactive({
@@ -31,7 +30,6 @@ const errors = reactive({
 
 const resetForm = () => {
   form.name = ''
-  form.is_active = true
   clearErrors()
 }
 
@@ -44,7 +42,6 @@ watch(() => props.isOpen, (newVal) => {
   if (newVal) {
     if (props.occupation) {
       form.name = props.occupation.name
-      form.is_active = props.occupation.is_active
     } else {
       resetForm()
     }
@@ -57,8 +54,7 @@ const handleSubmit = async () => {
 
   try {
     const payload = {
-      name: form.name.trim(),
-      is_active: form.is_active
+      name: form.name.trim()
     }
 
     if (props.occupation) {
@@ -108,22 +104,13 @@ const handleSubmit = async () => {
               type="text"
               class="form-control"
               :class="{ 'is-invalid': errors.name }"
-              placeholder="Misal: S1 Kedokteran Umum"
+              placeholder="Misal: PNS"
               required
             >
             <div v-if="errors.name" class="invalid-feedback">{{ errors.name }}</div>
           </div>
 
-          <div class="form-group" style="margin-bottom: 1.5rem;">
-            <label class="form-label">Status</label>
-            <div class="toggle-group">
-              <label class="toggle-row">
-                <input type="checkbox" class="toggle-input" v-model="form.is_active">
-                <div class="toggle-track"></div>
-                <span class="toggle-label-text">{{ form.is_active ? 'Aktif' : 'Nonaktif' }}</span>
-              </label>
-            </div>
-          </div>
+
 
           <div class="modal-footer">
             <button type="button" class="btn-cancel" @click="$emit('close')" :disabled="loading.submit">
@@ -258,60 +245,6 @@ const handleSubmit = async () => {
   color: #ef4444;
 }
 
-/* Toggle styles */
-.toggle-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: pointer;
-}
-
-.toggle-input {
-  display: none;
-}
-
-.toggle-track {
-  width: 38px;
-  height: 22px;
-  background: #cbd5e1;
-  border-radius: 999px;
-  position: relative;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-
-.toggle-track::after {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background: #ffffff;
-  border-radius: 50%;
-  top: 3px;
-  left: 3px;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.toggle-input:checked + .toggle-track {
-  background: var(--color-primary);
-}
-
-.toggle-input:checked + .toggle-track::after {
-  transform: translateX(16px);
-}
-
-.toggle-label-text {
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-}
 
 /* Footer */
 .modal-footer {
