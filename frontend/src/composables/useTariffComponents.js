@@ -57,24 +57,6 @@ export function useTariffComponents() {
         }
     };
 
-    const updateTariffComponentStatus = async (id, isActive) => {
-        error.value = null;
-        try {
-            const response = await tariffComponentService.updateTariffComponentStatus(id, isActive);
-            
-            // Update local state directly
-            const index = tariffComponents.value.findIndex(item => item.id === id);
-            if (index !== -1) {
-                tariffComponents.value[index].is_active = isActive;
-            }
-            
-            return response.data;
-        } catch (err) {
-            error.value = err.response?.data?.message || err.message || 'Gagal memperbarui status komponen tarif';
-            throw err;
-        }
-    };
-
     const deleteTariffComponent = async (id) => {
         error.value = null;
         loading.value = true;
@@ -102,7 +84,6 @@ export function useTariffComponents() {
         fetchTariffComponents,
         createTariffComponent,
         updateTariffComponent,
-        updateTariffComponentStatus,
         deleteTariffComponent
     };
 }
