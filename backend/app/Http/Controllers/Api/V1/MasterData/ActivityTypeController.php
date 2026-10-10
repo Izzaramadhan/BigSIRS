@@ -27,7 +27,7 @@ class ActivityTypeController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = (int) $request->input('per_page', 10);
-        $filters = $request->only(['search', 'is_active', 'parent_id']);
+        $filters = $request->only(['search', 'parent_id']);
 
         $activityTypes = $this->activityTypeService->getPaginated($filters, $perPage);
 
@@ -68,22 +68,7 @@ class ActivityTypeController extends Controller
         ]);
     }
 
-    /**
-     * Update the status of the specified resource.
-     */
-    public function updateStatus(Request $request, ActivityType $activityType): JsonResponse
-    {
-        $request->validate([
-            'is_active' => 'required|boolean',
-        ]);
 
-        $activityType = $this->activityTypeService->updateStatus($activityType, $request->is_active);
-
-        return response()->json([
-            'message' => 'Status jenis kegiatan berhasil diperbarui',
-            'data' => new ActivityTypeResource($activityType),
-        ]);
-    }
 
     /**
      * Remove the specified resource from storage.
@@ -103,8 +88,7 @@ class ActivityTypeController extends Controller
     public function lookup(Request $request): JsonResponse
     {
         $excludeId = $request->input('exclude_id');
-        $query = ActivityType::query()
-            ->where('is_active', true);
+        $query = ActivityType::query();
 
         $all = $query->orderBy('name', 'asc')->get();
 

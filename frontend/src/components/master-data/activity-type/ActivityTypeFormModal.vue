@@ -10,12 +10,20 @@ const props = defineProps({
   activityType: {
     type: Object,
     default: null
+  },
+  isSubmitting: {
+    type: Boolean,
+    default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
   }
 })
 
-const emit = defineEmits(['close', 'success'])
+const emit = defineEmits(['close', 'submit'])
 
-const { createActivityType, updateActivityType, lookupActivityTypes, loading } = useActivityTypes()
+const { lookupActivityTypes } = useActivityTypes()
 
 const form = ref({
   name: '',
@@ -43,48 +51,16 @@ watch(() => props.isOpen, (newVal) => {
         parent_id: null
       }
     }
-    errors.value = {}
-    submitError.value = null
     loadParentOptions()
   }
 })
 
-const validate = () => {
-  const newErrors = {}
-  
-  if (!form.value.name?.trim()) {
-    newErrors.name = 'Nama Jenis Kegiatan wajib diisi'
+const handleSubmit = () => {
+  const payload = {
+    name: form.value.name,
+    parent_id: form.value.parent_id
   }
-  
-  errors.value = newErrors
-  return Object.keys(newErrors).length === 0
-}
-
-const handleSubmit = async () => {
-  if (!validate()) return
-  
-  submitError.value = null
-  
-  try {
-    const payload = {
-      name: form.value.name,
-      parent_id: form.value.parent_id,
-      is_active: true // Default to active on backend if not sent or send true to be safe
-    }
-    
-    if (props.activityType) {
-      await updateActivityType(props.activityType.id, payload)
-    } else {
-      await createActivityType(payload)
-    }
-    emit('success')
-  } catch (err) {
-    if (err.response?.status === 422) {
-      errors.value = err.response.data.errors
-    } else {
-      submitError.value = err.response?.data?.message || 'Terjadi kesalahan sistem'
-    }
-  }
+  emit('submit', payload)
 }
 </script>
 
@@ -106,8 +82,8 @@ const handleSubmit = async () => {
 
         <form @submit.prevent="handleSubmit" class="modal-form">
           <div class="modal-body">
-            <div v-if="submitError" class="alert-error">
-              {{ submitError }}
+            <div v-if="errors.general" class="alert-error">
+              {{ errors.general }}
             </div>
 
             <div class="form-group">
@@ -119,6 +95,7 @@ const handleSubmit = async () => {
                 class="form-input"
                 :class="{ 'has-error': errors.name }"
                 placeholder="Masukkan nama Jenis Kegiatan"
+                required
               />
               <span v-if="errors.name" class="error-text">
                 {{ Array.isArray(errors.name) ? errors.name[0] : errors.name }}
@@ -145,12 +122,12 @@ const handleSubmit = async () => {
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn-cancel" @click="emit('close')" :disabled="loading">
+            <button type="button" class="btn-cancel" @click="emit('close')" :disabled="isSubmitting">
               Batal
             </button>
-            <button type="submit" class="btn-submit" :disabled="loading">
-              <span v-if="loading" class="spinner"></span>
-              {{ loading ? 'Menyimpan...' : (activityType ? 'Simpan Perubahan' : 'Simpan') }}
+            <button type="submit" class="btn-submit" :disabled="isSubmitting">
+              <span v-if="isSubmitting" class="spinner"></span>
+              {{ isSubmitting ? 'Menyimpan...' : (activityType ? 'Simpan Perubahan' : 'Simpan') }}
             </button>
           </div>
         </form>

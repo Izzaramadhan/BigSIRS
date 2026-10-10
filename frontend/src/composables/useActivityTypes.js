@@ -56,21 +56,7 @@ export function useActivityTypes() {
     }
   }
 
-  const updateStatus = async (id, isActive) => {
-    error.value = null
-    try {
-      const response = await ActivityTypeService.updateStatus(id, isActive)
-      // Update local state if needed
-      const index = activityTypes.value.findIndex(item => item.id === id)
-      if (index !== -1) {
-        activityTypes.value[index].is_active = isActive
-      }
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status'
-      throw err
-    }
-  }
+
 
   const deleteActivityType = async (id) => {
     loading.value = true
@@ -104,7 +90,6 @@ export function useActivityTypes() {
     fetchActivityTypes,
     createActivityType,
     updateActivityType,
-    updateStatus,
     deleteActivityType,
     lookupActivityTypes
   }
