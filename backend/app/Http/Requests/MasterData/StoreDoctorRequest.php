@@ -33,6 +33,7 @@ class StoreDoctorRequest extends FormRequest
             'person.gender' => ['required', 'in:L,P'],
             'person.nationality' => ['nullable', 'in:WNI,WNA'],
             'person.blood_type' => ['nullable', 'in:A,B,AB,O,Unknown'],
+            'person.allergies' => ['nullable', 'string'],
             'person.religion' => ['nullable', 'string', 'max:50'],
             'person.marital_status' => ['nullable', 'string', 'max:50'],
             'person.address' => ['nullable', 'string'],

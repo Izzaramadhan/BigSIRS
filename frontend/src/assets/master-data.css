@@ -184,7 +184,7 @@
   border-radius: 12px;
   width: 100%;
   max-width: 600px;
-  max-height: 90vh;
+  max-height: 94dvh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
@@ -197,6 +197,10 @@
 
 .modal-content.modal-lg {
   max-width: 800px;
+}
+
+.modal-content.modal-xl {
+  max-width: 1000px;
 }
 
 .modal-header {

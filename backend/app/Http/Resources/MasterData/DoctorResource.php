@@ -41,6 +41,7 @@ class DoctorResource extends JsonResource
                     'gender' => $this->employee->gender,
                     'nationality' => $this->employee->nationality,
                     'blood_type' => $this->employee->blood_type,
+                    'allergies' => $this->employee->allergies,
                     'religion' => $this->employee->religion,
                     'marital_status' => $this->employee->marital_status,
                     'address' => $this->employee->address,

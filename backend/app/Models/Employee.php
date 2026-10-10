@@ -24,6 +24,7 @@ class Employee extends Model
         'gender',
         'nationality',
         'blood_type',
+        'allergies',
         'religion',
         'marital_status',
         'address',
