@@ -20,12 +20,12 @@ class PolyclinicController extends Controller
         $sort = $request->query('sort', 'name');
         $direction = strtolower($request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
 
-        $allowedSorts = ['id', 'code', 'name', 'service_type', 'quota', 'jkn_quota', 'bpjs_code', 'is_active', 'created_at', 'updated_at'];
+        $allowedSorts = ['id', 'code', 'name', 'service_type', 'quota', 'jkn_quota', 'is_active', 'created_at', 'updated_at'];
         if (! in_array($sort, $allowedSorts)) {
             $sort = 'name';
         }
 
-        $query = Polyclinic::query();
+        $query = Polyclinic::with('warehouse');
 
         if ($request->filled('search')) {
             $query->search($request->search);
@@ -52,6 +52,7 @@ class PolyclinicController extends Controller
             unset($data['parent_id']);
 
             $polyclinic = Polyclinic::create($data);
+            $polyclinic->load('warehouse');
 
             return (new PolyclinicResource($polyclinic))->response()->setStatusCode(201);
         });
@@ -59,6 +60,7 @@ class PolyclinicController extends Controller
 
     public function show(Polyclinic $polyclinic)
     {
+        $polyclinic->load('warehouse');
         return new PolyclinicResource($polyclinic);
     }
 
@@ -71,7 +73,7 @@ class PolyclinicController extends Controller
 
             $polyclinic->update($data);
 
-            return new PolyclinicResource($polyclinic->fresh());
+            return new PolyclinicResource($polyclinic->fresh('warehouse'));
         });
     }
 
@@ -80,7 +82,7 @@ class PolyclinicController extends Controller
         return DB::transaction(function () use ($request, $polyclinic) {
             $polyclinic->update($request->validated());
 
-            return new PolyclinicResource($polyclinic->fresh());
+            return new PolyclinicResource($polyclinic->fresh('warehouse'));
         });
     }
 

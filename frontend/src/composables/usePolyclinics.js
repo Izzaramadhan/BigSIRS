@@ -11,8 +11,7 @@ export function usePolyclinics() {
   });
   const filters = reactive({
     search: '',
-    is_active: null,
-    service_type: null,
+    is_active: null
   });
   const sort = reactive({
     column: 'name',
@@ -48,7 +47,6 @@ export function usePolyclinics() {
 
       if (filters.search) params.search = filters.search;
       if (filters.is_active !== null) params.is_active = filters.is_active;
-      if (filters.service_type) params.service_type = filters.service_type;
 
       const response = await polyclinicService.getPolyclinics(params);
 

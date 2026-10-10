@@ -1,11 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import PolyclinicFormModal from '../PolyclinicFormModal.vue'
 
 vi.mock('@/services/polyclinic', () => {
   return {
     polyclinicService: {
       getPolyclinic: vi.fn(),
+    }
+  }
+})
+
+vi.mock('@/services/lookup.service', () => {
+  return {
+    default: {
+      getWarehouses: vi.fn().mockResolvedValue([{ id: 1, code: 'W1', name: 'Gudang 1' }])
     }
   }
 })
@@ -68,7 +76,7 @@ describe('PolyclinicFormModal', () => {
     expect(wrapper.find('#is_online_visible').exists()).toBe(true)
     expect(wrapper.find('#quota').exists()).toBe(true)
     expect(wrapper.find('#jkn_quota').exists()).toBe(true)
-    expect(wrapper.find('#bpjs_code').exists()).toBe(true)
+    expect(wrapper.find('#warehouse_id').exists()).toBe(true)
   })
 
   it('service_type dropdown lists all service types', () => {
@@ -82,11 +90,13 @@ describe('PolyclinicFormModal', () => {
     expect(optionTexts).toContain('Farmasi')
   })
 
-  it('Gudang Default field is disabled', () => {
+  it('Gudang Default dropdown is populated', async () => {
     const wrapper = mountModal()
-    const inputs = wrapper.findAll('input[disabled]')
-    const warehouseInput = inputs.find(i => i.attributes('placeholder')?.includes('Master Gudang'))
-    expect(warehouseInput).toBeDefined()
+    await flushPromises() // Wait for watch to resolve lookupService
+    const select = wrapper.find('#warehouse_id')
+    expect(select.exists()).toBe(true)
+    const options = select.findAll('option')
+    expect(options.length).toBeGreaterThan(1) // Placeholder + 1 mocked item
   })
 
   it('transforms code to uppercase and trims inputs on submit', async () => {
@@ -96,7 +106,6 @@ describe('PolyclinicFormModal', () => {
     await wrapper.find('input#name').setValue('Test Name')
     await wrapper.find('#service_type').setValue('rawat-jalan')
     await wrapper.find('textarea#description').setValue(' desc ')
-    await wrapper.find('input#bpjs_code').setValue(' bpjs123 ')
     
     await wrapper.find('form').trigger('submit.prevent')
     
@@ -107,7 +116,7 @@ describe('PolyclinicFormModal', () => {
       name: 'Test Name',
       service_type: 'rawat-jalan',
       description: 'desc',
-      bpjs_code: 'bpjs123',
+      warehouse_id: null,
     }))
   })
 

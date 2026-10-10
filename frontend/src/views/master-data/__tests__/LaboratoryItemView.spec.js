@@ -92,10 +92,11 @@ describe('LaboratoryItemView', () => {
 
     await wrapper.find('.action.delete').trigger('click')
     expect(wrapper.text()).toContain('Hapus Item Lab?')
+    laboratoryItemsService.list.mockClear()
     await wrapper.find('.delete-dialog .danger').trigger('click')
     await flushPromises()
 
     expect(laboratoryItemsService.remove).toHaveBeenCalledWith(1)
-    expect(laboratoryItemsService.list).toHaveBeenCalledTimes(2)
+    expect(laboratoryItemsService.list).toHaveBeenCalledTimes(1)
   })
 })
