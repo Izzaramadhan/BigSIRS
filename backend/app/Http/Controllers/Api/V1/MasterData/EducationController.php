@@ -21,9 +21,6 @@ class EducationController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
 
-        if ($request->has('status')) {
-            $query->where('is_active', $request->boolean('status'));
-        }
 
         $sortBy = $request->get('sort_by', 'id');
         $sortDesc = $request->boolean('sort_desc', false);
@@ -87,16 +84,5 @@ class EducationController extends Controller
         $education->delete();
 
         return response()->noContent();
-    }
-
-    public function updateStatus(Request $request, Education $education)
-    {
-        $validated = $request->validate([
-            'is_active' => 'required|boolean',
-        ]);
-
-        $education->update(['is_active' => $validated['is_active']]);
-
-        return new EducationResource($education);
     }
 }

@@ -15,7 +15,6 @@ class UpdateEducationRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:100',
-            'is_active' => 'boolean',
         ];
     }
 

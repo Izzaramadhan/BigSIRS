@@ -96,7 +96,6 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('doctor-schedules', DoctorScheduleController::class);
 
-            Route::patch('educations/{education}/status', [EducationController::class, 'updateStatus']);
             Route::apiResource('educations', EducationController::class);
 
             Route::patch('occupations/{occupation}/status', [OccupationController::class, 'updateStatus']);

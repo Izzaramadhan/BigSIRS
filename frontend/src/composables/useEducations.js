@@ -69,18 +69,6 @@ export function useEducations() {
     }
   }
 
-  const updateStatus = async (id, isActive) => {
-    loading.value = true
-    error.value = null
-    try {
-      return await educationsService.updateStatus(id, isActive)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
 
   return {
     educations,
@@ -90,7 +78,6 @@ export function useEducations() {
     fetchEducations,
     createEducation,
     updateEducation,
-    deleteEducation,
-    updateStatus
+    deleteEducation
   }
 }

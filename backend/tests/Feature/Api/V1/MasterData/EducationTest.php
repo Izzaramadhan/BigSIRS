@@ -46,16 +46,13 @@ class EducationTest extends TestCase
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/master-data/educations', [
                 'name' => '  S1 Teknik  ',
-                'is_active' => true,
             ]);
 
         $response->assertCreated()
-            ->assertJsonPath('data.name', 'S1 Teknik')
-            ->assertJsonPath('data.is_active', true);
+            ->assertJsonPath('data.name', 'S1 Teknik');
 
         $this->assertDatabaseHas('educations', [
             'name' => 'S1 Teknik',
-            'is_active' => 1,
         ]);
     }
 
@@ -79,12 +76,10 @@ class EducationTest extends TestCase
         $response = $this->actingAs($this->user)
             ->putJson('/api/v1/master-data/educations/'.$edu->id, [
                 'name' => 'Sekolah Dasar',
-                'is_active' => false,
             ]);
 
         $response->assertOk()
-            ->assertJsonPath('data.name', 'Sekolah Dasar')
-            ->assertJsonPath('data.is_active', false);
+            ->assertJsonPath('data.name', 'Sekolah Dasar');
     }
 
     public function test_allows_update_with_same_name()
