@@ -104,7 +104,6 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('regencies', RegencyController::class);
 
-            Route::patch('districts/{district}/status', [DistrictController::class, 'updateStatus']);
             Route::apiResource('districts', DistrictController::class);
 
             Route::patch('villages/{village}/status', [VillageController::class, 'updateStatus']);
