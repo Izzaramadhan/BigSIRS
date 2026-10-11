@@ -34,8 +34,27 @@ class SupplierController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
+        $perPage = $request->input('per_page', 10);
+        $sortBy = $request->input('sort', $request->input('sortBy', 'name'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->input('direction')) === 'desc';
+        } else {
+            $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $allowedSorts = ['id', 'name', 'phone', 'address', 'created_at', 'updated_at'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        if ($perPage === '-1' || $perPage === 'all') {
+            return SupplierResource::collection($query->get());
+        }
+
         return SupplierResource::collection(
-            $query->orderBy('name')->paginate((int) $request->get('per_page', 15))
+            $query->paginate((int) $perPage)
         );
     }
 
@@ -44,7 +63,12 @@ class SupplierController extends Controller
      */
     public function store(StoreSupplierRequest $request)
     {
-        $supplier = Supplier::create($request->validated());
+        $validated = $request->validated();
+        if (! isset($validated['is_active'])) {
+            $validated['is_active'] = true;
+        }
+
+        $supplier = Supplier::create($validated);
 
         return new SupplierResource($supplier);
     }

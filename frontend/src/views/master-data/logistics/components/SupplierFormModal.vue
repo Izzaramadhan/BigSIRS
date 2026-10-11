@@ -1,274 +1,265 @@
 <script setup>
 import { reactive, watch } from 'vue';
-import { useSuppliers } from '@/composables/useSuppliers';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
 
 const props = defineProps({
-  isOpen: Boolean,
+  isOpen: {
+    type: Boolean,
+    default: false
+  },
   supplier: {
     type: Object,
     default: null
+  },
+  item: {
+    type: Object,
+    default: null
+  },
+  isSubmitting: {
+    type: Boolean,
+    default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
   }
 });
 
-const emit = defineEmits(['close', 'saved']);
+const emit = defineEmits(['close', 'submit']);
 
-const { createSupplier, updateSupplier, error } = useSuppliers();
+const currentSupplier = () => props.supplier || props.item || null;
 
 const form = reactive({
   name: '',
   phone: '',
-  address: '',
-  is_active: true
+  address: ''
 });
 
-const state = reactive({
-  submitting: false,
-  errors: {}
-});
+const clientErrors = reactive({});
 
-watch(() => props.isOpen, (newVal) => {
-  if (newVal) {
-    state.errors = {};
-    if (props.supplier) {
-      form.name = props.supplier.name || '';
-      form.phone = props.supplier.phone || '';
-      form.address = props.supplier.address || '';
-      form.is_active = props.supplier.is_active ?? true;
+const resetForm = () => {
+  form.name = '';
+  form.phone = '';
+  form.address = '';
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+const populateForm = (data) => {
+  form.name = data.name || '';
+  form.phone = data.phone || '';
+  form.address = data.address || '';
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      const sup = currentSupplier();
+      if (sup) {
+        populateForm(sup);
+      } else {
+        resetForm();
+      }
     } else {
-      form.name = '';
-      form.phone = '';
-      form.address = '';
-      form.is_active = true;
+      resetForm();
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [props.supplier, props.item],
+  () => {
+    if (props.isOpen) {
+      const sup = currentSupplier();
+      if (sup) {
+        populateForm(sup);
+      }
     }
   }
-}, { immediate: true });
+);
 
-const handleSubmit = async () => {
-  state.submitting = true;
-  state.errors = {};
+const clearFieldError = (field) => {
+  if (clientErrors[field]) {
+    delete clientErrors[field];
+  }
+};
+
+const fieldError = (field) => {
+  if (clientErrors[field]) {
+    return clientErrors[field];
+  }
+  if (!props.errors || !props.errors[field]) return null;
+  return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field];
+};
+
+const validateClient = () => {
+  Object.keys(clientErrors).forEach((k) => delete clientErrors[k]);
+  let isValid = true;
+
+  if (!form.name || !form.name.trim()) {
+    clientErrors.name = 'Nama supplier wajib diisi.';
+    isValid = false;
+  }
+
+  return isValid;
+};
+
+const handleSubmit = () => {
+  if (props.isSubmitting) return;
+  if (!validateClient()) return;
 
   const payload = {
     name: form.name.trim(),
     phone: form.phone && form.phone.trim() ? form.phone.trim() : null,
-    address: form.address && form.address.trim() ? form.address.trim() : null,
-    is_active: form.is_active
+    address: form.address && form.address.trim() ? form.address.trim() : null
   };
 
-  try {
-    let success = false;
-    if (props.supplier) {
-      success = await updateSupplier(props.supplier.id, payload);
-    } else {
-      success = await createSupplier(payload);
-    }
-    
-    if (success) {
-      emit('saved');
-      emit('close');
-    } else if (error.value && typeof error.value === 'object') {
-        state.errors = error.value;
-    }
-  } catch (err) {
-    if (err.response && err.response.status === 422) {
-      state.errors = err.response.data.errors;
-    } else {
-      console.error(err);
-    }
-  } finally {
-    state.submitting = false;
-  }
+  emit('submit', payload);
 };
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-backdrop">
-      <div class="modal-container" role="dialog" aria-modal="true" :aria-labelledby="supplier ? 'edit-supplier-title' : 'add-supplier-title'">
-        <div class="modal-header">
-          <h2 class="modal-title" :id="supplier ? 'edit-supplier-title' : 'add-supplier-title'">
-            {{ supplier ? 'Edit Supplier' : 'Tambah Supplier' }}
-          </h2>
-          <button type="button" class="btn-close" @click="emit('close')" aria-label="Tutup">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="currentSupplier() ? 'Edit Supplier' : 'Tambah Supplier'"
+    :submit-text="currentSupplier() ? 'Perbarui' : 'Simpan'"
+    :is-submitting="isSubmitting"
+    size="md"
+    @close="emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form-container">
+      <!-- General Error Alert -->
+      <div v-if="errors?.general" class="alert-error" role="alert">
+        {{ errors.general }}
+      </div>
+
+      <div class="form-grid">
+        <!-- 1. Nama (required) -->
+        <div class="form-group form-group--full">
+          <label for="name" class="form-label required">Nama</label>
+          <input
+            id="name"
+            v-model="form.name"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('name') }"
+            placeholder="Masukkan nama supplier"
+            maxlength="150"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('name')"
+            required
+          />
+          <div v-if="fieldError('name')" class="invalid-feedback">
+            {{ fieldError('name') }}
+          </div>
         </div>
 
-        <div class="modal-body">
-          <form id="supplierForm" @submit.prevent="handleSubmit">
-            
-            <div class="form-group">
-              <label for="name" class="form-label">Nama Supplier <span class="text-danger">*</span></label>
-              <input 
-                type="text" 
-                id="name" 
-                v-model="form.name" 
-                class="form-control" 
-                :class="{ 'is-invalid': state.errors.name }"
-                required
-                maxlength="255"
-              />
-              <div v-if="state.errors.name" class="invalid-feedback">
-                {{ state.errors.name[0] }}
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="phone" class="form-label">Telepon</label>
-              <input 
-                type="text" 
-                id="phone" 
-                v-model="form.phone" 
-                class="form-control" 
-                :class="{ 'is-invalid': state.errors.phone }"
-                maxlength="255"
-              />
-              <div v-if="state.errors.phone" class="invalid-feedback">
-                {{ state.errors.phone[0] }}
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="address" class="form-label">Alamat</label>
-              <textarea 
-                id="address" 
-                v-model="form.address" 
-                class="form-control" 
-                :class="{ 'is-invalid': state.errors.address }"
-                rows="3"
-              ></textarea>
-              <div v-if="state.errors.address" class="invalid-feedback">
-                {{ state.errors.address[0] }}
-              </div>
-            </div>
-
-          </form>
+        <!-- 2. Telp -->
+        <div class="form-group form-group--full">
+          <label for="phone" class="form-label">Telp</label>
+          <input
+            id="phone"
+            v-model="form.phone"
+            type="tel"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('phone') }"
+            placeholder="Masukkan nomor telepon supplier"
+            maxlength="50"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('phone')"
+          />
+          <div v-if="fieldError('phone')" class="invalid-feedback">
+            {{ fieldError('phone') }}
+          </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="emit('close')" :disabled="state.submitting">
-            Batal
-          </button>
-          <button type="submit" form="supplierForm" class="btn btn-primary" :disabled="state.submitting">
-            <span v-if="state.submitting" class="spinner"></span>
-            {{ supplier ? 'Simpan Perubahan' : 'Simpan' }}
-          </button>
+        <!-- 3. Alamat -->
+        <div class="form-group form-group--full">
+          <label for="address" class="form-label">Alamat</label>
+          <textarea
+            id="address"
+            v-model="form.address"
+            class="form-control form-textarea"
+            :class="{ 'is-invalid': fieldError('address') }"
+            placeholder="Masukkan alamat supplier"
+            rows="3"
+            maxlength="500"
+            :disabled="isSubmitting"
+            @input="clearFieldError('address')"
+          ></textarea>
+          <div v-if="fieldError('address')" class="invalid-feedback">
+            {{ fieldError('address') }}
+          </div>
         </div>
       </div>
     </div>
-  </Teleport>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  animation: fadeIn 0.2s ease-out;
-}
-
-.modal-container {
-  background: white;
-  border-radius: 16px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+.modal-form-container {
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
-  animation: slideUp 0.3s ease-out;
+  gap: 1.25rem;
 }
 
-.modal-header {
-  padding: 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.modal-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0;
-}
-
-.btn-close {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-close svg {
-  width: 20px;
-  height: 20px;
-}
-
-.btn-close:hover {
-  background: #f1f5f9;
-  color: #ef4444;
-}
-
-.modal-body {
-  padding: 1.5rem;
-  overflow-y: auto;
-}
-
-.form-group {
-  margin-bottom: 1.25rem;
-}
-
-.form-group:last-child {
-  margin-bottom: 0;
-}
-
-.form-label {
-  display: block;
-  font-weight: 500;
-  color: #475569;
-  margin-bottom: 0.5rem;
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
   font-size: 0.875rem;
 }
 
-.text-danger {
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.form-group--full {
+  width: 100%;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-navy, #0f172a);
+}
+
+.form-label.required::after {
+  content: ' *';
   color: #ef4444;
 }
 
 .form-control {
   width: 100%;
   padding: 0.625rem 0.875rem;
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  color: #1e293b;
-  background-color: #fff;
-  background-clip: padding-box;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: var(--color-text-navy, #0f172a);
+  background-color: #ffffff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
 }
 
 .form-control:focus {
-  outline: 0;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  outline: none;
+  border-color: var(--color-primary, #0f766e);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
 }
 
 .form-control.is-invalid {
@@ -276,103 +267,23 @@ const handleSubmit = async () => {
 }
 
 .form-control.is-invalid:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 }
 
-textarea.form-control {
-  min-height: 100px;
+.form-control:disabled {
+  background-color: #f1f5f9;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.form-textarea {
   resize: vertical;
+  min-height: 80px;
 }
 
 .invalid-feedback {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: #ef4444;
-}
-
-.modal-footer {
-  padding: 1.25rem 1.5rem;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  background-color: #f8fafc;
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 500;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  border-radius: 8px;
-  transition: all 0.2s;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  color: #475569;
-  background-color: white;
-  border-color: #cbd5e1;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #f1f5f9;
-  color: #1e293b;
-}
-
-.btn-primary {
-  color: white;
-  background-color: #3b82f6;
-  box-shadow: 0 1px 2px rgba(59, 130, 246, 0.2);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #2563eb;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3), 0 2px 4px -1px rgba(59, 130, 246, 0.2);
-}
-
-.spinner {
-  display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  margin-right: 0.5rem;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: white;
-  animation: spin 1s ease-in-out infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { 
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  margin-top: 0.25rem;
 }
 </style>
