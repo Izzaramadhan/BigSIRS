@@ -1,98 +1,158 @@
-import { ref } from 'vue'
-import axios from '@/utils/axios'
+import { ref, reactive } from 'vue';
+import { laboratoryGroupsService } from '@/services/master-data/laboratoryGroups.service';
 
 export function useLaboratoryGroups() {
-  const laboratoryGroups = ref([])
-  const meta = ref({})
-  const loading = ref(false)
-  const error = ref(null)
+  const items = ref([]);
+  const pagination = reactive({
+    current_page: 1,
+    per_page: 10,
+    total: 0,
+    last_page: 1,
+    from: 0,
+    to: 0
+  });
 
-  const fetchLaboratoryGroups = async (params = {}) => {
-    loading.value = true
-    error.value = null
+  const filters = reactive({
+    search: '',
+    is_active: null
+  });
+
+  const sort = reactive({
+    column: 'name',
+    direction: 'asc'
+  });
+
+  const loading = ref(false);
+  const submitting = ref(false);
+  const error = ref(null);
+
+  const fetchLaboratoryGroups = async (customParams = {}) => {
+    loading.value = true;
+    error.value = null;
+
     try {
-      const response = await axios.get('/master-data/laboratory-groups', { params })
-      laboratoryGroups.value = response.data.data
-      meta.value = response.data.meta
-      return response.data
+      const params = {
+        page: pagination.current_page,
+        per_page: pagination.per_page,
+        sort_by: sort.column,
+        sort_desc: sort.direction === 'desc',
+        ...customParams
+      };
+
+      if (filters.search && filters.search.trim()) {
+        params.search = filters.search.trim();
+      }
+
+      if (filters.is_active !== null && filters.is_active !== '') {
+        params.is_active = filters.is_active;
+      }
+
+      const response = await laboratoryGroupsService.list(params);
+      items.value = response.data || [];
+
+      if (response.meta) {
+        pagination.current_page = response.meta.current_page || 1;
+        pagination.per_page = response.meta.per_page || 10;
+        pagination.total = response.meta.total || 0;
+        pagination.last_page = response.meta.last_page || 1;
+        pagination.from = response.meta.from ?? ((pagination.current_page - 1) * pagination.per_page + 1);
+        pagination.to = response.meta.to ?? Math.min(pagination.current_page * pagination.per_page, pagination.total);
+      }
+
+      return { success: true, data: response };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Failed to fetch laboratory groups'
-      console.error('Error fetching laboratory groups:', err)
-      throw err
+      error.value = err.response?.data?.message || 'Gagal memuat data grup lab.';
+      return { success: false, error: err };
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
 
   const getLaboratoryGroup = async (id) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await axios.get(`/master-data/laboratory-groups/${id}`)
-      return response.data.data
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Failed to fetch laboratory group details'
-      console.error('Error fetching laboratory group details:', err)
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
+    loading.value = true;
+    error.value = null;
 
-  const createLaboratoryGroup = async (data) => {
-    loading.value = true
-    error.value = null
     try {
-      const response = await axios.post('/master-data/laboratory-groups', data)
-      return response.data.data
+      const response = await laboratoryGroupsService.detail(id);
+      return { success: true, data: response.data || response };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Failed to create laboratory group'
-      console.error('Error creating laboratory group:', err)
-      throw err
+      error.value = err.response?.data?.message || 'Gagal memuat detail grup lab.';
+      return { success: false, error: err };
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
 
-  const updateLaboratoryGroup = async (id, data) => {
-    loading.value = true
-    error.value = null
+  const createLaboratoryGroup = async (payload) => {
+    submitting.value = true;
+    error.value = null;
+
     try {
-      const response = await axios.put(`/master-data/laboratory-groups/${id}`, data)
-      return response.data.data
+      const response = await laboratoryGroupsService.create(payload);
+      return { success: true, data: response.data || response };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Failed to update laboratory group'
-      console.error('Error updating laboratory group:', err)
-      throw err
+      return { success: false, error: err };
     } finally {
-      loading.value = false
+      submitting.value = false;
     }
-  }
+  };
+
+  const updateLaboratoryGroup = async (id, payload) => {
+    submitting.value = true;
+    error.value = null;
+
+    try {
+      const response = await laboratoryGroupsService.update(id, payload);
+      return { success: true, data: response.data || response };
+    } catch (err) {
+      return { success: false, error: err };
+    } finally {
+      submitting.value = false;
+    }
+  };
 
   const deleteLaboratoryGroup = async (id) => {
-    loading.value = true
-    error.value = null
+    submitting.value = true;
+    error.value = null;
+
     try {
-      await axios.delete(`/master-data/laboratory-groups/${id}`)
-      return true
+      await laboratoryGroupsService.remove(id);
+      return { success: true };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Failed to delete laboratory group'
-      console.error('Error deleting laboratory group:', err)
-      return false
+      return { success: false, error: err };
     } finally {
-      loading.value = false
+      submitting.value = false;
     }
-  }
+  };
+
+  const setPage = (page) => {
+    pagination.current_page = page;
+    fetchLaboratoryGroups();
+  };
+
+  const setSort = ({ column, direction }) => {
+    sort.column = column;
+    sort.direction = direction;
+    pagination.current_page = 1;
+    fetchLaboratoryGroups();
+  };
 
   return {
-    laboratoryGroups,
-    meta,
+    items,
+    laboratoryGroups: items,
+    pagination,
+    meta: pagination,
+    filters,
+    sort,
     loading,
+    submitting,
     error,
     fetchLaboratoryGroups,
     getLaboratoryGroup,
     createLaboratoryGroup,
     updateLaboratoryGroup,
-    deleteLaboratoryGroup
-  }
+    deleteLaboratoryGroup,
+    setPage,
+    setSort
+  };
 }
