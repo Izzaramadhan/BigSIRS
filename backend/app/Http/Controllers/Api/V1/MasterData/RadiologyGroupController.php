@@ -14,7 +14,7 @@ class RadiologyGroupController extends Controller
 {
     public function index(Request $request)
     {
-        $query = RadiologyGroup::with(['category', 'type', 'activityType'])
+        $query = RadiologyGroup::with(['category', 'type', 'activityType', 'itemGroups'])
             ->withCount('itemGroups')
             ->when($request->search, function ($q, $search) {
                 $q->where('name', 'like', "%{$search}%")

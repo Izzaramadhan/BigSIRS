@@ -29,12 +29,12 @@ const filteredOptions = computed(() => {
 });
 
 const selectedItems = computed(() => {
-  return props.modelValue.map(id => props.options.find(o => o.id === id)).filter(Boolean);
+  return props.modelValue.map(id => props.options.find(o => o.id === id || String(o.id) === String(id))).filter(Boolean);
 });
 
 const toggleSelect = (id) => {
   const newValue = [...props.modelValue];
-  const index = newValue.indexOf(id);
+  const index = newValue.findIndex(v => v === id || String(v) === String(id));
   if (index === -1) {
     newValue.push(id);
   } else {
@@ -44,7 +44,7 @@ const toggleSelect = (id) => {
 };
 
 const removeItem = (id) => {
-  const newValue = props.modelValue.filter(v => v !== id);
+  const newValue = props.modelValue.filter(v => v !== id && String(v) !== String(id));
   emit('update:modelValue', newValue);
 };
 
@@ -91,7 +91,7 @@ onUnmounted(() => {
           class="option-item"
           @click.stop="toggleSelect(opt.id)"
         >
-          <input type="checkbox" :checked="props.modelValue.includes(opt.id)" readonly />
+          <input type="checkbox" :checked="props.modelValue.some(v => v === opt.id || String(v) === String(opt.id))" readonly />
           <span class="ml-2">{{ opt.name }}</span>
         </div>
       </div>
