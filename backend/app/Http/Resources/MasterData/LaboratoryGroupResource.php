@@ -21,7 +21,12 @@ class LaboratoryGroupResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'price' => $this->price,
-            'is_active' => $this->is_active,
+            'is_active' => (bool) $this->is_active,
+            'harga_jaspel' => $this->harga_jaspel ?? null,
+            'loinc_code' => $this->loinc_code ?? $this->category?->loinc_code ?? null,
+            'loinc_url' => $this->loinc_url ?? $this->category?->loinc_url ?? null,
+            'snomed_code' => $this->snomed_code ?? $this->category?->snomed_code ?? null,
+            'snomed_url' => $this->snomed_url ?? $this->category?->snomed_url ?? null,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'deleted_at' => $this->deleted_at,
@@ -34,6 +39,9 @@ class LaboratoryGroupResource extends JsonResource
             // For form binding
             'laboratory_item_ids' => $this->when($this->relationLoaded('items'), function () {
                 return $this->items->pluck('id');
+            }),
+            'laboratory_item_id' => $this->when($this->relationLoaded('items'), function () {
+                return $this->items->first()?->id;
             }),
         ];
     }

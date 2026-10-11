@@ -19,13 +19,19 @@ class LaboratoryGroup extends Model
         'name',
         'description',
         'price',
+        'harga_jaspel',
         'is_active',
+        'loinc_code',
+        'loinc_url',
+        'snomed_code',
+        'snomed_url',
     ];
 
     protected $casts = [
         'legacy_id' => 'integer',
         'laboratory_category_id' => 'integer',
         'price' => 'decimal:2',
+        'harga_jaspel' => 'decimal:2',
         'is_active' => 'boolean',
     ];
 
