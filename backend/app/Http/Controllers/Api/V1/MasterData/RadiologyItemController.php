@@ -17,17 +17,36 @@ class RadiologyItemController extends Controller
     {
         $query = RadiologyItem::query()->with('group');
 
-        if ($request->has('search') && $request->search !== '') {
-            $search = $request->search;
-            $query->where('name', 'like', "%{$search}%");
+        if ($request->has('search') && trim($request->input('search')) !== '') {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhereHas('group', function ($g) use ($search) {
+                        $g->where('name', 'like', "%{$search}%");
+                    });
+            });
         }
 
         if ($request->has('radiology_item_group_id') && $request->radiology_item_group_id !== '') {
             $query->where('radiology_item_group_id', $request->radiology_item_group_id);
         }
 
+        if ($request->has('is_active') && $request->input('is_active') !== '' && $request->input('is_active') !== null) {
+            $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
+        }
+
         $perPage = $request->input('per_page', 10);
-        $items = $query->paginate($perPage);
+        $sortBy = $request->get('sortBy') ?? $request->get('sort_by', 'name');
+        $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->get('sort_desc', false), FILTER_VALIDATE_BOOLEAN)
+            || strtolower($request->get('direction', 'asc')) === 'desc';
+
+        $allowedSorts = ['id', 'name', 'radiology_item_group_id', 'created_at'];
+        if (!in_array($sortBy, $allowedSorts)) {
+            $sortBy = 'name';
+        }
+
+        $items = $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc')->paginate($perPage);
 
         return RadiologyItemResource::collection($items);
     }
