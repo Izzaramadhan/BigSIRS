@@ -99,7 +99,7 @@ const navigation = [
               { name: 'Tipe Rad', path: '/master-data/radiology-types' },
               { name: 'Kelompok Item Rad', path: '/master-data/radiology-item-groups' },
               { name: 'Item Rad', path: '/master-data/radiology-items' },
-              { name: 'Group Rad', path: '/master-data/radiology-groups' }
+              { name: 'Grup Rad', path: '/master-data/radiology-groups' }
             ]
           },
           {
