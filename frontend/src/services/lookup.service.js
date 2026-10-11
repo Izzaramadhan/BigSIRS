@@ -54,6 +54,31 @@ class LookupService {
     const response = await axios.get('/lookups/warehouses', { params })
     return extractCollection(response)
   }
+
+  async getMedicineUnits(params = {}) {
+    const response = await axios.get('/lookups/medicine-units', { params })
+    return extractCollection(response)
+  }
+
+  async getMedicineCategories(params = {}) {
+    const response = await axios.get('/lookups/medicine-categories', { params })
+    return extractCollection(response)
+  }
+
+  async getMedicineClassifications(params = {}) {
+    const response = await axios.get('/lookups/medicine-classifications', { params })
+    return extractCollection(response)
+  }
+
+  async getMedicineRoutes(params = {}) {
+    const response = await axios.get('/lookups/medicine-routes', { params })
+    return extractCollection(response)
+  }
+
+  async getGenericMedicines(params = {}) {
+    const response = await axios.get('/lookups/generic-medicines', { params })
+    return extractCollection(response)
+  }
 }
 
 export default new LookupService()
