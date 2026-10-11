@@ -29,8 +29,27 @@ class MedicinePackageController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
+        $perPage = $request->input('per_page', 10);
+        $sortBy = $request->input('sort', $request->input('sortBy', 'name'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->input('direction')) === 'desc';
+        } else {
+            $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $allowedSorts = ['id', 'name', 'price', 'quantity', 'created_at', 'updated_at'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        if ($perPage === '-1' || $perPage === 'all') {
+            return MedicinePackageResource::collection($query->get());
+        }
+
         return MedicinePackageResource::collection(
-            $query->orderBy('name')->paginate((int) $request->get('per_page', 15))
+            $query->paginate((int) $perPage)
         );
     }
 

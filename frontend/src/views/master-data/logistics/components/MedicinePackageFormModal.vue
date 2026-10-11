@@ -1,714 +1,885 @@
 <script setup>
-import { ref, watch, computed, reactive } from 'vue'
-import axios from '@/utils/axios'
+import { reactive, ref, computed, watch } from 'vue';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import { medicinesService } from '@/services/master-data/medicines.service';
 
 const props = defineProps({
   isOpen: {
     type: Boolean,
-    required: true
+    default: false
   },
   packageData: {
     type: Object,
     default: null
+  },
+  item: {
+    type: Object,
+    default: null
+  },
+  isSubmitting: {
+    type: Boolean,
+    default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
   }
-})
+});
 
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'submit']);
 
-const form = ref({
+const currentPackage = () => props.packageData || props.item || null;
+
+const form = reactive({
   name: '',
   price: 0,
   quantity: 0,
   description: '',
   items: []
-})
+});
 
-const state = reactive({
-  submitting: false,
-  errors: {}
-})
+const clientErrors = reactive({});
 
-const error = ref(null)
-const medicineSearch = ref('')
-const searchedMedicines = ref([])
-const searchTimeout = ref(null)
-
-const isEditing = computed(() => !!props.packageData)
+// Medicine search state
+const searchQuery = ref('');
+const searchResults = ref([]);
+const isSearching = ref(false);
+const searchErrorMessage = ref(null);
+let searchDebounceTimer = null;
 
 const calculatedTotal = computed(() => {
-  return form.value.items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0)
-})
+  return form.items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+});
+
+const formatRupiah = (val) => {
+  if (val === null || val === undefined || val === '') return 'Rp0';
+  const num = Number(val);
+  if (isNaN(num)) return 'Rp0';
+  return 'Rp' + new Intl.NumberFormat('id-ID').format(num);
+};
+
+const resetForm = () => {
+  form.name = '';
+  form.price = 0;
+  form.quantity = 0;
+  form.description = '';
+  form.items = [];
+  searchQuery.value = '';
+  searchResults.value = [];
+  isSearching.value = false;
+  searchErrorMessage.value = null;
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+const populateForm = (data) => {
+  form.name = data.name || '';
+  form.price = Number(data.price) || 0;
+  form.quantity = data.quantity !== null && data.quantity !== undefined ? Number(data.quantity) : 0;
+  form.description = data.description || '';
+  
+  if (Array.isArray(data.items)) {
+    form.items = data.items.map((item) => ({
+      medicine_id: item.medicine_id,
+      medicine_name: item.medicine?.name || item.medicine_name || `Obat #${item.medicine_id}`,
+      medicine_unit: item.medicine?.unit?.name || item.medicine_unit || '',
+      quantity: Number(item.quantity) || 1,
+      unit_price: Number(item.unit_price) || 0,
+      subtotal: Number(item.subtotal) || (Number(item.quantity) * Number(item.unit_price))
+    }));
+  } else {
+    form.items = [];
+  }
+
+  searchQuery.value = '';
+  searchResults.value = [];
+  isSearching.value = false;
+  searchErrorMessage.value = null;
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
 
 watch(
   () => props.isOpen,
-  (newVal) => {
-    if (newVal) {
-      state.errors = {}
-      error.value = null
-      medicineSearch.value = ''
-      searchedMedicines.value = []
-      
-      if (props.packageData) {
-        // Edit mode
-        form.value = {
-          name: props.packageData.name,
-          price: props.packageData.price,
-          quantity: props.packageData.quantity,
-          description: props.packageData.description || '',
-          items: (props.packageData.items || []).map(item => ({
-            medicine_id: item.medicine_id,
-            medicine_name: item.medicine?.name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            subtotal: item.subtotal
-          }))
-        }
+  (isOpen) => {
+    if (isOpen) {
+      const p = currentPackage();
+      if (p) {
+        populateForm(p);
       } else {
-        // Create mode
-        form.value = {
-          name: '',
-          price: 0,
-          quantity: 0,
-          description: '',
-          items: []
-        }
+        resetForm();
+      }
+    } else {
+      resetForm();
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [props.packageData, props.item],
+  () => {
+    if (props.isOpen) {
+      const p = currentPackage();
+      if (p) {
+        populateForm(p);
       }
     }
   }
-)
+);
 
-const formatNumber = (val) => {
-  return new Intl.NumberFormat('id-ID').format(val)
-}
+const onSearchInput = () => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+  }
 
-const onSearchMedicine = () => {
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value)
+  const query = searchQuery.value ? searchQuery.value.trim() : '';
+  if (!query || query.length < 2) {
+    searchResults.value = [];
+    isSearching.value = false;
+    searchErrorMessage.value = null;
+    return;
   }
-  
-  if (!medicineSearch.value || medicineSearch.value.length < 2) {
-    searchedMedicines.value = []
-    return
-  }
-  
-  searchTimeout.value = setTimeout(async () => {
+
+  isSearching.value = true;
+  searchErrorMessage.value = null;
+
+  searchDebounceTimer = setTimeout(async () => {
     try {
-      const response = await axios.get('/master-data/medicines', {
-        params: { search: medicineSearch.value, per_page: 10 }
-      })
-      searchedMedicines.value = response.data.data
+      const res = await medicinesService.getMedicines({ search: query, per_page: 8 });
+      const list = res.data || [];
+      searchResults.value = Array.isArray(list) ? list : (list.data || []);
     } catch (err) {
-      console.error('Error searching medicine:', err)
+      console.error('Failed to search medicines:', err);
+      searchErrorMessage.value = 'Gagal mencari obat. Silakan coba lagi.';
+      searchResults.value = [];
+    } finally {
+      isSearching.value = false;
     }
-  }, 300)
-}
+  }, 350);
+};
 
 const addMedicine = (medicine) => {
-  // Check duplicate
-  const exists = form.value.items.some(item => item.medicine_id === medicine.id)
+  if (!medicine || !medicine.id) return;
+
+  // Prevent duplicate medicine in package
+  const exists = form.items.some((item) => item.medicine_id === medicine.id);
   if (exists) {
-    alert('Obat sudah ada di dalam paket.')
-    return
+    clientErrors.search = `Obat "${medicine.name}" sudah ada dalam daftar.`;
+    return;
   }
-  
-  const unitPrice = medicine.selling_price_per_unit || 0
-  const qty = 1
-  
-  form.value.items.push({
+
+  delete clientErrors.search;
+  delete clientErrors.items;
+
+  const unitPrice = Number(medicine.selling_price_per_unit) || 0;
+  const qty = 1;
+  const subtotal = qty * unitPrice;
+
+  form.items.push({
     medicine_id: medicine.id,
     medicine_name: medicine.name,
-    medicine_unit: medicine.medicine_unit?.name || '',
+    medicine_unit: medicine.unit?.name || '',
     quantity: qty,
     unit_price: unitPrice,
-    subtotal: qty * unitPrice
-  })
-  
-  // Re-calculate package total
-  form.value.price = calculatedTotal.value
-  
-  medicineSearch.value = ''
-  searchedMedicines.value = []
-}
+    subtotal: subtotal
+  });
 
-const updateSubtotal = (item) => {
-  item.subtotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0)
-  form.value.price = calculatedTotal.value
-}
+  // Automatically update package total price
+  form.price = calculatedTotal.value;
+
+  searchQuery.value = '';
+  searchResults.value = [];
+};
+
+const updateItemSubtotal = (item) => {
+  const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+  item.quantity = qty;
+  const price = Math.max(0, Number(item.unit_price) || 0);
+  item.unit_price = price;
+  item.subtotal = qty * price;
+
+  form.price = calculatedTotal.value;
+};
 
 const removeItem = (index) => {
-  form.value.items.splice(index, 1)
-  form.value.price = calculatedTotal.value
-}
+  form.items.splice(index, 1);
+  form.price = calculatedTotal.value;
+};
 
-const submitForm = async () => {
-  if (form.value.items.length === 0) {
-    error.value = 'Paket harus memiliki minimal satu obat.'
-    return
+const clearFieldError = (field) => {
+  if (clientErrors[field]) {
+    delete clientErrors[field];
   }
-  
-  state.submitting = true
-  state.errors = {}
-  error.value = null
+};
 
-  try {
-    if (isEditing.value) {
-      await axios.put(`/master-data/medicine-packages/${props.packageData.id}`, form.value)
-    } else {
-      await axios.post('/master-data/medicine-packages', form.value)
+const fieldError = (field) => {
+  if (clientErrors[field]) {
+    return clientErrors[field];
+  }
+  if (!props.errors || !props.errors[field]) return null;
+  return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field];
+};
+
+const validateClient = () => {
+  Object.keys(clientErrors).forEach((k) => delete clientErrors[k]);
+  let isValid = true;
+
+  if (!form.name || !form.name.trim()) {
+    clientErrors.name = 'Nama paket obat wajib diisi.';
+    isValid = false;
+  }
+
+  if (form.items.length === 0) {
+    clientErrors.items = 'Paket obat harus memiliki minimal satu item obat.';
+    isValid = false;
+  }
+
+  for (let i = 0; i < form.items.length; i++) {
+    const item = form.items[i];
+    if (!item.quantity || item.quantity <= 0) {
+      clientErrors[`items.${i}.quantity`] = 'Jumlah obat harus lebih dari 0.';
+      isValid = false;
     }
-    emit('saved')
-    closeModal()
-  } catch (err) {
-    if (err.response && err.response.status === 422) {
-      state.errors = err.response.data.errors
-    } else {
-      error.value = err.response?.data?.message || err.message
+    if (item.unit_price < 0) {
+      clientErrors[`items.${i}.unit_price`] = 'Harga satuan tidak boleh negatif.';
+      isValid = false;
     }
-  } finally {
-    state.submitting = false
   }
-}
 
-const closeModal = () => {
-  if (!state.submitting) {
-    emit('close')
+  if (form.price < 0) {
+    clientErrors.price = 'Harga paket tidak boleh negatif.';
+    isValid = false;
   }
-}
+
+  return isValid;
+};
+
+const handleSubmit = () => {
+  if (props.isSubmitting) return;
+  if (!validateClient()) return;
+
+  const payload = {
+    name: form.name.trim(),
+    price: Number(form.price) || 0,
+    quantity: form.quantity !== null && form.quantity !== undefined ? Number(form.quantity) : 0,
+    description: form.description && form.description.trim() ? form.description.trim() : null,
+    items: form.items.map((item) => ({
+      medicine_id: item.medicine_id,
+      quantity: Number(item.quantity) || 1,
+      unit_price: Number(item.unit_price) || 0,
+      subtotal: Number(item.subtotal) || 0
+    }))
+  };
+
+  emit('submit', payload);
+};
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-backdrop">
-      <div class="modal-container modal-xl" role="dialog" aria-modal="true">
-        <div class="modal-header">
-          <h2 class="modal-title">
-            {{ isEditing ? 'Edit Paket Obat' : 'Tambah Paket Obat' }}
-          </h2>
-          <button type="button" class="btn-close" @click="closeModal" aria-label="Tutup">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="currentPackage() ? 'Edit Paket Obat' : 'Tambah Paket Obat'"
+    :submit-text="currentPackage() ? 'Perbarui' : 'Simpan'"
+    :is-submitting="isSubmitting"
+    size="xl"
+    @close="emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form-container">
+      <!-- General Error Alert -->
+      <div v-if="errors?.general" class="alert-error" role="alert">
+        {{ errors.general }}
+      </div>
+
+      <div class="form-grid">
+        <!-- 1. Nama Paket -->
+        <div class="form-group form-group--full">
+          <label for="name" class="form-label required">Nama Paket</label>
+          <input
+            id="name"
+            v-model="form.name"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('name') }"
+            placeholder="Masukkan nama paket obat"
+            maxlength="255"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('name')"
+            required
+            autofocus
+          />
+          <div v-if="fieldError('name')" class="invalid-feedback">
+            {{ fieldError('name') }}
+          </div>
         </div>
 
-        <div class="modal-body">
-          <div v-if="error" class="alert-error mb-4">
-            {{ error }}
+        <!-- 2. Pencarian Obat -->
+        <div class="form-group form-group--full search-section">
+          <label for="medicine_search" class="form-label">Pencarian Obat</label>
+          <div class="search-input-wrapper">
+            <svg
+              class="search-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              id="medicine_search"
+              v-model="searchQuery"
+              type="text"
+              class="form-control search-input"
+              :class="{ 'is-invalid': fieldError('search') }"
+              placeholder="Ketik minimal 2 huruf untuk mencari obat..."
+              autocomplete="off"
+              :disabled="isSubmitting"
+              @input="onSearchInput"
+            />
+            <span v-if="isSearching" class="search-spinner" aria-hidden="true"></span>
           </div>
 
-          <form id="packageForm" @submit.prevent="submitForm">
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="name" class="form-label">Nama Paket <span class="text-danger">*</span></label>
-                <input 
-                  type="text" 
-                  id="name" 
-                  v-model="form.name" 
-                  class="form-control" 
-                  :class="{ 'is-invalid': state.errors.name }"
-                  required
-                />
-                <div v-if="state.errors.name" class="invalid-feedback">{{ state.errors.name[0] }}</div>
-              </div>
-              
-              <div class="form-group flex-1" style="position: relative;">
-                <label class="form-label">Pencarian Obat</label>
-                <div class="search-box">
-                  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  </svg>
-                  <input
-                    type="text"
-                    class="form-control search-input"
-                    placeholder="Ketik minimal 2 huruf..."
-                    v-model="medicineSearch"
-                    @input="onSearchMedicine"
-                    :disabled="state.submitting"
-                  />
-                </div>
-                
-                <div v-if="searchedMedicines.length > 0" class="autocomplete-list">
-                  <button
-                    v-for="med in searchedMedicines"
-                    :key="med.id"
-                    type="button"
-                    class="autocomplete-item"
-                    @click="addMedicine(med)"
-                  >
-                    <div class="med-name">{{ med.name }}</div>
-                    <div class="med-meta">{{ med.medicine_unit?.name || 'No Unit' }} • Rp {{ formatNumber(med.selling_price_per_unit || 0) }}</div>
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <div class="table-container mb-4">
-              <div class="table-header">Komposisi Paket</div>
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th class="col-name">NAMA OBAT</th>
-                    <th class="col-qty text-center">JUMLAH</th>
-                    <th class="col-price text-right">HARGA @</th>
-                    <th class="col-subtotal text-right">SUB TOTAL</th>
-                    <th class="col-action text-center">AKSI</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="form.items.length === 0">
-                    <td colspan="5" class="text-center empty-cell">Belum ada obat dalam paket. Cari dan tambahkan obat di atas.</td>
-                  </tr>
-                  <tr v-for="(item, index) in form.items" :key="index">
-                    <td class="font-medium text-navy">
-                      {{ item.medicine_name || item.medicine?.name }}
-                    </td>
-                    <td class="text-center">
-                      <input 
-                        type="number" 
-                        class="form-control text-center input-sm mx-auto" 
-                        v-model.number="item.quantity" 
-                        min="1" 
-                        @input="updateSubtotal(item)"
-                        required
-                        style="width: 80px;"
-                      />
-                    </td>
-                    <td>
-                      <input 
-                        type="number" 
-                        class="form-control text-right input-sm" 
-                        v-model.number="item.unit_price" 
-                        min="0" 
-                        @input="updateSubtotal(item)"
-                        required
-                      />
-                    </td>
-                    <td class="text-right font-medium">Rp {{ formatNumber(item.subtotal) }}</td>
-                    <td class="text-center">
-                      <button type="button" class="btn-action delete mx-auto" @click="removeItem(index)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div v-if="fieldError('search')" class="invalid-feedback">
+            {{ fieldError('search') }}
+          </div>
+          <div v-if="searchErrorMessage" class="invalid-feedback">
+            {{ searchErrorMessage }}
+          </div>
 
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="description" class="form-label">Deskripsi</label>
-                <textarea 
-                  id="description" 
-                  v-model="form.description" 
-                  class="form-control" 
-                  rows="4"
-                  placeholder="Tambahkan deskripsi paket..."
-                ></textarea>
+          <!-- Autocomplete Dropdown List -->
+          <div v-if="searchResults.length > 0" class="autocomplete-dropdown" role="listbox">
+            <button
+              v-for="med in searchResults"
+              :key="med.id"
+              type="button"
+              class="autocomplete-item"
+              @click="addMedicine(med)"
+            >
+              <div class="autocomplete-title">{{ med.name }}</div>
+              <div class="autocomplete-subtitle">
+                <span v-if="med.code" class="code-badge">{{ med.code }}</span>
+                <span v-if="med.unit?.name">{{ med.unit.name }}</span>
+                <span v-if="med.category?.name">• {{ med.category.name }}</span>
               </div>
-
-              <div class="form-group flex-1 totals-section">
-                <div class="form-group mb-3">
-                  <label for="price" class="form-label">Total Harga Paket (Rp) <span class="text-danger">*</span></label>
-                  <input 
-                    type="number" 
-                    id="price" 
-                    v-model.number="form.price" 
-                    class="form-control text-right font-medium" 
-                    :class="{ 'is-invalid': state.errors.price }"
-                    required
-                  />
-                  <div class="total-hint mt-1">Total komposisi: Rp {{ formatNumber(calculatedTotal) }}</div>
-                  <div v-if="state.errors.price" class="invalid-feedback">{{ state.errors.price[0] }}</div>
-                </div>
-                
-                <div class="form-group mb-0">
-                  <label for="quantity" class="form-label">Kapasitas / Stok Paket</label>
-                  <input 
-                    type="number" 
-                    id="quantity" 
-                    v-model.number="form.quantity" 
-                    class="form-control text-right" 
-                  />
-                </div>
-              </div>
-            </div>
-          </form>
+            </button>
+          </div>
+          <div
+            v-else-if="!isSearching && searchQuery.trim().length >= 2 && searchResults.length === 0 && !searchErrorMessage"
+            class="autocomplete-dropdown empty-dropdown"
+          >
+            <span class="text-muted">Obat tidak ditemukan.</span>
+          </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="closeModal" :disabled="state.submitting">
-            Batal
-          </button>
-          <button type="submit" form="packageForm" class="btn btn-primary" :disabled="state.submitting">
-            <span v-if="state.submitting" class="spinner"></span>
-            {{ isEditing ? 'Simpan Perubahan' : 'Simpan' }}
-          </button>
+        <!-- 3. Daftar Obat Terpilih -->
+        <div class="form-group form-group--full">
+          <div class="items-header">
+            <span class="items-title required">Daftar Obat Terpilih</span>
+            <span class="items-count">{{ form.items.length }} obat</span>
+          </div>
+
+          <div v-if="fieldError('items')" class="invalid-feedback mb-2">
+            {{ fieldError('items') }}
+          </div>
+
+          <div class="items-table-wrapper">
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th class="col-item-name">Nama Obat</th>
+                  <th class="col-item-qty text-center">Jumlah</th>
+                  <th class="col-item-price text-right">Harga Satuan</th>
+                  <th class="col-item-subtotal text-right">Subtotal</th>
+                  <th class="col-item-action text-center">Hapus</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="form.items.length === 0">
+                  <td colspan="5" class="empty-items-cell">
+                    Belum ada obat yang dipilih. Gunakan pencarian obat di atas untuk menambahkan item.
+                  </td>
+                </tr>
+                <tr v-for="(item, index) in form.items" :key="item.medicine_id">
+                  <!-- 1. Nama Obat -->
+                  <td class="col-item-name font-medium text-navy">
+                    <div>{{ item.medicine_name }}</div>
+                    <div v-if="item.medicine_unit" class="text-muted text-xs">
+                      Satuan: {{ item.medicine_unit }}
+                    </div>
+                  </td>
+
+                  <!-- 2. Jumlah -->
+                  <td class="col-item-qty text-center">
+                    <input
+                      v-model.number="item.quantity"
+                      type="number"
+                      min="1"
+                      step="1"
+                      class="form-control form-control-sm text-center"
+                      :disabled="isSubmitting"
+                      @input="updateItemSubtotal(item)"
+                      required
+                    />
+                    <div v-if="fieldError(`items.${index}.quantity`)" class="invalid-feedback text-xs">
+                      {{ fieldError(`items.${index}.quantity`) }}
+                    </div>
+                  </td>
+
+                  <!-- 3. Harga Satuan -->
+                  <td class="col-item-price text-right">
+                    <input
+                      v-model.number="item.unit_price"
+                      type="number"
+                      min="0"
+                      step="any"
+                      class="form-control form-control-sm text-right"
+                      :disabled="isSubmitting"
+                      @input="updateItemSubtotal(item)"
+                      required
+                    />
+                    <div v-if="fieldError(`items.${index}.unit_price`)" class="invalid-feedback text-xs">
+                      {{ fieldError(`items.${index}.unit_price`) }}
+                    </div>
+                  </td>
+
+                  <!-- 4. Subtotal -->
+                  <td class="col-item-subtotal text-right font-medium text-navy">
+                    {{ formatRupiah(item.subtotal) }}
+                  </td>
+
+                  <!-- 5. Hapus -->
+                  <td class="col-item-action text-center">
+                    <button
+                      type="button"
+                      class="btn-remove-item"
+                      title="Hapus obat dari paket"
+                      aria-label="Hapus obat"
+                      :disabled="isSubmitting"
+                      @click="removeItem(index)"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 4 & 5. Ringkasan & Total -->
+        <div class="form-row-split">
+          <!-- 6. Deskripsi -->
+          <div class="form-group flex-1">
+            <label for="description" class="form-label">Deskripsi</label>
+            <textarea
+              id="description"
+              v-model="form.description"
+              rows="4"
+              class="form-control"
+              placeholder="Masukkan deskripsi paket obat"
+              :disabled="isSubmitting"
+            ></textarea>
+          </div>
+
+          <!-- 4. Harga Paket & 5. Jumlah -->
+          <div class="form-group flex-1 summary-card">
+            <div class="summary-field">
+              <label for="price" class="form-label required">Harga Paket</label>
+              <input
+                id="price"
+                v-model.number="form.price"
+                type="number"
+                min="0"
+                step="any"
+                class="form-control text-right font-medium"
+                :class="{ 'is-invalid': fieldError('price') }"
+                placeholder="0"
+                :disabled="isSubmitting"
+                required
+              />
+              <div class="helper-hint">
+                Total Komposisi Obat: <strong>{{ formatRupiah(calculatedTotal) }}</strong>
+              </div>
+              <div v-if="fieldError('price')" class="invalid-feedback">
+                {{ fieldError('price') }}
+              </div>
+            </div>
+
+            <div class="summary-field mt-3">
+              <label for="quantity" class="form-label">Jumlah</label>
+              <input
+                id="quantity"
+                v-model.number="form.quantity"
+                type="number"
+                min="0"
+                step="1"
+                class="form-control text-right"
+                placeholder="Masukkan jumlah paket"
+                :disabled="isSubmitting"
+              />
+              <div class="helper-hint">
+                Kapasitas / kuantitas default paket obat.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </Teleport>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-}
-
-.modal-container {
-  background: #fff;
-  border-radius: 8px;
-  width: 100%;
-  max-width: 600px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+.modal-form-container {
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
+  gap: 1.25rem;
 }
 
-.modal-container.modal-xl {
-  max-width: 1000px;
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
 }
 
-.modal-header {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
+.form-grid {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--color-text-navy);
-}
-
-.btn-close {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-}
-
-.btn-close:hover {
-  background: #f1f5f9;
-  color: #334155;
-}
-
-.btn-close svg {
-  width: 20px;
-  height: 20px;
-}
-
-.modal-body {
-  padding: 1.5rem;
-  overflow-y: auto;
-}
-
-.form-row {
-  display: flex;
-  gap: 1.5rem;
-  margin-bottom: 1.25rem;
-  flex-wrap: wrap;
-}
-
-.flex-1 {
-  flex: 1;
-  min-width: 300px;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .form-group {
-  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.form-group--full {
+  width: 100%;
 }
 
 .form-label {
-  display: block;
-  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
   font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
+  color: var(--color-text-navy, #0f172a);
+}
+
+.form-label.required::after,
+.items-title.required::after {
+  content: ' *';
+  color: #ef4444;
 }
 
 .form-control {
   width: 100%;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
   border-radius: 6px;
-  font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
+  color: var(--color-text-navy, #0f172a);
+  background-color: #ffffff;
   transition: border-color 0.2s, box-shadow 0.2s;
   box-sizing: border-box;
 }
 
+.form-control-sm {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.85rem;
+}
+
 .form-control:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.1);
+  border-color: var(--color-primary, #0f766e);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
 }
 
 .form-control.is-invalid {
-  border-color: #dc2626;
+  border-color: #ef4444;
+}
+
+.form-control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.form-control:disabled {
+  background-color: #f1f5f9;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .invalid-feedback {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
   font-size: 0.8rem;
-  color: #dc2626;
+  color: #ef4444;
+  margin-top: 0.25rem;
 }
 
-.text-danger {
-  color: #dc2626;
-}
-
-.search-box {
+/* Search section */
+.search-section {
   position: relative;
-  width: 100%;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .search-icon {
   position: absolute;
   left: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-secondary);
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  pointer-events: none;
 }
 
 .search-input {
-  padding-left: 2.5rem;
+  padding-left: 2.25rem;
+  padding-right: 2rem;
 }
 
-.autocomplete-list {
+.search-spinner {
+  position: absolute;
+  right: 0.75rem;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: var(--color-primary, #0f766e);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.autocomplete-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
-  width: 100%;
-  background: white;
-  border: 1px solid var(--color-border-soft);
+  right: 0;
+  z-index: 50;
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
   border-radius: 6px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   margin-top: 4px;
-  z-index: 50;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
 }
 
-.autocomplete-item {
-  display: block;
-  width: 100%;
-  text-align: left;
+.empty-dropdown {
   padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+}
+
+.autocomplete-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0.625rem 1rem;
   border: none;
-  background: none;
-  border-bottom: 1px solid #f1f5f9;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.2s;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
 }
 
 .autocomplete-item:hover {
-  background: #f8fafc;
+  background-color: var(--color-bg-hover, #f8fafc);
 }
 
-.med-name {
+.autocomplete-title {
+  font-size: 0.875rem;
   font-weight: 500;
-  color: var(--color-text-navy);
-  margin-bottom: 2px;
+  color: var(--color-text-navy, #0f172a);
 }
 
-.med-meta {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
+.autocomplete-subtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 2px;
 }
 
-.table-container {
-  border: 1px solid var(--color-border-soft);
-  border-radius: 8px;
-  overflow: hidden;
+.code-badge {
+  background: #f1f5f9;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-family: monospace;
 }
 
-.table-header {
-  background: #f8fafc;
-  padding: 0.75rem 1rem;
+/* Items Table */
+.items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.items-title {
+  font-size: 0.875rem;
   font-weight: 600;
-  border-bottom: 1px solid var(--color-border-soft);
-  color: var(--color-text-navy);
+  color: var(--color-text-navy, #0f172a);
 }
 
-.data-table {
+.items-count {
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.items-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border-soft, #e2e8f0);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.items-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
 }
 
-.data-table th {
-  background: #ffffff;
-  padding: 0.75rem 1rem;
+.items-table th {
+  background: #f8fafc;
+  padding: 0.625rem 0.875rem;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: #64748b;
   border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 
-.data-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e2e8f0;
+.items-table td {
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
 }
 
-.data-table tbody tr:last-child td {
+.items-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.input-sm {
-  padding: 0.4rem 0.5rem;
-  font-size: 0.85rem;
+.col-item-name {
+  min-width: 200px;
 }
 
-.col-name { text-align: left; }
-.col-qty { width: 100px; }
-.col-price { width: 150px; }
-.col-subtotal { width: 150px; }
-.col-action { width: 80px; }
+.col-item-qty {
+  width: 100px;
+}
 
-.empty-cell {
+.col-item-price {
+  width: 150px;
+}
+
+.col-item-subtotal {
+  width: 150px;
+}
+
+.col-item-action {
+  width: 60px;
+}
+
+.empty-items-cell {
+  text-align: center;
   padding: 2rem 1rem !important;
-  color: #64748b;
+  color: #94a3b8;
   font-style: italic;
 }
 
-.btn-action {
-  width: 32px;
-  height: 32px;
-  display: flex;
+.btn-remove-item {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  width: 28px;
+  height: 28px;
   background: transparent;
-  border-radius: 6px;
-  color: var(--color-text-secondary);
+  border: none;
+  border-radius: 4px;
+  color: #ef4444;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.15s;
 }
 
-.btn-action svg {
-  width: 16px;
-  height: 16px;
+.btn-remove-item:hover:not(:disabled) {
+  background: #fef2f2;
 }
 
-.btn-action.delete:hover { background: #fef2f2; color: #ef4444; }
+.btn-remove-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-.totals-section {
+.btn-remove-item svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Split row */
+.form-row-split {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.flex-1 {
+  flex: 1;
+  min-width: 280px;
+}
+
+.summary-card {
   background: #f8fafc;
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
 }
 
-.total-hint {
-  font-size: 0.8rem;
-  color: #64748b;
+.summary-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.alert-error {
-  background: #fef2f2;
-  color: #991b1b;
-  padding: 1rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  border: 1px solid #fecaca;
+.helper-hint {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin-top: 0.25rem;
 }
 
 .text-center { text-align: center; }
 .text-right { text-align: right; }
+.text-navy { color: var(--color-text-navy, #0f172a); }
+.text-muted { color: #64748b; }
 .font-medium { font-weight: 500; }
-.text-navy { color: var(--color-text-navy); }
-.mx-auto { margin-left: auto; margin-right: auto; }
-.mb-4 { margin-bottom: 1.5rem; }
-.mb-3 { margin-bottom: 1rem; }
-.mb-0 { margin-bottom: 0; }
-.mt-1 { margin-top: 0.25rem; }
-
-.modal-footer {
-  padding: 1.25rem 1.5rem;
-  border-top: 1px solid var(--color-border-soft);
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
-
-.btn {
-  padding: 0.6rem 1.25rem;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.9rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: 1px solid transparent;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #ffffff;
-  border-color: #cbd5e1;
-  color: #334155;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #94a3b8;
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: #ffffff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-}
-
-.spinner {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 0.8s linear infinite;
-}
+.text-xs { font-size: 0.75rem; }
+.mt-3 { margin-top: 0.75rem; }
+.mb-2 { margin-bottom: 0.5rem; }
 
 @keyframes spin {
+  from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 </style>
