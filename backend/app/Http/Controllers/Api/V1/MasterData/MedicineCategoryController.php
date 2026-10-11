@@ -26,8 +26,18 @@ class MedicineCategoryController extends Controller
             });
         }
 
-        $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
-        $sortBy = $request->get('sortBy', 'created_at');
+        $sortBy = $request->get('sort', $request->get('sortBy', 'created_at'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->get('direction')) === 'desc';
+        } else {
+            $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $allowedSorts = ['id', 'name', 'description', 'created_at', 'updated_at'];
+        if (! in_array($sortBy, $allowedSorts)) {
+            $sortBy = 'created_at';
+        }
+
         $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
 
         $perPage = $request->get('per_page', 10);
