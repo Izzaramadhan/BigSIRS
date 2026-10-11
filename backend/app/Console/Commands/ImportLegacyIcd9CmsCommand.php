@@ -62,6 +62,9 @@ class ImportLegacyIcd9CmsCommand extends Command
                             'needs_review' => $isNeedsReview,
                             'inacbg_code' => $row->kode_inacbg ?? null,
                             'inacbg_name' => $row->deskripsi_inacbg ?? null,
+                            'class_1_tariff' => $row->tarif_kelas1 ?? null,
+                            'class_2_tariff' => $row->tarif_kelas2 ?? null,
+                            'class_3_tariff' => $row->tarif_kelas3 ?? null,
                         ]);
                     }
                 } else {
@@ -75,6 +78,9 @@ class ImportLegacyIcd9CmsCommand extends Command
                             'needs_review' => $isNeedsReview,
                             'inacbg_code' => $row->kode_inacbg ?? null,
                             'inacbg_name' => $row->deskripsi_inacbg ?? null,
+                            'class_1_tariff' => $row->tarif_kelas1 ?? null,
+                            'class_2_tariff' => $row->tarif_kelas2 ?? null,
+                            'class_3_tariff' => $row->tarif_kelas3 ?? null,
                         ]);
                     }
                 }
