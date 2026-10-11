@@ -7,6 +7,7 @@ use App\Http\Requests\MasterData\StoreMedicationSignaRequest;
 use App\Http\Requests\MasterData\UpdateMedicationSignaRequest;
 use App\Http\Resources\MasterData\MedicationSignaResource;
 use App\Models\MasterData\MedicationSigna;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -31,9 +32,28 @@ class MedicationSignaController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        return MedicationSignaResource::collection(
-            $query->orderBy('name')->paginate((int) $request->get('per_page', 15))
-        );
+        $perPage = $request->input('per_page', 10);
+        $sortBy = $request->input('sort', $request->input('sortBy', 'name'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->input('direction')) === 'desc';
+        } else {
+            $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $allowedSorts = ['id', 'name', 'is_active', 'created_at', 'updated_at'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        if ($perPage === '-1' || $perPage === 'all') {
+            return MedicationSignaResource::collection($query->get());
+        }
+
+        $medicationSignas = $query->paginate((int) $perPage);
+
+        return MedicationSignaResource::collection($medicationSignas);
     }
 
     /**
@@ -73,18 +93,12 @@ class MedicationSignaController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(MedicationSigna $medicationSigna): Response
+    public function destroy(MedicationSigna $medicationSigna): JsonResponse
     {
         Gate::authorize('delete', $medicationSigna);
 
-        // Check for dependencies (if prescriptions use this signa via foreign key)
-        // For now, based on legacy audit, signa might be stored as text, but if there's a reference:
-        // if ($medicationSigna->prescriptions()->exists()) {
-        //     abort(409, 'Signa obat tidak dapat dihapus karena sudah digunakan pada resep atau data pemberian obat.');
-        // }
-
         $medicationSigna->delete();
 
-        return response()->noContent();
+        return response()->json(['message' => 'Signa obat berhasil dihapus.']);
     }
 }
