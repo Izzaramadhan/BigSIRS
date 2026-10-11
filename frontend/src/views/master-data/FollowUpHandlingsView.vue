@@ -1,135 +1,185 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useFollowUpHandlings } from '@/composables/useFollowUpHandlings'
-import FollowUpHandlingFormModal from '@/views/master-data/components/FollowUpHandlingFormModal.vue';
+import { ref, onMounted } from 'vue';
+import { useFollowUpHandlings } from '@/composables/useFollowUpHandlings';
+import FollowUpHandlingTable from '@/components/master-data/follow-up-handlings/FollowUpHandlingTable.vue';
+import FollowUpHandlingFilters from '@/components/master-data/follow-up-handlings/FollowUpHandlingFilters.vue';
+import FollowUpHandlingFormModal from '@/components/master-data/follow-up-handlings/FollowUpHandlingFormModal.vue';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
-import MasterDataSearchInput from '@/components/master-data/shared/MasterDataSearchInput.vue';
 import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
 import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
 import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
 import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
-import MasterDataSkeletonRow from '@/components/master-data/shared/MasterDataSkeletonRow.vue';
-import MasterDataActionButtons from '@/components/master-data/shared/MasterDataActionButtons.vue';
+import AppToast from '@/components/common/AppToast.vue';
+
 const {
-  handlings,
-  loading,
-  error,
+  items,
   pagination,
+  filters,
+  loading,
+  submitting,
+  error,
   fetchHandlings,
   createHandling,
   updateHandling,
-  deleteHandling
-} = useFollowUpHandlings()
+  deleteHandling,
+  setPage
+} = useFollowUpHandlings();
 
-const notification = ref(null)
+const formModalOpen = ref(false);
+const deleteDialogOpen = ref(false);
+const selectedHandling = ref(null);
+const handlingToDelete = ref(null);
+const formErrors = ref({});
 
-const showToast = (title, message, type = 'success') => {
-  notification.value = { title, message, type }
-  setTimeout(() => {
-    notification.value = null
-  }, 3000)
-}
+const toast = ref({
+  show: false,
+  type: 'success',
+  title: '',
+  message: ''
+});
 
-const isFormModalOpen = ref(false)
-const selectedHandling = ref(null)
+const showToast = ({ type = 'success', title, message }) => {
+  toast.value = { show: true, type, title, message };
+};
 
-const isDeleteModalOpen = ref(false)
-const handlingToDelete = ref(null)
-const deleteError = ref(null)
-
-const searchQuery = ref('')
-const perPage = ref(10)
-
-const handleSearch = () => {
-  fetchHandlings({ page: 1, per_page: perPage.value, search: searchQuery.value })
-}
-
-const handlePageChange = (page) => {
-  if (page < 1 || page > pagination.value.lastPage) return
-  fetchHandlings({ page, per_page: perPage.value, search: searchQuery.value })
-}
+const closeToast = () => {
+  toast.value.show = false;
+};
 
 const openAddModal = () => {
-  selectedHandling.value = null
-  isFormModalOpen.value = true
-}
+  selectedHandling.value = null;
+  formErrors.value = {};
+  formModalOpen.value = true;
+};
 
-const openEditModal = (handling) => {
-  selectedHandling.value = JSON.parse(JSON.stringify(handling))
-  isFormModalOpen.value = true
-}
+const openEditModal = (item) => {
+  selectedHandling.value = { ...item };
+  formErrors.value = {};
+  formModalOpen.value = true;
+};
 
-const onFormSubmit = async (formData) => {
-  try {
-    if (selectedHandling.value) {
-      await updateHandling(selectedHandling.value.id, formData)
+const closeFormModal = () => {
+  if (submitting.value) return;
+  formModalOpen.value = false;
+  selectedHandling.value = null;
+  formErrors.value = {};
+};
+
+const openDeleteDialog = (item) => {
+  handlingToDelete.value = item;
+  deleteDialogOpen.value = true;
+};
+
+const closeDeleteDialog = () => {
+  if (submitting.value) return;
+  deleteDialogOpen.value = false;
+  handlingToDelete.value = null;
+};
+
+const handleFilter = ({ key, value }) => {
+  filters[key] = value;
+  pagination.current_page = 1;
+  fetchHandlings(1);
+};
+
+const handleFormSubmit = async (payload) => {
+  formErrors.value = {};
+
+  const isEditing = Boolean(selectedHandling.value);
+  let result;
+
+  if (isEditing) {
+    result = await updateHandling(selectedHandling.value.id, payload);
+  } else {
+    result = await createHandling(payload);
+  }
+
+  if (result.success) {
+    formModalOpen.value = false;
+    selectedHandling.value = null;
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: isEditing
+        ? 'Penanganan lanjutan berhasil diperbarui.'
+        : 'Penanganan lanjutan berhasil ditambahkan.'
+    });
+    fetchHandlings(pagination.current_page);
+  } else {
+    if (result.errors || result.error?.response?.status === 422) {
+      formErrors.value = result.errors || result.error?.response?.data?.errors || {};
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: result.error?.response?.data?.message || (typeof result.error === 'string' ? result.error : 'Silakan periksa kembali data yang dimasukkan.')
+      });
     } else {
-      await createHandling(formData)
+      const msg = typeof result.error === 'string'
+        ? result.error
+        : (result.error?.response?.data?.message || 'Terjadi kesalahan sistem. Silakan coba lagi.');
+      formErrors.value = { general: msg };
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: msg
+      });
     }
-    isFormModalOpen.value = false
-    fetchHandlings({ page: pagination.value.currentPage, per_page: perPage.value, search: searchQuery.value })
-    showToast(
-      'Berhasil',
-      `Penanganan lanjutan berhasil ${selectedHandling.value ? 'diperbarui' : 'ditambahkan'}`,
-      'success'
-    )
-  } catch (err) {
-    console.error('Failed to save handling:', err)
   }
-}
+};
 
-const confirmDelete = (handling) => {
-  handlingToDelete.value = handling
-  deleteError.value = null
-  isDeleteModalOpen.value = true
-}
+const handleDeleteConfirm = async () => {
+  if (!handlingToDelete.value || submitting.value) return;
 
-const handleDelete = async () => {
-  if (!handlingToDelete.value) return
-  
-  try {
-    await deleteHandling(handlingToDelete.value.id)
-    isDeleteModalOpen.value = false
-    if (handlings.value.length === 1 && pagination.value.currentPage > 1) {
-      pagination.value.currentPage--
+  const result = await deleteHandling(handlingToDelete.value.id);
+
+  if (result.success) {
+    deleteDialogOpen.value = false;
+    handlingToDelete.value = null;
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: 'Penanganan lanjutan berhasil dihapus.'
+    });
+
+    if (items.value.length === 1 && pagination.current_page > 1) {
+      pagination.current_page--;
     }
-    fetchHandlings({ page: pagination.value.currentPage, per_page: perPage.value, search: searchQuery.value })
-    showToast('Berhasil', 'Penanganan lanjutan berhasil dihapus', 'success')
-  } catch (err) {
-    deleteError.value = err.response?.data?.message || 'Gagal menghapus penanganan lanjutan.'
-    console.error('Failed to delete handling:', err)
-  }
-}
 
-let searchTimeout
-watch(searchQuery, () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    handleSearch()
-  }, 500)
-})
+    fetchHandlings(pagination.current_page);
+  } else {
+    let errorMessage = 'Penanganan lanjutan gagal dihapus. Silakan coba lagi.';
+    if (typeof result.error === 'string') {
+      errorMessage = result.error;
+    } else if (result.error?.response?.data?.message) {
+      errorMessage = result.error.response.data.message;
+    }
+
+    showToast({
+      type: 'error',
+      title: 'Gagal Menghapus',
+      message: errorMessage
+    });
+  }
+};
 
 onMounted(() => {
-  fetchHandlings({ per_page: perPage.value })
-})
-
-const getRowNumber = (index) => {
-  if (pagination.value.perPage === 'all') return index + 1
-  return (pagination.value.currentPage - 1) * pagination.value.perPage + index + 1
-}
-
+  fetchHandlings();
+});
 </script>
 
 <template>
   <div class="page-container">
-    <!-- Notification Toast -->
-    <div v-if="notification" class="notification-toast" :class="`toast-${notification.type}`">
-      {{ notification.message }}
-    </div>
+    <AppToast
+      :show="toast.show"
+      :type="toast.type"
+      :title="toast.title"
+      :message="toast.message"
+      @close="closeToast"
+    />
 
     <!-- Header -->
-    <MasterDataPageHeader 
-      title="Master Data Penanganan Lanjutan"
+    <MasterDataPageHeader
+      title="Penanganan Lanjutan"
       subtitle="Kelola data referensi penanganan lanjutan pasien."
       :breadcrumbs="[
         { label: 'Dashboard', active: false },
@@ -143,227 +193,87 @@ const getRowNumber = (index) => {
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          Tambah Data
+          Tambah Penanganan Lanjutan
         </button>
       </template>
     </MasterDataPageHeader>
 
     <!-- Content -->
     <div class="page-content">
-      <!-- Filters -->
-      <div class="filters-container">
-        <MasterDataSearchInput 
-          v-model="searchQuery" 
-          placeholder="Cari penanganan..." 
-        />
-        
-        <div class="filter-actions">
-          <select v-model="perPage" class="form-select filter-select" @change="handleSearch">
-            <option :value="10">10 / halaman</option>
-            <option :value="25">25 / halaman</option>
-            <option :value="50">50 / halaman</option>
-          </select>
-        </div>
-      </div>
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error.includes('403') || error.includes('unauthorized') || error.includes('Unauthorized') ? 'Anda tidak memiliki akses untuk melihat data ini.' : 'Gagal memuat data.'" 
-        @retry="fetchHandlings({ page: pagination.currentPage, per_page: perPage, search: searchQuery })" 
+      <FollowUpHandlingFilters
+        :filters="filters"
+        :loading="loading"
+        @filter="handleFilter"
+        @refresh="() => fetchHandlings(pagination.current_page)"
       />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && handlings.length === 0" 
-          :is-search="!!searchQuery"
-        />
-        
-        <template v-else>
-          <div class="table-wrapper">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th class="col-no text-center">No</th>
-                    <th class="col-name">Nama</th>
-                    <th class="col-actions text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template v-if="loading">
-                    <MasterDataSkeletonRow :columns="3" :rows="5" />
-                  </template>
 
-                  <template v-else>
-                    <tr v-for="(handling, index) in handlings" :key="handling.id">
-                      <td class="col-no text-center text-muted">{{ getRowNumber(index) }}</td>
-                      <td class="col-name font-medium text-navy">{{ handling.name }}</td>
-                      <td class="actions-cell">
-                        <MasterDataActionButtons 
-                          @edit="openEditModal(handling)"
-                          @delete="confirmDelete(handling)"
-                        />
-                      </td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <MasterDataPagination 
-            :pagination="{
-              current_page: pagination.currentPage,
-              last_page: pagination.lastPage,
-              per_page: perPage,
-              total: pagination.total
-            }"
+      <MasterDataErrorState
+        v-if="error"
+        :error="error"
+        @retry="() => fetchHandlings(pagination.current_page)"
+      />
+
+      <template v-else>
+        <MasterDataEmptyState
+          v-if="!loading && items.length === 0"
+          :is-search="!!filters.search"
+        >
+          <template #action v-if="!filters.search">
+            <button class="btn-primary" @click="openAddModal">Tambah Penanganan Lanjutan</button>
+          </template>
+        </MasterDataEmptyState>
+
+        <template v-else>
+          <FollowUpHandlingTable
+            :items="items"
+            :pagination="pagination"
             :loading="loading"
-            :item-count="handlings.length"
-            @page-change="handlePageChange"
+            @edit="openEditModal"
+            @delete="openDeleteDialog"
+          />
+
+          <MasterDataPagination
+            :pagination="pagination"
+            :loading="loading"
+            :item-count="items.length"
+            @page-change="setPage"
           />
         </template>
       </template>
     </div>
 
-    <FollowUpHandlingFormModal 
-      :is-open="isFormModalOpen"
-      :title="selectedHandling ? 'Edit Penanganan Lanjutan' : 'Tambah Penanganan Lanjutan'"
-      :initial-data="selectedHandling || {}"
-      :loading="loading"
-      @close="isFormModalOpen = false"
-      @submit="onFormSubmit"
+    <!-- Modals -->
+    <FollowUpHandlingFormModal
+      :is-open="formModalOpen"
+      :item="selectedHandling"
+      :is-submitting="submitting"
+      :errors="formErrors"
+      @close="closeFormModal"
+      @submit="handleFormSubmit"
     />
 
-    <!-- Delete Confirmation Modal -->
-    <MasterDataDeleteDialog 
-      :is-open="isDeleteModalOpen"
-      title="Hapus Data"
+    <MasterDataDeleteDialog
+      :is-open="deleteDialogOpen"
+      title="Hapus Penanganan Lanjutan"
       :item-name="handlingToDelete?.name"
-      warning-message="Tindakan ini tidak dapat dibatalkan."
-      :is-submitting="loading"
-      @close="isDeleteModalOpen = false"
-      @confirm="handleDelete"
+      warning-message="Pastikan data yang dipilih sudah benar. Data yang dihapus tidak dapat dikembalikan."
+      :is-submitting="submitting"
+      @close="closeDeleteDialog"
+      @confirm="handleDeleteConfirm"
     />
   </div>
 </template>
 
 <style scoped>
 .page-container {
-  max-width: 100%;
-  position: relative;
-}
-
-.notification-toast {
-  position: fixed;
-  top: 1.5rem;
-  right: 1.5rem;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  background: white;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  z-index: 1100;
-  animation: slideInRight 0.3s ease-out forwards;
-  font-weight: 500;
-}
-
-.toast-success {
-  border-left: 4px solid #10b981;
-  color: #047857;
-}
-
-@keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.filter-actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.filter-select {
-  padding: 0.625rem 2rem 0.625rem 1rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
-  background-color: white;
-  cursor: pointer;
-}
-
-.table-wrapper {
-  overflow-x: auto;
-  width: 100%;
-}
-
-.table-container {
-  min-width: 800px;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-
-.data-table th {
-  padding: 1rem 1.25rem;
-  font-weight: 600;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #64748b;
-  background-color: #f8fafc;
-  border-bottom: 1px solid var(--color-border-soft);
-}
-
-.data-table td {
-  padding: 1rem 1.25rem;
-  font-size: 0.9rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  vertical-align: middle;
-}
-
-.data-table tbody tr:hover {
-  background-color: #f8fafc;
-}
-
-.col-no {
-  width: 80px;
-}
-
-.col-name {
-  width: auto;
-}
-
-.col-actions {
-  width: 120px;
-}
-
-.text-center {
-  text-align: center;
-}
-
-.text-right {
-  text-align: right;
-}
-
-.text-muted {
-  color: #64748b;
-}
-
-.text-navy {
-  color: var(--color-text-navy);
-}
-
-.font-medium {
-  font-weight: 500;
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 </style>
