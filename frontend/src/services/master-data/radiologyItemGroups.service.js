@@ -3,7 +3,7 @@ import axios from '@/utils/axios'
 const API_PATH = '/master-data/radiology-item-groups'
 
 export const radiologyItemGroupsService = {
-  async getGroups(params) {
+  async getGroups(params = {}) {
     const { data } = await axios.get(API_PATH, { params })
     return data
   },
@@ -32,4 +32,21 @@ export const radiologyItemGroupsService = {
     const { data } = await axios.delete(`${API_PATH}/${id}`)
     return data
   },
+
+  // Aliases for unified service pattern
+  getAll(params = {}) {
+    return this.getGroups(params)
+  },
+  getById(id) {
+    return this.getGroup(id)
+  },
+  create(payload) {
+    return this.createGroup(payload)
+  },
+  update(id, payload) {
+    return this.updateGroup(id, payload)
+  },
+  delete(id) {
+    return this.deleteGroup(id)
+  }
 }

@@ -115,7 +115,7 @@ const handleSort = (column) => {
           <template v-else-if="items.length === 0">
             <tr>
               <td colspan="4" class="text-center py-8 text-muted">
-                Tidak ada data tipe radiologi.
+                Tidak ada data item radiologi.
               </td>
             </tr>
           </template>

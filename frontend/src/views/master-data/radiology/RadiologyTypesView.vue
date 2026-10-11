@@ -96,8 +96,8 @@ const handleFormSubmit = async (payload) => {
       type: 'success',
       title: 'Berhasil',
       message: isEditing
-        ? 'Tipe radiologi berhasil diperbarui.'
-        : 'Tipe radiologi berhasil ditambahkan.'
+        ? 'Item radiologi berhasil diperbarui.'
+        : 'Item radiologi berhasil ditambahkan.'
     });
     fetchTypes();
   } else {
@@ -133,7 +133,7 @@ const handleDeleteConfirm = async () => {
     showToast({
       type: 'success',
       title: 'Berhasil',
-      message: 'Tipe radiologi berhasil dihapus.'
+      message: 'Item radiologi berhasil dihapus.'
     });
 
     // Adjust pagination if deleting the only record on later page
@@ -143,7 +143,7 @@ const handleDeleteConfirm = async () => {
 
     fetchTypes();
   } else {
-    let errorMessage = 'Tipe radiologi gagal dihapus. Silakan coba lagi.';
+    let errorMessage = 'Item radiologi gagal dihapus. Silakan coba lagi.';
     if (typeof result.error === 'string') {
       errorMessage = result.error;
     } else if (result.error?.response?.data?.message) {
@@ -190,7 +190,7 @@ onMounted(() => {
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          Tambah Tipe Rad
+          Tambah Item Rad
         </button>
       </template>
     </MasterDataPageHeader>
@@ -216,7 +216,7 @@ onMounted(() => {
           :is-search="!!filters.search"
         >
           <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Tipe Rad</button>
+            <button class="btn-primary" @click="openAddModal">Tambah Item Rad</button>
           </template>
         </MasterDataEmptyState>
         
@@ -253,7 +253,7 @@ onMounted(() => {
     
     <MasterDataDeleteDialog 
       :is-open="deleteDialogOpen"
-      title="Hapus Tipe Radiologi"
+      title="Hapus Item Radiologi"
       :item-name="typeToDelete ? typeToDelete.name : ''"
       warning-message="Pastikan data yang dipilih sudah benar. Data yang dihapus tidak dapat dikembalikan."
       :is-submitting="submitting"

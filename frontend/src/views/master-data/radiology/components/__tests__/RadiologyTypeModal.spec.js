@@ -23,10 +23,10 @@ describe('RadiologyTypeModal.vue', () => {
   it('renders correctly with default title for new type, placeholder, and default Status Aktif', () => {
     const wrapper = mountModal();
 
-    expect(wrapper.text()).toContain('Tambah Tipe Radiologi');
+    expect(wrapper.text()).toContain('Tambah Item Radiologi');
     const nameInput = wrapper.find('input#name');
     expect(nameInput.element.value).toBe('');
-    expect(nameInput.attributes('placeholder')).toBe('Masukkan nama tipe radiologi');
+    expect(nameInput.attributes('placeholder')).toBe('Masukkan tipe radiologi');
 
     const descInput = wrapper.find('textarea#description');
     expect(descInput.element.value).toBe('');
@@ -51,7 +51,7 @@ describe('RadiologyTypeModal.vue', () => {
 
     const wrapper = mountModal({ type });
 
-    expect(wrapper.text()).toContain('Edit Tipe Radiologi');
+    expect(wrapper.text()).toContain('Edit Item Radiologi');
     expect(wrapper.find('input#name').element.value).toBe('Radiografi Konvensional');
     expect(wrapper.find('textarea#description').element.value).toBe('Foto rontgen umum');
     expect(wrapper.find('input#status_active').element.checked).toBe(true);
@@ -69,7 +69,7 @@ describe('RadiologyTypeModal.vue', () => {
 
     const wrapper = mountModal({ type });
 
-    expect(wrapper.text()).toContain('Edit Tipe Radiologi');
+    expect(wrapper.text()).toContain('Edit Item Radiologi');
     expect(wrapper.find('input#name').element.value).toBe('USG Khusus');
     expect(wrapper.find('textarea#description').element.value).toBe('');
     expect(wrapper.find('input#status_active').element.checked).toBe(false);
@@ -131,13 +131,13 @@ describe('RadiologyTypeModal.vue', () => {
   it('renders field validation errors when passed in props', () => {
     const wrapper = mountModal({
       errors: {
-        name: ['Tipe radiologi sudah digunakan.'],
+        name: ['Kelompok item radiologi sudah digunakan.'],
         description: ['Deskripsi terlalu panjang.'],
         general: 'Terjadi kesalahan sistem.'
       }
     });
 
-    expect(wrapper.text()).toContain('Tipe radiologi sudah digunakan.');
+    expect(wrapper.text()).toContain('Kelompok item radiologi sudah digunakan.');
     expect(wrapper.text()).toContain('Deskripsi terlalu panjang.');
     expect(wrapper.text()).toContain('Terjadi kesalahan sistem.');
     expect(wrapper.find('input#name').classes()).toContain('is-invalid');

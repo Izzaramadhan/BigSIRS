@@ -112,7 +112,7 @@ const handleSubmit = () => {
 <template>
   <MasterDataFormModal
     :is-open="isOpen"
-    :title="type ? 'Edit Tipe Radiologi' : 'Tambah Tipe Radiologi'"
+    :title="type ? 'Edit Item Radiologi' : 'Tambah Item Radiologi'"
     :submit-text="type ? 'Simpan Perubahan' : 'Simpan'"
     :is-submitting="isSubmitting"
     size="md"
@@ -135,7 +135,7 @@ const handleSubmit = () => {
             type="text"
             class="form-control"
             :class="{ 'is-invalid': fieldError('name') }"
-            placeholder="Masukkan nama tipe radiologi"
+            placeholder="Masukkan tipe radiologi"
             maxlength="255"
             autocomplete="off"
             :disabled="isSubmitting"
