@@ -23,6 +23,9 @@ class UpdateIcd9cmCodeRequest extends FormRequest
             'is_active' => 'boolean',
             'inacbg_code' => 'nullable|string|max:100',
             'inacbg_name' => 'nullable|string',
+            'class_1_tariff' => 'nullable|numeric|min:0',
+            'class_2_tariff' => 'nullable|numeric|min:0',
+            'class_3_tariff' => 'nullable|numeric|min:0',
         ];
     }
 }

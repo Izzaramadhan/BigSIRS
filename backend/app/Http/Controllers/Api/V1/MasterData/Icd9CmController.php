@@ -23,12 +23,12 @@ class Icd9CmController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        $sortField = $request->input('sort_by', 'created_at');
-        $sortDir = $request->input('sort_dir', 'desc');
+        $sortField = $request->input('sort_by', $request->input('sort', 'created_at'));
+        $sortDir = $request->input('sort_dir', $request->input('direction', 'desc'));
 
-        $allowedSorts = ['code', 'name', 'english_name', 'created_at', 'updated_at', 'is_active'];
+        $allowedSorts = ['code', 'name', 'english_name', 'inacbg_code', 'created_at', 'updated_at', 'is_active'];
         if (in_array($sortField, $allowedSorts)) {
-            $query->orderBy($sortField, $sortDir === 'asc' ? 'asc' : 'desc');
+            $query->orderBy($sortField, strtolower($sortDir) === 'asc' ? 'asc' : 'desc');
         } else {
             $query->orderBy('created_at', 'desc');
         }
