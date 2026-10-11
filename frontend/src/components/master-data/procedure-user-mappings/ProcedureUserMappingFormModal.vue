@@ -1,244 +1,290 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useProcedureUserMappings } from '@/composables/useProcedureUserMappings'
 import ProcedureUserMappingService from '@/services/master-data/procedure-user-mappings.service'
 import AsyncProcedureSelect from '@/components/common/AsyncProcedureSelect.vue'
 import AsyncEmployeeSelect from '@/components/common/AsyncEmployeeSelect.vue'
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue'
 
 const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: true
+  },
+  modelValue: {
+    type: Boolean,
+    default: undefined
+  },
   id: {
     type: [Number, String],
+    default: null
+  },
+  item: {
+    type: Object,
     default: null
   }
 })
 
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'saved', 'update:modelValue'])
 
-const { createMapping, updateMapping, loading, error } = useProcedureUserMappings()
+const isModalOpen = computed(() => {
+  return props.modelValue !== undefined ? props.modelValue : props.isOpen
+})
 
 const isEditMode = computed(() => !!props.id)
+
+const { createMapping, updateMapping, submitting } = useProcedureUserMappings()
 
 const form = ref({
   procedure_id: '',
   employee_ids: []
 })
 
+const initialProcedure = ref(null)
 const formErrors = ref({})
+const generalError = ref('')
+const loadingDetail = ref(false)
 const employeeSelectRef = ref(null)
+
+const resetForm = () => {
+  form.value = {
+    procedure_id: '',
+    employee_ids: []
+  }
+  initialProcedure.value = null
+  formErrors.value = {}
+  generalError.value = ''
+  if (employeeSelectRef.value) {
+    employeeSelectRef.value.setInitialOptions([])
+  }
+}
+
+const loadDetail = async (id) => {
+  loadingDetail.value = true
+  generalError.value = ''
+  try {
+    const data = await ProcedureUserMappingService.getMapping(id)
+    form.value.procedure_id = data.procedure?.id || id
+    initialProcedure.value = data.procedure || null
+    form.value.employee_ids = data.employees?.map(e => e.id) || []
+    
+    await nextTick()
+    if (employeeSelectRef.value && data.employees) {
+      employeeSelectRef.value.setInitialOptions(data.employees)
+    }
+  } catch (err) {
+    console.error('Error loading detail mapping:', err)
+    generalError.value = err.response?.data?.message || 'Gagal memuat detail mapping tindakan user.'
+  } finally {
+    loadingDetail.value = false
+  }
+}
+
+watch(
+  () => [isModalOpen.value, props.id],
+  async ([open, currentId]) => {
+    if (open) {
+      resetForm()
+      if (currentId) {
+        if (props.item && props.item.id === currentId) {
+          form.value.procedure_id = props.item.procedure?.id || currentId
+          initialProcedure.value = props.item.procedure || null
+          form.value.employee_ids = props.item.employees?.map(e => e.id) || []
+          await nextTick()
+          if (employeeSelectRef.value && props.item.employees) {
+            employeeSelectRef.value.setInitialOptions(props.item.employees)
+          }
+        }
+        await loadDetail(currentId)
+      }
+    } else {
+      resetForm()
+    }
+  },
+  { immediate: true }
+)
 
 const validateForm = () => {
   const errors = {}
-  if (!form.value.procedure_id) errors.procedure_id = 'Tindakan wajib dipilih'
+  if (!form.value.procedure_id) {
+    errors.procedure_id = 'Tindakan wajib dipilih.'
+  }
   if (!form.value.employee_ids || form.value.employee_ids.length === 0) {
-    errors.employee_ids = 'Minimal satu pegawai wajib dipilih'
+    errors.employee_ids = 'Minimal satu user / pegawai wajib dipilih.'
   }
   formErrors.value = errors
   return Object.keys(errors).length === 0
 }
 
-const handleSubmit = async () => {
-  if (!validateForm()) return
-
-  try {
-    if (isEditMode.value) {
-      await updateMapping(props.id, form.value)
-    } else {
-      await createMapping(form.value)
-    }
-    emit('saved')
-  } catch {
-    // Error is handled in composable, but we might want to catch it to stop modal closing
-  }
+const handleClose = () => {
+  if (submitting.value) return
+  resetForm()
+  emit('close')
+  emit('update:modelValue', false)
 }
 
-onMounted(async () => {
+const handleSubmit = async () => {
+  generalError.value = ''
+  formErrors.value = {}
+
+  if (!validateForm()) return
+
+  const payload = {
+    procedure_id: form.value.procedure_id,
+    employee_ids: form.value.employee_ids
+  }
+
+  let result
   if (isEditMode.value) {
-    try {
-      loading.value = true
-      const data = await ProcedureUserMappingService.getMapping(props.id)
-      form.value.procedure_id = data.procedure.id
-      form.value.employee_ids = data.employees.map(e => e.id)
-      
-      // Inject selected employees data to employeeSelectRef
-      if (employeeSelectRef.value) {
-        employeeSelectRef.value.setInitialOptions(data.employees)
+    result = await updateMapping(props.id, payload)
+  } else {
+    result = await createMapping(payload)
+  }
+
+  if (result.success) {
+    emit('saved', isEditMode.value ? 'edit' : 'create')
+    handleClose()
+  } else {
+    const err = result.error
+    if (err.response?.status === 422) {
+      const respErrors = err.response.data?.errors
+      if (respErrors) {
+        formErrors.value = {
+          procedure_id: respErrors.procedure_id ? respErrors.procedure_id[0] : null,
+          employee_ids: respErrors.employee_ids ? respErrors.employee_ids[0] : null
+        }
       }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      loading.value = false
+      generalError.value = err.response.data?.message || 'Data yang dimasukkan tidak valid.'
+    } else {
+      generalError.value = err.response?.data?.message || 'Terjadi kesalahan sistem saat menyimpan data.'
     }
   }
-})
+}
 </script>
 
 <template>
-  <div class="modal-backdrop">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title">
-            {{ isEditMode ? 'Edit Mapping Tindakan' : 'Tambah Mapping Tindakan' }}
-          </h3>
-          <button class="close-btn" @click="$emit('close')">×</button>
-        </div>
-        
-        <div class="modal-body">
-          <div v-if="error" class="alert alert-danger mb-4">
-            {{ error }}
-          </div>
+  <MasterDataFormModal
+    :is-open="isModalOpen"
+    :title="isEditMode ? 'Edit Mapping Tindakan User' : 'Tambah Mapping Tindakan User'"
+    :is-submitting="submitting"
+    :is-submit-disabled="loadingDetail || (!isEditMode && !form.procedure_id) || form.employee_ids.length === 0"
+    :submit-text="isEditMode ? 'Simpan Perubahan' : 'Simpan'"
+    size="md"
+    @close="handleClose"
+    @submit="handleSubmit"
+  >
+    <div v-if="loadingDetail" class="text-center py-8 text-secondary">
+      Memuat detail mapping...
+    </div>
 
-          <form @submit.prevent="handleSubmit" class="form">
-            <div class="form-group">
-              <label class="form-label">Tindakan <span class="required">*</span></label>
-              <AsyncProcedureSelect 
-                v-model="form.procedure_id"
-                placeholder="Pilih Tindakan..."
-                :error="!!formErrors.procedure_id"
-                :disabled="isEditMode"
-              />
-              <span v-if="formErrors.procedure_id" class="error-text">{{ formErrors.procedure_id }}</span>
-              <span v-if="isEditMode" class="help-text text-secondary mt-1">Tindakan tidak dapat diubah pada mode edit. Hapus mapping jika salah.</span>
-            </div>
+    <div v-else class="modal-form-content">
+      <div v-if="generalError" class="alert alert-danger mb-4" role="alert">
+        {{ generalError }}
+      </div>
 
-            <div class="form-group">
-              <label class="form-label">Pegawai (Medis / Paramedis) <span class="required">*</span></label>
-              <AsyncEmployeeSelect 
-                ref="employeeSelectRef"
-                v-model="form.employee_ids"
-                placeholder="Cari dan pilih pegawai..."
-                :error="!!formErrors.employee_ids"
-                :multiple="true"
-              />
-              <span v-if="formErrors.employee_ids" class="error-text">{{ formErrors.employee_ids }}</span>
-            </div>
-          </form>
-        </div>
+      <!-- Tindakan -->
+      <div class="form-group">
+        <label class="form-label required">Tindakan</label>
+        <AsyncProcedureSelect 
+          v-model="form.procedure_id"
+          :initial-procedure="initialProcedure"
+          placeholder="Cari tindakan..."
+          :error="!!formErrors.procedure_id"
+          :disabled="isEditMode"
+        />
+        <span v-if="formErrors.procedure_id" class="error-message">
+          {{ formErrors.procedure_id }}
+        </span>
+        <span v-if="isEditMode" class="form-hint">
+          Tindakan tidak dapat diubah pada mode edit. Hapus mapping jika salah.
+        </span>
+      </div>
 
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="$emit('close')" :disabled="loading">
-            Batal
-          </button>
-          <button class="btn btn-primary" @click="handleSubmit" :disabled="loading">
-            {{ loading ? 'Menyimpan...' : 'Simpan' }}
-          </button>
-        </div>
+      <!-- User / Pegawai -->
+      <div class="form-group">
+        <label class="form-label required">User (Pegawai Medis / Paramedis)</label>
+        <AsyncEmployeeSelect 
+          ref="employeeSelectRef"
+          v-model="form.employee_ids"
+          placeholder="Cari nama atau NIP pegawai..."
+          :error="!!formErrors.employee_ids"
+          :multiple="true"
+        />
+        <span v-if="formErrors.employee_ids" class="error-message">
+          {{ formErrors.employee_ids }}
+        </span>
+        <span class="form-hint">
+          Dapat memilih lebih dari satu pegawai untuk tindakan ini.
+        </span>
       </div>
     </div>
-  </div>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
-}
-
-.modal-dialog {
-  background: #ffffff;
-  border-radius: 12px;
-  width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: slideUp 0.3s ease;
+.modal-form-content {
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-}
-
-.modal-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--color-text-navy);
-  margin: 0;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.close-btn:hover {
-  color: var(--color-danger);
-}
-
-.modal-body {
-  padding: 1.5rem;
-  overflow-y: auto;
+  gap: 1.25rem;
 }
 
 .form-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: 0;
 }
 
 .form-label {
   display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-navy);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-navy, #0f172a);
   margin-bottom: 0.5rem;
 }
 
-.required {
-  color: var(--color-danger);
+.form-label.required::after {
+  content: ' *';
+  color: var(--color-danger, #ef4444);
 }
 
-.error-text {
-  color: var(--color-danger);
+.form-hint {
+  display: block;
   font-size: 0.8rem;
-  margin-top: 0.3rem;
+  color: var(--color-text-secondary, #64748b);
+  margin-top: 0.35rem;
+}
+
+.error-message {
   display: block;
+  font-size: 0.8rem;
+  color: var(--color-danger, #ef4444);
+  margin-top: 0.35rem;
 }
 
-.help-text {
-  font-size: 0.75rem;
-  display: block;
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
 }
 
-.mt-1 {
-  margin-top: 0.25rem;
+.alert-danger {
+  background-color: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
-  border-top: 1px solid var(--color-border-soft);
-  background: #f8fafc;
-  border-radius: 0 0 12px 12px;
+.text-center {
+  text-align: center;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.text-secondary {
+  color: #64748b;
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+.py-8 {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
 }
 </style>
