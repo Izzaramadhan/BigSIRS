@@ -1,210 +1,345 @@
 <script setup>
-import { ref, watch } from 'vue'
-import { useRadiologyItemGroups } from '@/composables/useRadiologyItemGroups'
+import { reactive, watch } from 'vue';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
 
 const props = defineProps({
   isOpen: {
     type: Boolean,
     default: false
   },
+  group: {
+    type: Object,
+    default: null
+  },
   groupData: {
     type: Object,
     default: null
+  },
+  isSubmitting: {
+    type: Boolean,
+    default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
   }
-})
+});
 
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'submit', 'saved']);
 
-const { createGroup, updateGroup, loading } = useRadiologyItemGroups()
+const activeGroup = () => props.group || props.groupData || null;
 
-const form = ref({
+const form = reactive({
   name: '',
   description: '',
   is_active: true
-})
+});
 
-const errors = ref({})
-const globalError = ref(null)
+const clientErrors = reactive({});
 
-watch(() => props.isOpen, (newVal) => {
-  if (newVal) {
-    if (props.groupData) {
-      form.value = { ...props.groupData }
+const resetForm = () => {
+  form.name = '';
+  form.description = '';
+  form.is_active = true;
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+const populateForm = (data) => {
+  form.name = data.name || '';
+  form.description = (data.description !== null && data.description !== undefined) ? String(data.description) : '';
+  form.is_active = (data.is_active !== undefined && data.is_active !== null) ? Boolean(data.is_active) : true;
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      const current = activeGroup();
+      if (current) {
+        populateForm(current);
+      } else {
+        resetForm();
+      }
     } else {
-      form.value = {
-        name: '',
-        description: '',
-        is_active: true
+      resetForm();
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [props.group, props.groupData],
+  () => {
+    if (props.isOpen) {
+      const current = activeGroup();
+      if (current) {
+        populateForm(current);
       }
     }
-    errors.value = {}
-    globalError.value = null
   }
-})
+);
 
-const validateForm = () => {
-  const newErrors = {}
-  
-  if (!form.value.name?.trim()) {
-    newErrors.name = 'Kelompok Item Radiologi wajib diisi'
+const clearFieldError = (field) => {
+  if (clientErrors[field]) {
+    delete clientErrors[field];
   }
-  
-  errors.value = newErrors
-  return Object.keys(newErrors).length === 0
-}
+};
 
-const handleSubmit = async () => {
-  if (!validateForm()) return
-  
-  globalError.value = null
-  
+const fieldError = (field) => {
+  if (clientErrors[field]) {
+    return clientErrors[field];
+  }
+  if (!props.errors || !props.errors[field]) return null;
+  return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field];
+};
+
+const validateClient = () => {
+  Object.keys(clientErrors).forEach((k) => delete clientErrors[k]);
+  let isValid = true;
+
+  if (!form.name || !form.name.trim()) {
+    clientErrors.name = 'Kelompok item radiologi wajib diisi.';
+    isValid = false;
+  }
+
+  return isValid;
+};
+
+const handleSubmit = () => {
+  if (!validateClient()) return;
+
   const payload = {
-    name: form.value.name,
-    description: form.value.description,
-    is_active: form.value.is_active === true || form.value.is_active === '1'
-  }
-  
-  let result
-  if (props.groupData?.id) {
-    result = await updateGroup(props.groupData.id, payload)
-  } else {
-    result = await createGroup(payload)
-  }
-  
-  if (result.success) {
-    emit('saved')
-  } else {
-    if (result.errors) {
-      errors.value = result.errors
-    }
-    globalError.value = result.error || 'Terjadi kesalahan saat menyimpan data.'
-  }
-}
+    name: form.name.trim(),
+    description: form.description && form.description.trim() ? form.description.trim() : null,
+    is_active: Boolean(form.is_active)
+  };
 
-const close = () => {
-  if (!loading.value) {
-    emit('close')
-  }
-}
+  emit('submit', payload);
+  emit('saved', payload);
+};
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-overlay" @click.self="close">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>{{ groupData ? 'Edit' : 'Tambah' }} Data Kelompok Item Radiologi</h3>
-          <button class="btn-close" @click="close" :disabled="loading">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="activeGroup() ? 'Edit Kelompok Item Radiologi' : 'Tambah Kelompok Item Radiologi'"
+    :submit-text="activeGroup() ? 'Simpan Perubahan' : 'Simpan'"
+    :is-submitting="isSubmitting"
+    size="md"
+    @close="emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form-container">
+      <!-- General Error Alert -->
+      <div v-if="errors?.general" class="alert-error" role="alert">
+        {{ errors.general }}
+      </div>
+
+      <div class="form-grid">
+        <!-- 1. Kelompok Item (name) -->
+        <div class="form-group form-group--full">
+          <label for="name" class="form-label required">Kelompok Item</label>
+          <input
+            id="name"
+            v-model="form.name"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('name') }"
+            placeholder="Masukkan nama kelompok item"
+            maxlength="255"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('name')"
+            required
+          />
+          <div v-if="fieldError('name')" class="invalid-feedback">
+            {{ fieldError('name') }}
+          </div>
         </div>
-        
-        <form @submit.prevent="handleSubmit" class="modal-form">
-          <div class="modal-body">
-            <div v-if="globalError" class="alert-error">
-              {{ globalError }}
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label" for="group_name">
-                Kelompok Item Radiologi <span class="required">*</span>
-              </label>
-              <input 
-                id="group_name"
-                type="text" 
-                class="form-input" 
-                :class="{ 'is-invalid': errors.name }"
-                v-model="form.name"
-                placeholder="Kelompok Item Radiologi"
-                :disabled="loading"
-              />
-              <span v-if="errors.name" class="error-message">{{ Array.isArray(errors.name) ? errors.name[0] : errors.name }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label" for="group_description">Deskripsi</label>
-              <textarea 
-                id="group_description"
-                class="form-input form-textarea" 
-                :class="{ 'is-invalid': errors.description }"
-                v-model="form.description"
-                placeholder="Deskripsi"
-                rows="3"
-                :disabled="loading"
-              ></textarea>
-              <span v-if="errors.description" class="error-message">{{ Array.isArray(errors.description) ? errors.description[0] : errors.description }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label" for="group_status">Tampil</label>
-              <select 
-                id="group_status"
-                class="form-select" 
+
+        <!-- 2. Deskripsi -->
+        <div class="form-group form-group--full">
+          <label for="description" class="form-label">Deskripsi</label>
+          <textarea
+            id="description"
+            v-model="form.description"
+            class="form-control form-textarea"
+            :class="{ 'is-invalid': fieldError('description') }"
+            placeholder="Masukkan deskripsi kelompok item"
+            rows="4"
+            maxlength="1000"
+            :disabled="isSubmitting"
+            @input="clearFieldError('description')"
+          ></textarea>
+          <div v-if="fieldError('description')" class="invalid-feedback">
+            {{ fieldError('description') }}
+          </div>
+        </div>
+
+        <!-- 3. Status Tampil -->
+        <div class="form-group form-group--full">
+          <label class="form-label required">Status Tampil</label>
+          <div class="status-radio-group">
+            <label class="status-radio-item" :class="{ 'is-selected': form.is_active === true }">
+              <input
+                id="status_active"
+                type="radio"
                 v-model="form.is_active"
-                :disabled="loading"
-              >
-                <option :value="true">Ya</option>
-                <option :value="false">Tidak</option>
-              </select>
-            </div>
+                :value="true"
+                name="radiology_item_group_status"
+                :disabled="isSubmitting"
+                @change="clearFieldError('is_active')"
+              />
+              <span class="status-radio-label">Aktif</span>
+            </label>
+            <label class="status-radio-item" :class="{ 'is-selected': form.is_active === false }">
+              <input
+                id="status_inactive"
+                type="radio"
+                v-model="form.is_active"
+                :value="false"
+                name="radiology_item_group_status"
+                :disabled="isSubmitting"
+                @change="clearFieldError('is_active')"
+              />
+              <span class="status-radio-label">Nonaktif</span>
+            </label>
           </div>
-          
-          <div class="modal-footer">
-            <button type="button" class="btn-cancel" @click="close" :disabled="loading">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              Batal
-            </button>
-            <button type="submit" class="btn-primary" :disabled="loading">
-              <svg v-if="loading" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                <polyline points="7 3 7 8 15 8"></polyline>
-              </svg>
-              {{ groupData ? 'Simpan Perubahan' : 'Simpan' }}
-            </button>
+          <div v-if="fieldError('is_active')" class="invalid-feedback">
+            {{ fieldError('is_active') }}
           </div>
-        </form>
+        </div>
       </div>
     </div>
-  </Teleport>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 1rem; backdrop-filter: blur(2px); }
-.modal-content { background: #ffffff; border-radius: 8px; width: 100%; max-width: 650px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
-.modal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border-soft); display: flex; justify-content: space-between; align-items: center; background: #ffffff; border-radius: 8px 8px 0 0; }
-.modal-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; }
-.btn-close { background: transparent; border: none; color: var(--color-text-secondary); cursor: pointer; padding: 0.25rem; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-.btn-close:hover:not(:disabled) { background: var(--color-page-bg); color: var(--color-text-navy); }
-.btn-close:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-close svg { width: 20px; height: 20px; }
-.modal-form { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
-.modal-body { padding: 1.5rem; flex: 1; overflow-y: auto; }
-.form-group { margin-bottom: 1.25rem; display: flex; align-items: center; }
-.form-label { flex: 0 0 250px; text-align: right; margin-right: 1.5rem; font-size: 0.9rem; font-weight: 500; color: #374151; }
-.required { color: #ef4444; margin-left: 0.25rem; }
-.form-input, .form-select { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border-soft); border-radius: 4px; font-size: 0.9rem; transition: all 0.2s; background: #ffffff; color: var(--color-text-navy); width: 100%; box-sizing: border-box; }
-.form-input:focus, .form-select:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-light); }
-.form-input:disabled, .form-select:disabled { background: #f3f4f6; color: #94a3b8; cursor: not-allowed; }
-.is-invalid { border-color: #ef4444; }
-.is-invalid:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2); }
-.error-message { font-size: 0.75rem; color: #ef4444; margin-top: 0.25rem; display: block; margin-left: calc(250px + 1.5rem); }
-.form-textarea { resize: vertical; min-height: 80px; }
-.alert-error { background: #fef2f2; color: #ef4444; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; font-weight: 500; margin-bottom: 1.5rem; border: 1px solid #f87171; }
-.modal-footer { padding: 1.25rem 1.5rem; border-top: 1px solid var(--color-border-soft); display: flex; justify-content: flex-start; gap: 0.75rem; background: #ffffff; border-radius: 0 0 8px 8px; justify-content: center; }
-.btn-cancel { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem; background: #ffffff; border: 1px solid var(--color-border-soft); border-radius: 4px; font-size: 0.9rem; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; transition: all 0.2s; }
-.btn-cancel:hover:not(:disabled) { background: #f3f4f6; color: var(--color-text-navy); }
-.btn-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-cancel svg { width: 16px; height: 16px; }
-.btn-primary { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem; background: #06b6d4; border: none; border-radius: 4px; font-size: 0.9rem; font-weight: 500; color: #ffffff; cursor: pointer; transition: all 0.2s; }
-.btn-primary:hover:not(:disabled) { background: #0891b2; }
-.btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-.btn-primary svg { width: 16px; height: 16px; }
-.spinner { animation: spin 1s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@media (max-width: 640px) { .form-group { flex-direction: column; align-items: flex-start; } .form-label { text-align: left; margin-bottom: 0.5rem; flex: 0 0 auto; width: 100%; } .error-message { margin-left: 0; } }
+.modal-form-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group--full {
+  width: 100%;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-navy, #0f172a);
+  margin-bottom: 0.375rem;
+}
+
+.form-label.required::after {
+  content: " *";
+  color: #ef4444;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-text-navy, #0f172a);
+  background-color: #ffffff;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
+  border-radius: 6px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--color-primary, #0f766e);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.form-control.is-invalid {
+  border-color: #ef4444;
+}
+
+.form-control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.form-control:disabled {
+  background-color: #f8fafc;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.invalid-feedback {
+  display: block;
+  font-size: 0.8125rem;
+  color: #ef4444;
+  margin-top: 0.375rem;
+}
+
+.status-radio-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.status-radio-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #ffffff;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.status-radio-item:hover {
+  border-color: var(--color-primary, #0f766e);
+  background-color: #f0fdfa;
+}
+
+.status-radio-item.is-selected {
+  border-color: var(--color-primary, #0f766e);
+  background-color: #f0fdfa;
+}
+
+.status-radio-item input[type="radio"] {
+  cursor: pointer;
+  accent-color: var(--color-primary, #0f766e);
+}
+
+.status-radio-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-navy, #0f172a);
+}
 </style>

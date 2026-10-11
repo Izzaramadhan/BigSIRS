@@ -25,7 +25,7 @@ const mockPaginatedResponse = {
       {
         id: 2,
         name: 'Ultrasonografi',
-        description: 'Pemeriksaan USG organ dalam',
+        description: null,
         is_active: false
       }
     ],
@@ -49,7 +49,7 @@ describe('RadiologyTypesView.vue', () => {
       },
     });
 
-  it('renders page header, breadcrumbs, filters without status dropdown, and table with exact 4 columns', async () => {
+  it('renders page header, breadcrumbs, filters, and table with exact 4 columns: No, Tipe, Deskripsi, Aksi', async () => {
     const wrapper = mountView();
     await flushPromises();
 
@@ -63,16 +63,25 @@ describe('RadiologyTypesView.vue', () => {
     expect(wrapper.text()).toContain('Master Data');
     expect(wrapper.text()).toContain('Data Radiologi');
 
+    // Search input has placeholder with tipe radiologi
+    const searchInput = wrapper.find('input[placeholder="Cari tipe radiologi..."]');
+    expect(searchInput.exists()).toBe(true);
+
     // Verify status filter is NOT rendered
     expect(wrapper.find('.filter-controls').text()).not.toContain('Semua Status');
 
-    // 4 Columns in exact order
+    // 4 Columns in exact order: No, Tipe, Deskripsi, Aksi
     const ths = wrapper.findAll('thead th');
     expect(ths.length).toBe(4);
     expect(ths[0].text()).toBe('No');
     expect(ths[1].text()).toBe('Tipe');
     expect(ths[2].text()).toBe('Deskripsi');
     expect(ths[3].text()).toBe('Aksi');
+
+    // Verify null description renders '-'
+    const rows = wrapper.findAll('tbody tr');
+    expect(rows.length).toBe(2);
+    expect(rows[1].find('.col-desc').text()).toBe('-');
   });
 
   it('shows empty state when no data exists', async () => {
@@ -87,6 +96,26 @@ describe('RadiologyTypesView.vue', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Belum ada data yang ditambahkan.');
+    expect(wrapper.text()).toContain('Tambah Item Rad');
+  });
+
+  it('validates client side required field for Tipe', async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    // Click "Tambah Item Rad"
+    const addBtn = wrapper.find('button.btn-primary');
+    await addBtn.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Tambah Item Radiologi');
+
+    // Submit empty
+    await wrapper.find('form.modal-form-wrapper').trigger('submit');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Tipe radiologi wajib diisi.');
+    expect(radiologyTypesService.create).not.toHaveBeenCalled();
   });
 
   it('handles add workflow with status Aktif and single success toast notification', async () => {
@@ -99,24 +128,29 @@ describe('RadiologyTypesView.vue', () => {
     const wrapper = mountView();
     await flushPromises();
 
-    // Click "Tambah Tipe Rad"
+    // Click "Tambah Kelompok Item"
     const addBtn = wrapper.find('button.btn-primary');
     await addBtn.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Tambah Tipe Radiologi');
+    expect(wrapper.text()).toContain('Tambah Item Radiologi');
 
     // Fill form
     await wrapper.find('input#name').setValue('CT Scan Kepala');
+    await wrapper.find('textarea#description').setValue('Pemeriksaan CT scan kepala');
     await wrapper.find('form.modal-form-wrapper').trigger('submit');
     await flushPromises();
 
     expect(radiologyTypesService.create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'CT Scan Kepala', is_active: true })
+      expect.objectContaining({
+        name: 'CT Scan Kepala',
+        description: 'Pemeriksaan CT scan kepala',
+        is_active: true
+      })
     );
 
     // Toast message exact match
-    expect(wrapper.text()).toContain('Tipe radiologi berhasil ditambahkan.');
+    expect(wrapper.text()).toContain('Item radiologi berhasil ditambahkan.');
   });
 
   it('handles add workflow with status Nonaktif', async () => {
@@ -129,7 +163,7 @@ describe('RadiologyTypesView.vue', () => {
     const wrapper = mountView();
     await flushPromises();
 
-    // Click "Tambah Tipe Rad"
+    // Click "Tambah Kelompok Item"
     await wrapper.find('button.btn-primary').trigger('click');
     await flushPromises();
 
@@ -143,7 +177,7 @@ describe('RadiologyTypesView.vue', () => {
       expect.objectContaining({ name: 'Kedokteran Nuklir', is_active: false })
     );
 
-    expect(wrapper.text()).toContain('Tipe radiologi berhasil ditambahkan.');
+    expect(wrapper.text()).toContain('Item radiologi berhasil ditambahkan.');
   });
 
   it('handles edit workflow with status change from Aktif to Nonaktif', async () => {
@@ -161,7 +195,7 @@ describe('RadiologyTypesView.vue', () => {
     await editBtn.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Edit Tipe Radiologi');
+    expect(wrapper.text()).toContain('Edit Item Radiologi');
     expect(wrapper.find('input#name').element.value).toBe('Radiografi Konvensional');
     expect(wrapper.find('input#status_active').element.checked).toBe(true);
 
@@ -177,7 +211,7 @@ describe('RadiologyTypesView.vue', () => {
     );
 
     // Toast message exact match
-    expect(wrapper.text()).toContain('Tipe radiologi berhasil diperbarui.');
+    expect(wrapper.text()).toContain('Item radiologi berhasil diperbarui.');
   });
 
   it('handles edit workflow reading initial Nonaktif status correctly', async () => {
@@ -189,7 +223,7 @@ describe('RadiologyTypesView.vue', () => {
     await editBtns[1].trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Edit Tipe Radiologi');
+    expect(wrapper.text()).toContain('Edit Item Radiologi');
     expect(wrapper.find('input#name').element.value).toBe('Ultrasonografi');
     expect(wrapper.find('input#status_inactive').element.checked).toBe(true);
     expect(wrapper.find('input#status_active').element.checked).toBe(false);
@@ -202,7 +236,7 @@ describe('RadiologyTypesView.vue', () => {
         data: {
           message: 'The name has already been taken.',
           errors: {
-            name: ['Tipe radiologi sudah digunakan.']
+            name: ['Kelompok item radiologi sudah digunakan.']
           }
         }
       }
@@ -211,7 +245,7 @@ describe('RadiologyTypesView.vue', () => {
     const wrapper = mountView();
     await flushPromises();
 
-    // Click "Tambah Tipe Rad"
+    // Click "Tambah Kelompok Item"
     await wrapper.find('button.btn-primary').trigger('click');
     await flushPromises();
 
@@ -220,10 +254,10 @@ describe('RadiologyTypesView.vue', () => {
     await flushPromises();
 
     // Modal stays open
-    expect(wrapper.text()).toContain('Tambah Tipe Radiologi');
-    expect(wrapper.text()).toContain('Tipe radiologi sudah digunakan.');
+    expect(wrapper.text()).toContain('Tambah Item Radiologi');
+    expect(wrapper.text()).toContain('Kelompok item radiologi sudah digunakan.');
     // No success notification
-    expect(wrapper.text()).not.toContain('Tipe radiologi berhasil ditambahkan.');
+    expect(wrapper.text()).not.toContain('Item radiologi berhasil ditambahkan.');
   });
 
   it('handles delete workflow with confirmation dialog and single success toast', async () => {
@@ -238,7 +272,7 @@ describe('RadiologyTypesView.vue', () => {
     await flushPromises();
 
     // Confirm dialog is shown with item name
-    expect(wrapper.text()).toContain('Hapus Tipe Radiologi');
+    expect(wrapper.text()).toContain('Hapus Item Radiologi');
     expect(wrapper.text()).toContain('Radiografi Konvensional');
 
     // Confirm delete
@@ -247,6 +281,6 @@ describe('RadiologyTypesView.vue', () => {
     await flushPromises();
 
     expect(radiologyTypesService.delete).toHaveBeenCalledWith(1);
-    expect(wrapper.text()).toContain('Tipe radiologi berhasil dihapus.');
+    expect(wrapper.text()).toContain('Item radiologi berhasil dihapus.');
   });
 });
