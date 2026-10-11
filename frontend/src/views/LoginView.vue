@@ -38,6 +38,7 @@ onMounted(() => {
 });
 
 const handleLogin = async () => {
+  if (authStore.loading) return;
   errorMessage.value = '';
   const success = await authStore.login(username.value, password.value, captchaId.value, captchaAnswer.value);
   
@@ -152,11 +153,49 @@ const handleLogin = async () => {
           </div>
 
           <!-- Submit -->
-          <button type="submit" class="btn-submit" :disabled="authStore.loading">
-            <span class="btn-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+          <button 
+            type="submit" 
+            class="btn-submit" 
+            :disabled="authStore.loading"
+            :aria-busy="authStore.loading"
+          >
+            <span class="btn-submit__icon" aria-hidden="true">
+              <svg 
+                v-if="authStore.loading" 
+                class="spinner" 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                stroke-width="2.5" 
+                stroke-linecap="round" 
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
+              </svg>
+              <svg 
+                v-else 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                stroke-width="2" 
+                stroke-linecap="round" 
+                stroke-linejoin="round"
+              >
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                <polyline points="10 17 15 12 10 7"></polyline>
+                <line x1="15" y1="12" x2="3" y2="12"></line>
+              </svg>
             </span>
-            {{ authStore.loading ? 'MEMPROSES...' : 'LOGIN' }}
+            <span class="btn-submit__text">
+              {{ authStore.loading ? 'MEMPROSES...' : 'LOGIN' }}
+            </span>
           </button>
         </form>
       </div>
@@ -416,33 +455,100 @@ const handleLogin = async () => {
 
 .btn-submit {
   width: 100%;
-  padding: 0.875rem;
+  min-height: 48px;
+  padding: 0.75rem 1.5rem;
   background-color: #0f766e;
-  color: white;
+  color: #ffffff;
   border: none;
   border-radius: 8px;
   font-weight: 600;
   font-size: 0.95rem;
+  letter-spacing: 0.03em;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 0.5rem;
+  gap: 10px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  box-shadow: 0 2px 4px rgba(15, 118, 110, 0.18);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  user-select: none;
+  box-sizing: border-box;
 }
 
 .btn-submit:hover:not(:disabled) {
   background-color: #0d9488;
+  box-shadow: 0 4px 8px rgba(15, 118, 110, 0.28);
+}
+
+.btn-submit:focus {
+  outline: none;
+}
+
+.btn-submit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.35);
+}
+
+.btn-submit:active:not(:disabled) {
+  background-color: #115e59;
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(15, 118, 110, 0.2);
 }
 
 .btn-submit:disabled {
   background-color: #94a3b8;
+  color: #f1f5f9;
   cursor: not-allowed;
+  opacity: 0.85;
+  box-shadow: none;
+  transform: none;
 }
 
-.btn-icon {
-  display: flex;
+.btn-submit__icon {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  color: #ffffff;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  flex-shrink: 0;
+}
+
+.btn-submit__icon svg {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  stroke: currentColor;
+  flex-shrink: 0;
+  display: block;
+}
+
+.btn-submit__text {
+  color: #ffffff;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.spinner {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-alert {
