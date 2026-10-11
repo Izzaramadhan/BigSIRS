@@ -24,12 +24,13 @@ class RadiologyCategoryController extends Controller
         $query = RadiologyCategory::query()
             ->search($request->input('search'));
 
-        if ($request->has('is_active')) {
+        if ($request->has('is_active') && $request->input('is_active') !== '' && $request->input('is_active') !== null) {
             $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
         }
 
-        $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
-        $sortBy = $request->get('sortBy', 'name');
+        $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->get('sort_desc', false), FILTER_VALIDATE_BOOLEAN);
+        $sortBy = $request->get('sortBy') ?? $request->get('sort_by', 'name');
         $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
 
         $perPage = $request->get('per_page', 10);
