@@ -13,7 +13,7 @@ class MedicineController extends Controller
     {
         $query = Medicine::with(['unit', 'category', 'classification', 'route', 'generic']);
 
-        if ($request->has('search')) {
+        if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -22,28 +22,34 @@ class MedicineController extends Controller
             });
         }
 
-        if ($request->has('category_id') && $request->category_id != '') {
+        if ($request->filled('category_id')) {
             $query->where('medicine_category_id', $request->category_id);
         }
 
-        if ($request->has('classification_id') && $request->classification_id != '') {
+        if ($request->filled('classification_id')) {
             $query->where('medicine_classification_id', $request->classification_id);
         }
 
         $perPage = $request->input('per_page', 10);
-        $sortDesc = $request->input('sortDesc', 'false') === 'true';
-        $sortBy = $request->input('sortBy', 'created_at');
-
-        // Handle sorting for generic 'name' property
-        if ($sortBy == 'name' || $sortBy == 'code') {
-            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        $sortBy = $request->input('sort', $request->input('sortBy', 'name'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->input('direction')) === 'desc';
         } else {
-            $query->orderBy('created_at', 'desc');
+            $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
         }
 
-        $medicines = $query->paginate($perPage);
+        $allowedSorts = ['id', 'code', 'name', 'created_at', 'updated_at'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
 
-        return MedicineResource::collection($medicines);
+        if ($perPage === '-1' || $perPage === 'all') {
+            return MedicineResource::collection($query->get());
+        }
+
+        return MedicineResource::collection($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -59,12 +65,17 @@ class MedicineController extends Controller
             'medicine_route_id' => 'nullable|exists:medicine_routes,id',
             'generic_medicine_id' => 'nullable|exists:generic_medicines,id',
             'description' => 'nullable|string',
-            'is_active' => 'required|boolean',
+            'is_active' => 'nullable|boolean',
         ]);
 
-        $medicine = Medicine::create($validated);
+        if (! isset($validated['is_active'])) {
+            $validated['is_active'] = true;
+        }
 
-        return new MedicineResource($medicine);
+        $medicine = Medicine::create($validated);
+        $medicine->load(['unit', 'category', 'classification', 'route', 'generic']);
+
+        return (new MedicineResource($medicine))->response()->setStatusCode(201);
     }
 
     public function show(Medicine $medicine)
@@ -87,17 +98,17 @@ class MedicineController extends Controller
             'medicine_route_id' => 'nullable|exists:medicine_routes,id',
             'generic_medicine_id' => 'nullable|exists:generic_medicines,id',
             'description' => 'nullable|string',
-            'is_active' => 'required|boolean',
+            'is_active' => 'nullable|boolean',
         ]);
 
         $medicine->update($validated);
+        $medicine->load(['unit', 'category', 'classification', 'route', 'generic']);
 
         return new MedicineResource($medicine);
     }
 
     public function destroy(Medicine $medicine)
     {
-        // Add protection logic if medicine is used in transactions later.
         $medicine->delete();
 
         return response()->noContent();

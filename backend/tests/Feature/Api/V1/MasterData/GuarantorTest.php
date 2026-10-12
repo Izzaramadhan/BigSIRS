@@ -132,6 +132,53 @@ class GuarantorTest extends TestCase
         ]);
     }
 
+    public function test_can_create_guarantor_with_minimal_fields(): void
+    {
+        $payload = [
+            'name' => 'Asuransi Mandiri Sehat',
+            'is_government' => true,
+            'inacbg_id' => '5',
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/guarantors', $payload);
+
+        $response->assertCreated();
+
+        $this->assertDatabaseHas('guarantors', [
+            'name' => 'Asuransi Mandiri Sehat',
+            'is_government' => true,
+            'inacbg_id' => '5',
+            'type' => 'bpjs',
+        ]);
+    }
+
+    public function test_can_update_guarantor_with_minimal_fields(): void
+    {
+        $guarantor = Guarantor::factory()->create([
+            'code' => 'ASR-EXISTING',
+            'type' => GuarantorType::PrivateInsurance,
+            'name' => 'Old Name',
+        ]);
+
+        $payload = [
+            'name' => 'New Name',
+            'is_government' => false,
+            'inacbg_id' => null,
+        ];
+
+        $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/guarantors/{$guarantor->id}", $payload);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('guarantors', [
+            'id' => $guarantor->id,
+            'code' => 'ASR-EXISTING',
+            'type' => 'private_insurance',
+            'name' => 'New Name',
+            'is_government' => false,
+            'inacbg_id' => null,
+        ]);
+    }
+
     public function test_can_soft_delete_guarantor(): void
     {
         $guarantor = Guarantor::factory()->create();

@@ -34,9 +34,28 @@ class MedicineRouteController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        return MedicineRouteResource::collection(
-            $query->orderBy('name')->paginate((int) $request->get('per_page', 15))
-        );
+        $perPage = $request->input('per_page', 10);
+        $sortBy = $request->input('sort', $request->input('sortBy', 'name'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->input('direction')) === 'desc';
+        } else {
+            $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $allowedSorts = ['id', 'name', 'object_code', 'is_active', 'created_at', 'updated_at'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        if ($perPage === '-1' || $perPage === 'all') {
+            return MedicineRouteResource::collection($query->get());
+        }
+
+        $medicineRoutes = $query->paginate((int) $perPage);
+
+        return MedicineRouteResource::collection($medicineRoutes);
     }
 
     /**

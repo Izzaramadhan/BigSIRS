@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, watch, computed, nextTick } from 'vue';
 import BaseSelect from '@/components/common/BaseSelect.vue';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
 
 import LookupService from '@/services/lookup.service';
 import doctorService from '@/services/master-data/doctors.service';
@@ -39,6 +40,7 @@ const createEmptyForm = () => ({
     gender: '',
     nationality: 'WNI',
     blood_type: '',
+    allergies: '',
     religion: '',
     marital_status: '',
     address: '',
@@ -222,6 +224,7 @@ const initializeEditMode = async (detail) => {
         gender: person.gender || '',
         nationality: person.nationality || 'WNI',
         blood_type: person.blood_type || '',
+        allergies: person.allergies || '',
         religion: person.religion || '',
         marital_status: person.marital_status || '',
         address: person.address || '',
@@ -333,6 +336,7 @@ const buildPayload = () => {
       gender: form.person.gender || null,
       nationality: form.person.nationality || null,
       blood_type: form.person.blood_type || null,
+      allergies: normalizeNullableString(form.person.allergies),
       religion: form.person.religion || null,
       marital_status: form.person.marital_status || null,
       address: normalizeNullableString(form.person.address),
@@ -417,19 +421,16 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div v-if="open" class="modal-overlay" @click.self="emit('close')">
-    <div class="modal-content modal-xl">
-      <div class="modal-header">
-        <h2 class="modal-title">{{ isEditMode ? 'Edit' : 'Tambah' }} Master Data Dokter</h2>
-        <button type="button" class="btn-close" @click="emit('close')" aria-label="Tutup modal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-
-      <div v-if="loadingDetail" class="loading-state">
+  <MasterDataFormModal
+    :is-open="open"
+    :title="isEditMode ? 'Edit Dokter' : 'Tambah Dokter'"
+    :is-submitting="isSubmitting || loadingDetail || !!detailError"
+    :submit-text="isEditMode ? 'Simpan Perubahan' : 'Simpan'"
+    size="xl"
+    @close="emit('close')"
+    @submit="handleSubmit"
+  >
+    <div v-if="loadingDetail" class="loading-state">
         <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="23 4 23 10 17 10"></polyline>
           <polyline points="1 20 1 14 7 14"></polyline>
@@ -445,7 +446,7 @@ const handleSubmit = async () => {
         </div>
       </div>
 
-      <form v-else id="doctor-form" @submit.prevent="handleSubmit" class="modal-body" novalidate>
+      <div v-else class="form-content">
         <div v-if="submitError" class="alert alert-danger" style="background: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
           {{ submitError }}
         </div>
@@ -457,45 +458,45 @@ const handleSubmit = async () => {
         <div class="section-card">
           <h3 class="section-title">1. Identitas Person / Pegawai</h3>
           
-          <div class="form-row">
+          <div class="form-grid">
             <div class="form-group">
               <label class="form-label required">Nomor KTP (NIK)</label>
               <input type="text" v-model="form.person.national_id" class="form-input" :class="{ 'has-error': fieldError('person.national_id', 'national_id') }" required maxlength="20">
-              <span v-if="fieldError('person.national_id', 'national_id')" class="error-message">{{ fieldError('person.national_id', 'national_id') }}</span>
+              <div v-if="fieldError('person.national_id', 'national_id')" class="error-message">{{ fieldError('person.national_id', 'national_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label required">Nama Lengkap (beserta gelar)</label>
               <input type="text" v-model="form.person.name" class="form-input" :class="{ 'has-error': fieldError('person.name', 'name') }" required>
-              <span v-if="fieldError('person.name', 'name')" class="error-message">{{ fieldError('person.name', 'name') }}</span>
+              <div v-if="fieldError('person.name', 'name')" class="error-message">{{ fieldError('person.name', 'name') }}</div>
             </div>
           </div>
 
-          <div class="form-row grid-3">
+          <div class="form-grid" >
             <div class="form-group">
               <label class="form-label">Tempat Lahir</label>
               <input type="text" v-model="form.person.birth_place" class="form-input" :class="{ 'has-error': fieldError('person.birth_place', 'birth_place') }">
-              <span v-if="fieldError('person.birth_place', 'birth_place')" class="error-message">{{ fieldError('person.birth_place', 'birth_place') }}</span>
+              <div v-if="fieldError('person.birth_place', 'birth_place')" class="error-message">{{ fieldError('person.birth_place', 'birth_place') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Tanggal Lahir</label>
               <input type="date" v-model="form.person.birth_date" class="form-input" :class="{ 'has-error': fieldError('person.birth_date', 'birth_date') }">
-              <span v-if="fieldError('person.birth_date', 'birth_date')" class="error-message">{{ fieldError('person.birth_date', 'birth_date') }}</span>
+              <div v-if="fieldError('person.birth_date', 'birth_date')" class="error-message">{{ fieldError('person.birth_date', 'birth_date') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label required">Jenis Kelamin</label>
-              <select v-model="form.person.gender" class="form-input" :class="{ 'has-error': fieldError('person.gender', 'gender') }" required>
+              <select v-model="form.person.gender" class="form-select" :class="{ 'has-error': fieldError('person.gender', 'gender') }" required>
                 <option value="">Pilih Jenis Kelamin</option>
                 <option value="L">Laki-laki</option>
                 <option value="P">Perempuan</option>
               </select>
-              <span v-if="fieldError('person.gender', 'gender')" class="error-message">{{ fieldError('person.gender', 'gender') }}</span>
+              <div v-if="fieldError('person.gender', 'gender')" class="error-message">{{ fieldError('person.gender', 'gender') }}</div>
             </div>
           </div>
 
-          <div class="form-row grid-4">
+          <div class="form-grid" >
             <div class="form-group">
               <label class="form-label">Golongan Darah</label>
-              <select v-model="form.person.blood_type" class="form-input" :class="{ 'has-error': fieldError('person.blood_type', 'blood_type') }">
+              <select v-model="form.person.blood_type" class="form-select" :class="{ 'has-error': fieldError('person.blood_type', 'blood_type') }">
                 <option value="">Pilih Golongan Darah</option>
                 <option value="Unknown">Tidak Diketahui</option>
                 <option value="A">A</option>
@@ -503,11 +504,11 @@ const handleSubmit = async () => {
                 <option value="AB">AB</option>
                 <option value="O">O</option>
               </select>
-              <span v-if="fieldError('person.blood_type', 'blood_type')" class="error-message">{{ fieldError('person.blood_type', 'blood_type') }}</span>
+              <div v-if="fieldError('person.blood_type', 'blood_type')" class="error-message">{{ fieldError('person.blood_type', 'blood_type') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Agama</label>
-              <select v-model="form.person.religion" class="form-input" :class="{ 'has-error': fieldError('person.religion', 'religion') }">
+              <select v-model="form.person.religion" class="form-select" :class="{ 'has-error': fieldError('person.religion', 'religion') }">
                 <option value="">Pilih Agama</option>
                 <option value="Islam">Islam</option>
                 <option value="Kristen">Kristen</option>
@@ -516,30 +517,36 @@ const handleSubmit = async () => {
                 <option value="Budha">Budha</option>
                 <option value="Khong Hucu">Khong Hucu</option>
               </select>
-              <span v-if="fieldError('person.religion', 'religion')" class="error-message">{{ fieldError('person.religion', 'religion') }}</span>
+              <div v-if="fieldError('person.religion', 'religion')" class="error-message">{{ fieldError('person.religion', 'religion') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Status Perkawinan</label>
-              <select v-model="form.person.marital_status" class="form-input" :class="{ 'has-error': fieldError('person.marital_status', 'marital_status') }">
+              <select v-model="form.person.marital_status" class="form-select" :class="{ 'has-error': fieldError('person.marital_status', 'marital_status') }">
                 <option value="">Pilih Status</option>
                 <option value="Belum Kawin">Belum Kawin</option>
                 <option value="Kawin">Kawin</option>
                 <option value="Cerai Hidup">Cerai Hidup</option>
                 <option value="Cerai Mati">Cerai Mati</option>
               </select>
-              <span v-if="fieldError('person.marital_status', 'marital_status')" class="error-message">{{ fieldError('person.marital_status', 'marital_status') }}</span>
+              <div v-if="fieldError('person.marital_status', 'marital_status')" class="error-message">{{ fieldError('person.marital_status', 'marital_status') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Kebangsaan</label>
-              <select v-model="form.person.nationality" class="form-input" :class="{ 'has-error': fieldError('person.nationality', 'nationality') }">
+              <select v-model="form.person.nationality" class="form-select" :class="{ 'has-error': fieldError('person.nationality', 'nationality') }">
                 <option value="WNI">WNI</option>
                 <option value="WNA">WNA</option>
               </select>
-              <span v-if="fieldError('person.nationality', 'nationality')" class="error-message">{{ fieldError('person.nationality', 'nationality') }}</span>
+              <div v-if="fieldError('person.nationality', 'nationality')" class="error-message">{{ fieldError('person.nationality', 'nationality') }}</div>
             </div>
           </div>
 
-          <div class="form-row">
+          
+          <div class="form-group" style="margin-bottom: 1.25rem;">
+            <label class="form-label">Alergi</label>
+            <textarea v-model="form.person.allergies" class="form-textarea" rows="2" placeholder="Tuliskan alergi obat, makanan, atau lainnya jika diketahui" :class="{ 'has-error': fieldError('person.allergies', 'allergies') }"></textarea>
+            <div v-if="fieldError('person.allergies', 'allergies')" class="error-message">{{ fieldError('person.allergies', 'allergies') }}</div>
+          </div>
+          <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Pendidikan</label>
               <BaseSelect 
@@ -551,7 +558,7 @@ const handleSubmit = async () => {
                 placeholder="Pilih Pendidikan"
                 emptyMessage="Data Pendidikan belum tersedia"
               />
-              <span v-if="fieldError('person.education_id', 'education_id')" class="error-message">{{ fieldError('person.education_id', 'education_id') }}</span>
+              <div v-if="fieldError('person.education_id', 'education_id')" class="error-message">{{ fieldError('person.education_id', 'education_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Pekerjaan</label>
@@ -564,7 +571,7 @@ const handleSubmit = async () => {
                 placeholder="Pilih Pekerjaan"
                 emptyMessage="Data Pekerjaan belum tersedia"
               />
-              <span v-if="fieldError('person.occupation_id', 'occupation_id')" class="error-message">{{ fieldError('person.occupation_id', 'occupation_id') }}</span>
+              <div v-if="fieldError('person.occupation_id', 'occupation_id')" class="error-message">{{ fieldError('person.occupation_id', 'occupation_id') }}</div>
             </div>
           </div>
         </div>
@@ -575,11 +582,11 @@ const handleSubmit = async () => {
           
           <div class="form-group">
             <label class="form-label">Alamat Lengkap (Jalan/Blok/RT/RW)</label>
-            <textarea v-model="form.person.address" class="form-input" rows="2" :class="{ 'has-error': fieldError('person.address', 'address') }"></textarea>
-            <span v-if="fieldError('person.address', 'address')" class="error-message">{{ fieldError('person.address', 'address') }}</span>
+            <textarea v-model="form.person.address" class="form-textarea" rows="2" :class="{ 'has-error': fieldError('person.address', 'address') }"></textarea>
+            <div v-if="fieldError('person.address', 'address')" class="error-message">{{ fieldError('person.address', 'address') }}</div>
           </div>
 
-          <div class="form-row grid-4">
+          <div class="form-grid" >
             <div class="form-group">
               <label class="form-label">Provinsi</label>
               <BaseSelect 
@@ -592,7 +599,7 @@ const handleSubmit = async () => {
                 placeholder="Pilih Provinsi"
                 emptyMessage="Data Provinsi belum tersedia"
               />
-              <span v-if="fieldError('person.province_id', 'province_id')" class="error-message">{{ fieldError('person.province_id', 'province_id') }}</span>
+              <div v-if="fieldError('person.province_id', 'province_id')" class="error-message">{{ fieldError('person.province_id', 'province_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Kabupaten / Kota</label>
@@ -607,7 +614,7 @@ const handleSubmit = async () => {
                 placeholder="Pilih Kota/Kab"
                 emptyMessage="Data Kota/Kab belum tersedia"
               />
-              <span v-if="fieldError('person.regency_id', 'regency_id')" class="error-message">{{ fieldError('person.regency_id', 'regency_id') }}</span>
+              <div v-if="fieldError('person.regency_id', 'regency_id')" class="error-message">{{ fieldError('person.regency_id', 'regency_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Kecamatan</label>
@@ -622,7 +629,7 @@ const handleSubmit = async () => {
                 placeholder="Pilih Kecamatan"
                 emptyMessage="Data Kecamatan belum tersedia"
               />
-              <span v-if="fieldError('person.district_id', 'district_id')" class="error-message">{{ fieldError('person.district_id', 'district_id') }}</span>
+              <div v-if="fieldError('person.district_id', 'district_id')" class="error-message">{{ fieldError('person.district_id', 'district_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Kelurahan / Desa</label>
@@ -636,20 +643,20 @@ const handleSubmit = async () => {
                 placeholder="Pilih Kelurahan"
                 emptyMessage="Data Kelurahan belum tersedia"
               />
-              <span v-if="fieldError('person.village_id', 'village_id')" class="error-message">{{ fieldError('person.village_id', 'village_id') }}</span>
+              <div v-if="fieldError('person.village_id', 'village_id')" class="error-message">{{ fieldError('person.village_id', 'village_id') }}</div>
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Kode Pos</label>
               <input type="text" v-model="form.person.postal_code" class="form-input" :class="{ 'has-error': fieldError('person.postal_code', 'postal_code') }" maxlength="10">
-              <span v-if="fieldError('person.postal_code', 'postal_code')" class="error-message">{{ fieldError('person.postal_code', 'postal_code') }}</span>
+              <div v-if="fieldError('person.postal_code', 'postal_code')" class="error-message">{{ fieldError('person.postal_code', 'postal_code') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Nomor HP</label>
-              <input type="text" v-model="form.person.phone" class="form-input" :class="{ 'has-error': fieldError('person.phone', 'phone') }" maxlength="20">
-              <span v-if="fieldError('person.phone', 'phone')" class="error-message">{{ fieldError('person.phone', 'phone') }}</span>
+              <input type="tel" v-model="form.person.phone" class="form-input" :class="{ 'has-error': fieldError('person.phone', 'phone') }" maxlength="20" placeholder="Contoh: 081234567890">
+              <div v-if="fieldError('person.phone', 'phone')" class="error-message">{{ fieldError('person.phone', 'phone') }}</div>
             </div>
           </div>
         </div>
@@ -658,7 +665,7 @@ const handleSubmit = async () => {
         <div class="section-card">
           <h3 class="section-title">3. Profil Profesional (Dokter)</h3>
           
-          <div class="form-row grid-3">
+          <div class="form-grid" >
             <div class="form-group">
               <label class="form-label required">Spesialisasi</label>
               <BaseSelect 
@@ -671,39 +678,39 @@ const handleSubmit = async () => {
                 emptyMessage="Data Spesialisasi belum tersedia"
                 required
               />
-              <span v-if="fieldError('professional.specialization_id', 'specialization_id')" class="error-message">{{ fieldError('professional.specialization_id', 'specialization_id') }}</span>
+              <div v-if="fieldError('professional.specialization_id', 'specialization_id')" class="error-message">{{ fieldError('professional.specialization_id', 'specialization_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">No. STR</label>
               <input type="text" v-model="form.professional.str_number" class="form-input" :class="{ 'has-error': fieldError('professional.str_number', 'str_number') }">
-              <span v-if="fieldError('professional.str_number', 'str_number')" class="error-message">{{ fieldError('professional.str_number', 'str_number') }}</span>
+              <div v-if="fieldError('professional.str_number', 'str_number')" class="error-message">{{ fieldError('professional.str_number', 'str_number') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">No. SIP</label>
               <input type="text" v-model="form.professional.sip_number" class="form-input" :class="{ 'has-error': fieldError('professional.sip_number', 'sip_number') }">
-              <span v-if="fieldError('professional.sip_number', 'sip_number')" class="error-message">{{ fieldError('professional.sip_number', 'sip_number') }}</span>
+              <div v-if="fieldError('professional.sip_number', 'sip_number')" class="error-message">{{ fieldError('professional.sip_number', 'sip_number') }}</div>
             </div>
           </div>
 
-          <div class="form-row grid-3">
+          <div class="form-grid" >
             <div class="form-group">
               <label class="form-label">Berlaku SIP (Sampai)</label>
               <input type="date" v-model="form.professional.sip_valid_until" class="form-input" :class="{ 'has-error': fieldError('professional.sip_valid_until', 'sip_valid_until') }">
-              <span v-if="fieldError('professional.sip_valid_until', 'sip_valid_until')" class="error-message">{{ fieldError('professional.sip_valid_until', 'sip_valid_until') }}</span>
+              <div v-if="fieldError('professional.sip_valid_until', 'sip_valid_until')" class="error-message">{{ fieldError('professional.sip_valid_until', 'sip_valid_until') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Kode BPJS DPJP</label>
               <input type="text" v-model="form.professional.bpjs_dpjp_code" class="form-input" :class="{ 'has-error': fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code') }">
-              <span v-if="fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code')" class="error-message">{{ fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code') }}</span>
+              <div v-if="fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code')" class="error-message">{{ fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">IHS Number (SatuSehat)</label>
               <input type="text" v-model="form.person.ihs_number" class="form-input" :class="{ 'has-error': fieldError('person.ihs_number', 'ihs_number') }">
-              <span v-if="fieldError('person.ihs_number', 'ihs_number')" class="error-message">{{ fieldError('person.ihs_number', 'ihs_number') }}</span>
+              <div v-if="fieldError('person.ihs_number', 'ihs_number')" class="error-message">{{ fieldError('person.ihs_number', 'ihs_number') }}</div>
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Tanda Tangan</label>
               <input 
@@ -714,365 +721,61 @@ const handleSubmit = async () => {
                 accept="image/png, image/jpeg, image/jpg"
                 :class="{ 'has-error': fieldError('signature') }"
               >
-              <span v-if="fieldError('signature')" class="error-message">{{ fieldError('signature') }}</span>
+              <div v-if="fieldError('signature')" class="error-message">{{ fieldError('signature') }}</div>
               
               <div v-if="previewImage" class="signature-preview">
                 <img :src="previewImage" alt="Preview Tanda Tangan" />
                 <button type="button" class="btn-remove-sig" @click="removeSignature">Hapus</button>
               </div>
             </div>
-            <div class="form-group checkbox-group" style="margin-top: 2rem;">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="form.professional.is_active" class="form-checkbox">
-                <span class="label-text">Status Dokter Aktif</span>
-              </label>
-            </div>
+
           </div>
         </div>
 
-        <div class="modal-footer sticky-footer">
-          <button type="button" class="btn-outline" @click="emit('close')" :disabled="isSubmitting">Batal</button>
-          <button type="submit" form="doctor-form" class="btn-primary" :disabled="isSubmitting || loadingDetail || !!detailError">
-            <template v-if="isSubmitting">
-              <span class="spinner"></span> Menyimpan...
-            </template>
-            <template v-else>Simpan Master Data</template>
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
+      </div>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 1rem;
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; backdrop-filter: blur(0px); }
-  to { opacity: 1; backdrop-filter: blur(6px); }
-}
-
-.modal-content {
-  background: #f8fafc;
-  border-radius: 16px;
-  width: 100%;
-  max-height: 95vh;
+.form-content {
   display: flex;
   flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.1) inset;
-  overflow: hidden;
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 0;
 }
-
-@keyframes slideUp {
-  from { transform: translateY(20px) scale(0.98); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
-}
-
-.modal-xl {
-  max-width: 1000px;
-}
-
-.modal-header {
-  padding: 1.5rem 2rem;
-  background: #ffffff;
-  border-bottom: 1px solid #f1f5f9;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 2;
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--color-text-navy, #0f172a);
-  letter-spacing: -0.01em;
-}
-
-.btn-close {
-  background: #f8fafc;
-  border: 1px solid transparent;
-  color: #64748b;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.btn-close:hover {
-  background: #f1f5f9;
-  color: #ef4444;
-  border-color: #e2e8f0;
-  transform: scale(1.05);
-}
-
-.btn-close svg {
-  width: 20px;
-  height: 20px;
-}
-
-.modal-body {
-  padding: 2rem;
-  overflow-y: auto;
-  flex: 1;
-}
-
-/* Custom scrollbar for webkit */
-.modal-body::-webkit-scrollbar {
-  width: 8px;
-}
-.modal-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-.modal-body::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 20px;
-}
-
 .section-card {
   background: #ffffff;
   border-radius: 12px;
-  padding: 1.75rem;
-  margin-bottom: 2rem;
-  border: 1px solid #e2e8f0;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--color-border-soft);
   box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
-.section-card:hover {
-  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);
-  border-color: #cbd5e1;
-  transform: translateY(-2px);
+.section-card:last-child {
+  margin-bottom: 0;
 }
-
 .section-title {
   margin-top: 0;
-  margin-bottom: 1.5rem;
-  font-size: 1.15rem;
+  margin-bottom: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  color: var(--color-primary, #0d9488);
-  border-bottom: 2px solid #f1f5f9;
-  padding-bottom: 0.75rem;
-  position: relative;
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border-soft);
+  padding-bottom: 0.5rem;
 }
-
-.section-title::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 60px;
-  height: 2px;
-  background: var(--color-primary, #0d9488);
-  border-radius: 2px;
-}
-
-.form-row {
+.form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
 }
-
-.form-row.grid-3 {
-  grid-template-columns: repeat(3, 1fr);
+@media (min-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
-
-.form-row.grid-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
 .form-group {
   margin-bottom: 0;
 }
-
-.form-label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 0.5rem;
-}
-
-.form-label.required::after {
-  content: '*';
-  color: #ef4444;
-  margin-left: 0.25rem;
-}
-
-.form-input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  color: #0f172a;
-  font-family: inherit;
-  transition: all 0.2s ease;
-  box-sizing: border-box;
-}
-
-.form-input::placeholder {
-  color: #94a3b8;
-}
-
-.form-input:disabled {
-  background: #f1f5f9;
-  cursor: not-allowed;
-  color: #94a3b8;
-}
-
-.form-input:focus:not(:disabled) {
-  outline: none;
-  background: #ffffff;
-  border-color: var(--color-primary, #0d9488);
-  box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.1);
-}
-
-.form-input.has-error {
-  border-color: #ef4444;
-  background: #fef2f2;
-}
-.form-input.has-error:focus {
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
-}
-
-select.form-input {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 1rem center;
-  background-size: 1rem;
-  padding-right: 2.5rem;
-}
-
-.error-message {
-  display: block;
-  color: #ef4444;
-  font-size: 0.8rem;
-  margin-top: 0.4rem;
-  font-weight: 500;
-}
-
-.checkbox-group {
-  display: flex;
-  align-items: center;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  cursor: pointer;
-}
-
-.form-checkbox {
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  accent-color: var(--color-primary, #0d9488);
-  border-radius: 4px;
-}
-
-.label-text {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #334155;
-}
-
-.modal-footer {
-  padding: 1.25rem 2rem;
-  background: #ffffff;
-  border-top: 1px solid #f1f5f9;
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  z-index: 2;
-  box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
-}
-
-.sticky-footer {
-  position: sticky;
-  bottom: 0;
-}
-
-.btn-primary, .btn-outline {
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-}
-
-.btn-primary {
-  background: var(--color-primary, #0d9488);
-  color: #ffffff;
-  border: none;
-  box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.2);
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(110%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 8px -1px rgba(13, 148, 136, 0.3);
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.btn-outline {
-  background: transparent;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-}
-
-.btn-outline:hover:not(:disabled) {
-  background: #f8fafc;
-  color: #0f172a;
-  border-color: #94a3b8;
-}
-
-.spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
 .signature-preview {
   margin-top: 12px;
   border: 2px dashed #cbd5e1;
@@ -1082,19 +785,13 @@ select.form-input {
   align-items: center;
   border-radius: 8px;
   background: #f8fafc;
-  transition: border-color 0.2s;
 }
-.signature-preview:hover {
-  border-color: #94a3b8;
-}
-
 .signature-preview img {
   max-width: 200px;
   max-height: 100px;
   display: block;
   border-radius: 4px;
 }
-
 .btn-remove-sig {
   margin-top: 8px;
   background: #fee2e2;
@@ -1105,69 +802,32 @@ select.form-input {
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 500;
-  transition: all 0.2s;
 }
 .btn-remove-sig:hover {
   background: #fca5a5;
   color: #991b1b;
 }
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@media (max-width: 768px) {
-  .form-row, .form-row.grid-3, .form-row.grid-4 {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-  .modal-header, .modal-footer {
-    padding: 1.25rem 1.5rem;
-  }
-  .modal-body {
-    padding: 1.5rem;
-  }
-}
-</style>
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
+  padding: 4rem 0;
   color: var(--color-text-secondary);
 }
-
 .loading-state svg {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   margin-bottom: 1rem;
   color: var(--color-primary);
 }
-
 .error-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
-  color: #991b1b;
-  background: #fef2f2;
-  border-radius: 8px;
-  margin: 1rem;
-  text-align: center;
+  padding: 3rem 0;
+  color: var(--color-danger);
+  gap: 1rem;
 }
-
-.error-state p {
-  margin: 0 0 1rem 0;
-  font-weight: 500;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+</style>

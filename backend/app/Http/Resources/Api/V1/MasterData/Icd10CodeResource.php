@@ -19,9 +19,9 @@ class Icd10CodeResource extends JsonResource
             'is_active' => (bool) $this->is_active,
             'inacbg_code' => $this->inacbg_code,
             'inacbg_name' => $this->inacbg_name,
-            'class_1_tariff' => (float) $this->class_1_tariff,
-            'class_2_tariff' => (float) $this->class_2_tariff,
-            'class_3_tariff' => (float) $this->class_3_tariff,
+            'class_1_tariff' => $this->class_1_tariff !== null ? (float) $this->class_1_tariff : null,
+            'class_2_tariff' => $this->class_2_tariff !== null ? (float) $this->class_2_tariff : null,
+            'class_3_tariff' => $this->class_3_tariff !== null ? (float) $this->class_3_tariff : null,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

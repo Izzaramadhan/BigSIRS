@@ -1,8 +1,15 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useTariffComponents } from '@/composables/useTariffComponents';
 import TariffComponentTable from '@/components/master-data/tariff-components/TariffComponentTable.vue';
+import TariffComponentFilters from '@/components/master-data/tariff-components/TariffComponentFilters.vue';
 import TariffComponentFormModal from '@/components/master-data/tariff-components/TariffComponentFormModal.vue';
+import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
+import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
+import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
+import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
+import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
+import AppToast from '@/components/common/AppToast.vue';
 
 const {
   tariffComponents,
@@ -14,411 +21,265 @@ const {
   fetchTariffComponents,
   createTariffComponent,
   updateTariffComponent,
-  updateTariffComponentStatus,
   deleteTariffComponent
 } = useTariffComponents();
 
-const searchQuery = ref('');
-const isModalOpen = ref(false);
-const editingItem = ref(null);
-const modalErrors = ref({});
-const isSaving = ref(false);
+const formModalOpen = ref(false);
+const deleteDialogOpen = ref(false);
+const selectedItem = ref(null);
+const formErrors = ref({});
+const isSubmitting = ref(false);
+const toast = ref({
+  show: false,
+  type: 'success',
+  title: '',
+  message: ''
+});
 
-const sortField = ref('created_at');
-const sortDir = ref('desc');
+const filters = ref({
+  search: ''
+});
 
-const searchTimeout = ref(null);
+const sort = ref({
+  column: 'created_at',
+  direction: 'desc'
+});
 
-const handleSearch = () => {
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value);
-  }
-  searchTimeout.value = setTimeout(() => {
-    currentPage.value = 1;
-    loadData();
-  }, 400);
+const showToast = ({ type = 'success', title, message }) => {
+  toast.value = { show: true, type, title, message };
+};
+
+const closeToast = () => {
+  toast.value.show = false;
+};
+
+const openAddModal = () => {
+  selectedItem.value = null;
+  formErrors.value = {};
+  formModalOpen.value = true;
+};
+
+const openEditModal = (item) => {
+  selectedItem.value = item;
+  formErrors.value = {};
+  formModalOpen.value = true;
+};
+
+const openDeleteDialog = (item) => {
+  selectedItem.value = item;
+  deleteDialogOpen.value = true;
+};
+
+const handleFilter = ({ key, value }) => {
+  filters.value[key] = value;
+  currentPage.value = 1;
+  loadData();
 };
 
 const handleSort = ({ column, direction }) => {
-  sortField.value = column;
-  sortDir.value = direction;
+  sort.value.column = column;
+  sort.value.direction = direction;
   loadData();
+};
+
+const setPage = (page) => {
+  if (page >= 1 && page <= Math.ceil(totalItems.value / perPage.value)) {
+    currentPage.value = page;
+    loadData();
+  }
 };
 
 const loadData = () => {
   fetchTariffComponents({
-    search: searchQuery.value,
-    sort_by: sortField.value,
-    sort_dir: sortDir.value
+    search: filters.value.search,
+    sort_by: sort.value.column,
+    sort_dir: sort.value.direction
   });
 };
 
-const openAddModal = () => {
-  editingItem.value = null;
-  modalErrors.value = {};
-  isModalOpen.value = true;
-};
-
-const openEditModal = (item) => {
-  editingItem.value = { ...item };
-  modalErrors.value = {};
-  isModalOpen.value = true;
-};
-
-const closeModal = () => {
-  isModalOpen.value = false;
-  editingItem.value = null;
-  modalErrors.value = {};
-};
-
-const handleSave = async (data) => {
-  isSaving.value = true;
-  modalErrors.value = {};
+const handleFormSubmit = async (payload) => {
+  formErrors.value = {};
+  isSubmitting.value = true;
+  
+  const isEditing = Boolean(selectedItem.value);
+  
   try {
-    if (editingItem.value) {
-      await updateTariffComponent(editingItem.value.id, data);
+    if (isEditing) {
+      await updateTariffComponent(selectedItem.value.id, payload);
     } else {
-      await createTariffComponent(data);
+      await createTariffComponent(payload);
     }
-    closeModal();
+    
+    formModalOpen.value = false;
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: isEditing 
+        ? 'Komponen berhasil diperbarui.' 
+        : 'Komponen berhasil ditambahkan.'
+    });
     loadData();
   } catch (err) {
     if (err.response?.status === 422) {
-      modalErrors.value = err.response.data.errors || {};
+      formErrors.value = err.response.data.errors || {};
+      showToast({
+        type: 'error',
+        title: 'Validasi Gagal',
+        message: 'Mohon periksa kembali form pengisian.'
+      });
     } else {
-      modalErrors.value = { general: err.response?.data?.message || err.message || 'Terjadi kesalahan' };
+      showToast({
+        type: 'error',
+        title: 'Gagal',
+        message: err.response?.data?.message || `Gagal ${isEditing ? 'memperbarui' : 'menambahkan'} komponen.`
+      });
     }
   } finally {
-    isSaving.value = false;
+    isSubmitting.value = false;
   }
 };
 
-const handleToggleStatus = async (item) => {
-  const newStatus = !item.is_active;
-  const actionText = newStatus ? 'mengaktifkan' : 'menonaktifkan';
-  if (confirm(`Apakah Anda yakin ingin ${actionText} komponen tindakan "${item.name}"?`)) {
-    try {
-      await updateTariffComponentStatus(item.id, newStatus);
-    } catch {
-      alert('Gagal merubah status.');
+const handleDeleteConfirm = async () => {
+  isSubmitting.value = true;
+  try {
+    await deleteTariffComponent(selectedItem.value.id);
+    deleteDialogOpen.value = false;
+    
+    // Pagination adjustment
+    if (tariffComponents.value.length === 1 && currentPage.value > 1) {
+      currentPage.value--;
     }
-  }
-};
-
-const handleDelete = async (item) => {
-  if (confirm(`Apakah Anda yakin ingin menghapus komponen tindakan "${item.name}"?`)) {
-    try {
-      await deleteTariffComponent(item.id);
-      loadData();
-    } catch {
-      alert(error.value || 'Gagal menghapus data.');
+    
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: 'Komponen berhasil dihapus.'
+    });
+    loadData();
+  } catch (err) {
+    let errorMessage = 'Gagal menghapus komponen.';
+    
+    if (err.response?.status === 409 || err.response?.status === 422) {
+      errorMessage = err.response?.data?.message || 'Komponen tarif tidak dapat dihapus karena masih digunakan.';
+    } else if (err.response?.data?.message) {
+      errorMessage = err.response.data.message;
     }
+    
+    showToast({
+      type: 'error',
+      title: 'Gagal Menghapus',
+      message: errorMessage
+    });
+    deleteDialogOpen.value = false;
+  } finally {
+    isSubmitting.value = false;
   }
-};
-
-const changePage = (page) => {
-  currentPage.value = page;
-  loadData();
-};
-
-const changePerPage = () => {
-  currentPage.value = 1;
-  loadData();
 };
 
 onMounted(() => {
   loadData();
 });
-
-watch(searchQuery, (newVal) => {
-  handleSearch(newVal);
-});
 </script>
 
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <div class="header-content">
-        <h1 class="page-title">Komponen Tindakan</h1>
-        <p class="page-subtitle">Kelola master data komponen pembentuk tarif</p>
-      </div>
-      <button class="btn btn-primary" @click="openAddModal">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-        Tambah Komponen
-      </button>
-    </div>
-
-    <div v-if="error" class="alert alert-danger" role="alert">
-      {{ error }}
-    </div>
-
-    <div class="filter-bar">
-      <div class="search-box">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input 
-          type="text" 
-          v-model="searchQuery" 
-          class="form-control" 
-          placeholder="Cari nama atau deskripsi komponen..." 
-        />
-      </div>
-
-      <div class="filter-actions">
-        <div class="per-page-select">
-          <label>Tampilkan:</label>
-          <select v-model="perPage" class="form-control" @change="changePerPage">
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <TariffComponentTable 
-      :items="tariffComponents" 
-      :loading="loading"
-      :sort-config="{ column: sortField, direction: sortDir }"
-      :pagination="{ current_page: currentPage, per_page: perPage, total: totalItems }"
-      @sort="handleSort"
-      @edit="openEditModal" 
-      @delete="handleDelete" 
-      @toggle-status="handleToggleStatus"
+    <AppToast 
+      :show="toast.show"
+      :type="toast.type"
+      :title="toast.title"
+      :message="toast.message"
+      @close="closeToast"
     />
 
-    <div class="pagination-bar" v-if="Math.ceil(totalItems / perPage) > 1">
-      <div class="pagination-info">
-        Menampilkan {{ (currentPage - 1) * perPage + 1 }} - 
-        {{ Math.min(currentPage * perPage, totalItems) }} 
-        dari {{ totalItems }} data
-      </div>
-      <div class="pagination-controls">
-        <button 
-          class="btn-page" 
-          :disabled="currentPage === 1"
-          @click="changePage(currentPage - 1)"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"></polyline>
+    <!-- Header -->
+    <MasterDataPageHeader 
+      title="Komponen Tindakan"
+      subtitle="Kelola master data komponen pembentuk tarif."
+      :breadcrumbs="[
+        { label: 'Dashboard', active: false },
+        { label: 'Master Data', active: false },
+        { label: 'Tindakan', active: false },
+        { label: 'Komponen', active: true }
+      ]"
+    >
+      <template #actions>
+        <button type="button" class="btn-primary" @click="openAddModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
+          Tambah Komponen
         </button>
-        
-        <button 
-          v-for="page in Math.ceil(totalItems / perPage)" 
-          :key="page"
-          class="btn-page"
-          :class="{ active: page === currentPage }"
-          @click="changePage(page)"
-        >
-          {{ page }}
-        </button>
+      </template>
+    </MasterDataPageHeader>
 
-        <button 
-          class="btn-page" 
-          :disabled="currentPage === Math.ceil(totalItems / perPage)"
-          @click="changePage(currentPage + 1)"
+    <!-- Content -->
+    <div class="page-content">
+      <TariffComponentFilters 
+        :filters="filters"
+        :loading="loading"
+        @filter="handleFilter"
+        @refresh="loadData"
+      />
+      
+      <MasterDataErrorState 
+        v-if="error" 
+        :error="error" 
+        @retry="loadData" 
+      />
+      
+      <template v-else>
+        <MasterDataEmptyState 
+          v-if="!loading && tariffComponents.length === 0" 
+          :is-search="!!filters.search"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        </button>
-      </div>
+          <template #action v-if="!filters.search">
+            <button class="btn-primary" @click="openAddModal">Tambah Komponen</button>
+          </template>
+        </MasterDataEmptyState>
+        
+        <template v-else>
+          <TariffComponentTable 
+            :items="tariffComponents"
+            :pagination="{ current_page: currentPage, per_page: perPage, total: totalItems }"
+            :sort-config="sort"
+            :loading="loading"
+            @sort="handleSort"
+            @edit="openEditModal"
+            @delete="openDeleteDialog"
+          />
+          
+          <MasterDataPagination 
+            :pagination="{ current_page: currentPage, last_page: Math.ceil(totalItems / perPage), per_page: perPage, total: totalItems }"
+            :loading="loading"
+            :item-count="tariffComponents.length"
+            @page-change="setPage"
+          />
+        </template>
+      </template>
     </div>
 
-    <TariffComponentFormModal
-      :isOpen="isModalOpen"
-      :editData="editingItem"
-      :loading="isSaving"
-      :errors="modalErrors"
-      @close="closeModal"
-      @save="handleSave"
+    <!-- Modals -->
+    <TariffComponentFormModal 
+      :is-open="formModalOpen"
+      :edit-data="selectedItem"
+      :is-submitting="isSubmitting"
+      :errors="formErrors"
+      @close="formModalOpen = false"
+      @submit="handleFormSubmit"
+    />
+    
+    <MasterDataDeleteDialog 
+      :is-open="deleteDialogOpen"
+      title="Hapus Komponen Tindakan?"
+      :item-name="selectedItem ? selectedItem.name : ''"
+      warning-message="Tindakan ini tidak dapat dibatalkan. Pastikan komponen ini tidak terhubung dengan paket tindakan lain."
+      :is-submitting="isSubmitting"
+      @close="deleteDialogOpen = false"
+      @confirm="handleDeleteConfirm"
     />
   </div>
 </template>
 
 <style scoped>
-.page-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-}
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-  margin: 0 0 0.25rem 0;
-}
-
-.page-subtitle {
-  color: var(--color-text-secondary);
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.alert {
-  padding: 1rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-}
-
-.alert-danger {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #f87171;
-}
-
-.filter-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  background: #fff;
-  padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border-soft);
-}
-
-.search-box {
-  position: relative;
-  width: 300px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  color: #94a3b8;
-}
-
-.search-box .form-control {
-  padding-left: 2.25rem;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-.per-page-select {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-}
-
-.form-control {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.form-control:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.1);
-}
-
-.btn {
-  padding: 0.6rem 1.25rem;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.9rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: 1px solid transparent;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: #ffffff;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-
-.pagination-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0;
-}
-
-.pagination-info {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-}
-
-.pagination-controls {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.btn-page {
-  min-width: 32px;
-  height: 32px;
-  padding: 0 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border-soft);
-  background: #fff;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  color: var(--color-text-navy);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-page:hover:not(:disabled):not(.active) {
-  background: #f1f5f9;
-}
-
-.btn-page.active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
-
-.btn-page:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: #f8fafc;
-}
-
-.btn-page svg {
-  width: 16px;
-  height: 16px;
-}
 </style>

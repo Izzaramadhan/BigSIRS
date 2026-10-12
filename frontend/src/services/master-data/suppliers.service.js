@@ -27,5 +27,7 @@ class SupplierService {
   }
 }
 
-export const SupplierServiceInstance = new SupplierService();
-export { SupplierServiceInstance as SupplierService };
+export const suppliersService = new SupplierService();
+export const SupplierServiceInstance = suppliersService;
+export { suppliersService as SupplierService };
+export default suppliersService;

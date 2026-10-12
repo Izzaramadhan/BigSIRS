@@ -1,109 +1,178 @@
-import { ref } from 'vue'
-import axios from '@/utils/axios'
+import { ref, reactive } from 'vue';
+import { followUpHandlingsService } from '@/services/master-data/followUpHandlings.service';
 
 export function useFollowUpHandlings() {
-  const handlings = ref([])
-  const loading = ref(false)
-  const error = ref(null)
-  const pagination = ref({
-    currentPage: 1,
-    lastPage: 1,
+  const items = ref([]);
+  const pagination = reactive({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
     total: 0,
-    perPage: 10
-  })
+    from: 0,
+    to: 0,
+    // Backward compatibility aliases
+    get currentPage() {
+      return this.current_page;
+    },
+    set currentPage(val) {
+      this.current_page = val;
+    },
+    get lastPage() {
+      return this.last_page;
+    },
+    set lastPage(val) {
+      this.last_page = val;
+    },
+    get perPage() {
+      return this.per_page;
+    },
+    set perPage(val) {
+      this.per_page = val;
+    }
+  });
 
-  const fetchHandlings = async (params = {}) => {
-    loading.value = true
-    error.value = null
-    
+  const filters = reactive({
+    search: ''
+  });
+
+  const loading = ref(false);
+  const submitting = ref(false);
+  const error = ref(null);
+
+  const fetchHandlings = async (pageOrParams = 1) => {
+    loading.value = true;
+    error.value = null;
+
     try {
-      const response = await axios.get('/master-data/follow-up-handlings', {
-        params: {
-          page: params.page || pagination.value.currentPage,
-          per_page: params.per_page || pagination.value.perPage,
-          search: params.search || ''
+      const params = {
+        page: pagination.current_page,
+        per_page: pagination.per_page
+      };
+
+      if (typeof pageOrParams === 'number') {
+        params.page = pageOrParams;
+        pagination.current_page = pageOrParams;
+      } else if (typeof pageOrParams === 'object' && pageOrParams !== null) {
+        if (pageOrParams.page !== undefined) {
+          params.page = pageOrParams.page;
+          pagination.current_page = pageOrParams.page;
         }
-      })
-      
-      if (params.per_page === 'all') {
-        handlings.value = response.data.data
-        pagination.value = {
-          currentPage: 1,
-          lastPage: 1,
-          total: response.data.data.length,
-          perPage: 'all'
+        if (pageOrParams.per_page !== undefined) {
+          params.per_page = pageOrParams.per_page;
+          pagination.per_page = pageOrParams.per_page;
         }
+        if (pageOrParams.search !== undefined) {
+          filters.search = pageOrParams.search;
+        }
+      }
+
+      if (filters.search) {
+        params.search = filters.search;
+      }
+
+      const response = await followUpHandlingsService.getFollowUpHandlings(params);
+      const data = response?.data || [];
+      const meta = response?.meta || {};
+
+      items.value = data;
+
+      if (meta.current_page !== undefined) {
+        pagination.current_page = meta.current_page;
+        pagination.last_page = meta.last_page;
+        pagination.per_page = meta.per_page;
+        pagination.total = meta.total;
+        pagination.from = meta.from || 0;
+        pagination.to = meta.to || 0;
       } else {
-        handlings.value = response.data.data
-        pagination.value = {
-          currentPage: response.data.meta.current_page,
-          lastPage: response.data.meta.last_page,
-          total: response.data.meta.total,
-          perPage: response.data.meta.per_page
-        }
+        pagination.total = data.length;
+        pagination.last_page = 1;
+        pagination.from = data.length > 0 ? 1 : 0;
+        pagination.to = data.length;
       }
     } catch (err) {
-      error.value = err.response?.data?.message || 'Terjadi kesalahan saat memuat data penanganan lanjutan'
-      if (err.response?.status === 401) {
-        throw err
-      }
+      error.value = err.response?.data?.message || 'Data Penanganan Lanjutan gagal dimuat.';
+      console.error('Failed to fetch follow-up handlings:', err);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
 
-  const createHandling = async (data) => {
-    loading.value = true
-    error.value = null
-    
-    try {
-      const response = await axios.post('/master-data/follow-up-handlings', data)
-      return response.data
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
+  const createHandling = async (payload) => {
+    submitting.value = true;
+    error.value = null;
 
-  const updateHandling = async (id, data) => {
-    loading.value = true
-    error.value = null
-    
     try {
-      const response = await axios.put(`/master-data/follow-up-handlings/${id}`, data)
-      return response.data
+      const response = await followUpHandlingsService.createFollowUpHandling(payload);
+      return { success: true, data: response?.data || response };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Terjadi kesalahan saat mengupdate data'
-      throw err
+      return {
+        success: false,
+        error: err,
+        errors: err.response?.data?.errors || {}
+      };
     } finally {
-      loading.value = false
+      submitting.value = false;
     }
-  }
+  };
+
+  const updateHandling = async (id, payload) => {
+    submitting.value = true;
+    error.value = null;
+
+    try {
+      const response = await followUpHandlingsService.updateFollowUpHandling(id, payload);
+      return { success: true, data: response?.data || response };
+    } catch (err) {
+      return {
+        success: false,
+        error: err,
+        errors: err.response?.data?.errors || {}
+      };
+    } finally {
+      submitting.value = false;
+    }
+  };
 
   const deleteHandling = async (id) => {
-    loading.value = true
-    error.value = null
-    
+    submitting.value = true;
+    error.value = null;
+
     try {
-      await axios.delete(`/master-data/follow-up-handlings/${id}`)
+      const response = await followUpHandlingsService.deleteFollowUpHandling(id);
+      return { success: true, data: response };
     } catch (err) {
-      error.value = err.response?.data?.message || 'Terjadi kesalahan saat menghapus data'
-      throw err
+      return {
+        success: false,
+        error: err
+      };
     } finally {
-      loading.value = false
+      submitting.value = false;
     }
-  }
+  };
+
+  const setPage = (page) => {
+    if (page >= 1 && page <= pagination.last_page) {
+      pagination.current_page = page;
+      fetchHandlings(page);
+    }
+  };
 
   return {
-    handlings,
-    loading,
-    error,
+    items,
+    handlings: items, // alias
     pagination,
+    filters,
+    loading,
+    submitting,
+    error,
     fetchHandlings,
+    fetchFollowUpHandlings: fetchHandlings,
     createHandling,
+    createFollowUpHandling: createHandling,
     updateHandling,
-    deleteHandling
-  }
+    updateFollowUpHandling: updateHandling,
+    deleteHandling,
+    deleteFollowUpHandling: deleteHandling,
+    setPage
+  };
 }

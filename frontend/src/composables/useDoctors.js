@@ -11,7 +11,6 @@ export function useDoctors() {
   });
   const filters = reactive({
     search: '',
-    is_active: null,
     specialization_id: null,
   });
   const sort = reactive({
@@ -36,7 +35,6 @@ export function useDoctors() {
       };
 
       if (filters.search) params.search = filters.search;
-      if (filters.is_active !== null) params.status = filters.is_active;
       if (filters.specialization_id) params.specialization_id = filters.specialization_id;
 
       const response = await doctorService.getDoctors(params);
@@ -80,14 +78,7 @@ export function useDoctors() {
     }
   };
 
-  const toggleStatus = async (id, isActive) => {
-    try {
-      await doctorService.updateStatus(id, isActive);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    }
-  };
+
 
   const deleteDoctor = async (id) => {
     try {
@@ -126,7 +117,6 @@ export function useDoctors() {
     fetchDoctors,
     createDoctor,
     updateDoctor,
-    toggleStatus,
     deleteDoctor,
     setPage,
     setSort

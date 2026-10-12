@@ -38,4 +38,24 @@ class UpdateRadiologyCategoryRequest extends FormRequest
             'snomed_url' => ['nullable', 'string', 'max:255'],
         ];
     }
+
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+
+        if (is_string($this->name)) {
+            $merge['name'] = trim(preg_replace('/\s+/', ' ', $this->name));
+        }
+
+        foreach (['description', 'loinc_code', 'loinc_url', 'snomed_code', 'snomed_url'] as $field) {
+            if ($this->has($field) && is_string($this->input($field))) {
+                $val = trim($this->input($field));
+                $merge[$field] = $val === '' ? null : $val;
+            }
+        }
+
+        if (! empty($merge)) {
+            $this->merge($merge);
+        }
+    }
 }

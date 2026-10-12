@@ -184,14 +184,7 @@ const formatGender = (gender) => {
               <span class="detail-label">Nomor IHS (SatuSehat)</span>
               <span class="detail-value">{{ formatString(person.ihs_number) }}</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Status</span>
-              <span class="detail-value">
-                <span class="status-badge" :class="professional.is_active ? 'active' : 'inactive'">
-                  {{ professional.is_active ? 'Aktif' : 'Nonaktif' }}
-                </span>
-              </span>
-            </div>
+            
           </div>
         </div>
       </div>
@@ -339,24 +332,6 @@ const formatGender = (gender) => {
   font-size: 0.95rem;
   color: var(--color-text-navy);
   font-weight: 500;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.status-badge.active {
-  background: #d1fae5;
-  color: #059669;
-}
-
-.status-badge.inactive {
-  background: #fee2e2;
-  color: #dc2626;
 }
 
 .loading-state, .empty-state {

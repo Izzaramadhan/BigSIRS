@@ -33,7 +33,25 @@ class WarehouseController extends Controller
         }
 
         $perPage = $request->input('per_page', 10);
-        $warehouses = $query->latest()->paginate($perPage);
+        $sortBy = $request->input('sort', $request->input('sortBy', 'created_at'));
+        if ($request->has('direction')) {
+            $sortDesc = strtolower($request->input('direction')) === 'desc';
+        } else {
+            $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $allowedSorts = ['id', 'code', 'name', 'created_at', 'updated_at'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+        } else {
+            $query->latest();
+        }
+
+        if ($perPage === '-1' || $perPage === 'all') {
+            return WarehouseResource::collection($query->get());
+        }
+
+        $warehouses = $query->paginate((int) $perPage);
 
         return WarehouseResource::collection($warehouses);
     }

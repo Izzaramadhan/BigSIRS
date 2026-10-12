@@ -12,6 +12,10 @@ defineProps({
     type: Boolean,
     default: false
   },
+  isSubmitDisabled: {
+    type: Boolean,
+    default: false
+  },
   submitText: {
     type: String,
     default: 'Simpan'
@@ -39,13 +43,13 @@ defineEmits(['close', 'submit']);
           </button>
         </div>
         
-        <form @submit.prevent="$emit('submit')">
+        <form @submit.prevent="$emit('submit')" class="modal-form-wrapper">
           <div class="modal-body">
             <slot></slot>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn-cancel" @click="$emit('close')" :disabled="isSubmitting">Batal</button>
-            <button type="submit" class="btn-primary" :disabled="isSubmitting">
+            <button type="submit" class="btn-primary" :disabled="isSubmitting || isSubmitDisabled">
               {{ isSubmitting ? 'Menyimpan...' : submitText }}
             </button>
           </div>
@@ -54,3 +58,12 @@ defineEmits(['close', 'submit']);
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+.modal-form-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+</style>

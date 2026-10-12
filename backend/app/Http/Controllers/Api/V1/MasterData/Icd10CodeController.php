@@ -18,7 +18,8 @@ class Icd10CodeController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%")
-                    ->orWhere('english_name', 'like', "%{$search}%");
+                    ->orWhere('english_name', 'like', "%{$search}%")
+                    ->orWhere('inacbg_code', 'like', "%{$search}%");
             });
         }
 
@@ -26,12 +27,12 @@ class Icd10CodeController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        $sortField = $request->get('sort_by', 'code');
-        $sortDir = $request->get('sort_dir', 'asc');
-        $allowedSorts = ['id', 'code', 'name', 'created_at'];
+        $sortField = $request->get('sort_by', $request->get('sort', 'code'));
+        $sortDir = $request->get('sort_dir', $request->get('direction', 'asc'));
+        $allowedSorts = ['id', 'code', 'name', 'english_name', 'inacbg_code', 'created_at'];
 
         if (in_array($sortField, $allowedSorts)) {
-            $query->orderBy($sortField, $sortDir);
+            $query->orderBy($sortField, strtolower($sortDir) === 'desc' ? 'desc' : 'asc');
         }
 
         $perPage = (int) $request->get('per_page', 10);

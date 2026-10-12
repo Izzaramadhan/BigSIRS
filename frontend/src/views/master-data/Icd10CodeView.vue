@@ -1,332 +1,284 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue'
-import { useIcd10Codes } from '@/composables/useIcd10Codes'
-import Icd10CodeTable from '@/components/master-data/icd10-codes/Icd10CodeTable.vue'
-import Icd10CodeFormModal from '@/components/master-data/icd10-codes/Icd10CodeFormModal.vue'
+import { ref, onMounted } from 'vue';
+import { useIcd10Codes } from '@/composables/useIcd10Codes';
+import Icd10CodeTable from '@/components/master-data/icd10-codes/Icd10CodeTable.vue';
+import Icd10CodeFilters from '@/components/master-data/icd10-codes/Icd10CodeFilters.vue';
+import Icd10CodeFormModal from '@/components/master-data/icd10-codes/Icd10CodeFormModal.vue';
+import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
+import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
+import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
+import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
+import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
+import AppToast from '@/components/common/AppToast.vue';
 
 const {
-  codes,
-  loading,
+  items,
   pagination,
   filters,
-  fetchCodes,
-  createCode,
-  updateCode,
-  updateStatus,
-  deleteCode,
-  handlePageChange,
-  setFilter
-} = useIcd10Codes()
+  sort,
+  loading,
+  submitting,
+  error,
+  fetchIcd10Codes,
+  createIcd10Code,
+  updateIcd10Code,
+  deleteIcd10Code,
+  setPage,
+  setSort
+} = useIcd10Codes();
 
-const isModalOpen = ref(false)
-const selectedCode = ref(null)
+const formModalOpen = ref(false);
+const deleteDialogOpen = ref(false);
+const selectedCode = ref(null);
+const codeToDelete = ref(null);
+const formErrors = ref({});
 
-const visiblePages = computed(() => {
-  const current = pagination.value.currentPage
-  const last = pagination.value.lastPage
-  const delta = 2
-  const range = []
-  const rangeWithDots = []
-  let l
+const toast = ref({
+  show: false,
+  type: 'success',
+  title: '',
+  message: ''
+});
 
-  for (let i = 1; i <= last; i++) {
-    if (i === 1 || i === last || (i >= current - delta && i <= current + delta)) {
-      range.push(i)
-    }
+const showToast = ({ type = 'success', title, message }) => {
+  toast.value = { show: true, type, title, message };
+};
+
+const closeToast = () => {
+  toast.value.show = false;
+};
+
+const openAddModal = () => {
+  selectedCode.value = null;
+  formErrors.value = {};
+  formModalOpen.value = true;
+};
+
+const openEditModal = (item) => {
+  selectedCode.value = { ...item };
+  formErrors.value = {};
+  formModalOpen.value = true;
+};
+
+const closeFormModal = () => {
+  if (submitting.value) return;
+  formModalOpen.value = false;
+  selectedCode.value = null;
+  formErrors.value = {};
+};
+
+const openDeleteDialog = (item) => {
+  codeToDelete.value = item;
+  deleteDialogOpen.value = true;
+};
+
+const closeDeleteDialog = () => {
+  if (submitting.value) return;
+  deleteDialogOpen.value = false;
+  codeToDelete.value = null;
+};
+
+const handleFilter = ({ key, value }) => {
+  filters[key] = value;
+  pagination.current_page = 1;
+  fetchIcd10Codes(1);
+};
+
+const handleFormSubmit = async (payload) => {
+  formErrors.value = {};
+
+  const isEditing = Boolean(selectedCode.value);
+  let result;
+
+  if (isEditing) {
+    result = await updateIcd10Code(selectedCode.value.id, payload);
+  } else {
+    result = await createIcd10Code(payload);
   }
 
-  for (let i of range) {
-    if (l) {
-      if (i - l === 2) {
-        rangeWithDots.push(l + 1)
-      } else if (i - l !== 1) {
-        rangeWithDots.push('...')
-      }
+  if (result.success) {
+    formModalOpen.value = false;
+    selectedCode.value = null;
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: isEditing
+        ? 'Data ICD-10 berhasil diperbarui.'
+        : 'Data ICD-10 berhasil ditambahkan.'
+    });
+    fetchIcd10Codes(pagination.current_page);
+  } else {
+    if (result.errors || result.error?.response?.status === 422) {
+      formErrors.value = result.errors || result.error?.response?.data?.errors || {};
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: result.error?.response?.data?.message || (typeof result.error === 'string' ? result.error : 'Silakan periksa kembali data yang dimasukkan.')
+      });
+    } else {
+      const msg = typeof result.error === 'string'
+        ? result.error
+        : (result.error?.response?.data?.message || 'Terjadi kesalahan sistem. Silakan coba lagi.');
+      formErrors.value = { general: msg };
+      showToast({
+        type: 'error',
+        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
+        message: msg
+      });
     }
-    rangeWithDots.push(i)
-    l = i
   }
+};
 
-  return rangeWithDots
-})
+const handleDeleteConfirm = async () => {
+  if (!codeToDelete.value || submitting.value) return;
+
+  const result = await deleteIcd10Code(codeToDelete.value.id);
+
+  if (result.success) {
+    deleteDialogOpen.value = false;
+    codeToDelete.value = null;
+    showToast({
+      type: 'success',
+      title: 'Berhasil',
+      message: 'Data ICD-10 berhasil dihapus.'
+    });
+
+    if (items.value.length === 1 && pagination.current_page > 1) {
+      pagination.current_page--;
+    }
+
+    fetchIcd10Codes(pagination.current_page);
+  } else {
+    let errorMessage = 'Data ICD-10 gagal dihapus. Silakan coba lagi.';
+    if (typeof result.error === 'string') {
+      errorMessage = result.error;
+    } else if (result.error?.response?.data?.message) {
+      errorMessage = result.error.response.data.message;
+    }
+
+    showToast({
+      type: 'error',
+      title: 'Gagal Menghapus',
+      message: errorMessage
+    });
+  }
+};
 
 onMounted(() => {
-  fetchCodes()
-})
-
-const handleAdd = () => {
-  selectedCode.value = null
-  isModalOpen.value = true
-}
-
-const handleEdit = (code) => {
-  selectedCode.value = code
-  isModalOpen.value = true
-}
-
-const handleSubmit = async (formData) => {
-  const success = selectedCode.value
-    ? await updateCode(selectedCode.value.id, formData)
-    : await createCode(formData)
-
-  if (success) {
-    isModalOpen.value = false
-  }
-}
+  fetchIcd10Codes();
+});
 </script>
 
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <div class="header-content">
-        <h1 class="page-title">Master Data Diagnosa (ICD-10)</h1>
-        <p class="page-subtitle">Kelola data diagnosis ICD-10</p>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-primary" @click="handleAdd">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon">
-            <path d="M12 5v14M5 12h14" />
+    <AppToast
+      :show="toast.show"
+      :type="toast.type"
+      :title="toast.title"
+      :message="toast.message"
+      @close="closeToast"
+    />
+
+    <!-- Header -->
+    <MasterDataPageHeader
+      title="ICD-10"
+      subtitle="Kelola data klasifikasi penyakit dan diagnosis ICD-10."
+      :breadcrumbs="[
+        { label: 'Dashboard', active: false },
+        { label: 'Master Data', active: false },
+        { label: 'Data Diagnosa', active: false },
+        { label: 'ICD-10', active: true }
+      ]"
+    >
+      <template #actions>
+        <button type="button" class="btn-primary" @click="openAddModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
           Tambah ICD-10
         </button>
-      </div>
+      </template>
+    </MasterDataPageHeader>
+
+    <!-- Content -->
+    <div class="page-content">
+      <Icd10CodeFilters
+        :filters="filters"
+        :loading="loading"
+        @filter="handleFilter"
+        @refresh="() => fetchIcd10Codes(pagination.current_page)"
+      />
+
+      <MasterDataErrorState
+        v-if="error"
+        :error="error"
+        @retry="() => fetchIcd10Codes(pagination.current_page)"
+      />
+
+      <template v-else>
+        <MasterDataEmptyState
+          v-if="!loading && items.length === 0"
+          :is-search="!!filters.search"
+        >
+          <template #action v-if="!filters.search">
+            <button class="btn-primary" @click="openAddModal">Tambah ICD-10</button>
+          </template>
+        </MasterDataEmptyState>
+
+        <template v-else>
+          <Icd10CodeTable
+            :items="items"
+            :pagination="pagination"
+            :sort="sort"
+            :loading="loading"
+            @sort="setSort"
+            @edit="openEditModal"
+            @delete="openDeleteDialog"
+          />
+
+          <MasterDataPagination
+            :pagination="pagination"
+            :loading="loading"
+            :item-count="items.length"
+            @page-change="setPage"
+          />
+        </template>
+      </template>
     </div>
 
-    <div class="card">
-      <div class="card-header">
-        <div class="filters">
-          <div class="search-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input 
-              type="text" 
-              class="form-control" 
-              placeholder="Cari kode atau nama diagnosa..."
-              :value="filters.search"
-              @input="e => setFilter('search', e.target.value)"
-            >
-          </div>
-          <select 
-            class="form-control"
-            :value="filters.is_active === null ? '' : filters.is_active"
-            @change="e => setFilter('is_active', e.target.value === '' ? null : e.target.value === 'true')"
-          >
-            <option value="">Semua Status</option>
-            <option value="true">Aktif</option>
-            <option value="false">Nonaktif</option>
-          </select>
-        </div>
-      </div>
-      
-      <div class="card-body">
-        <Icd10CodeTable
-          :codes="codes"
-          :loading="loading"
-          @edit="handleEdit"
-          @status-change="updateStatus"
-          @delete="deleteCode"
-        />
-
-        <div class="pagination-bar" v-if="pagination.lastPage > 1">
-          <div class="pagination-info">
-            Menampilkan {{ (pagination.currentPage - 1) * pagination.perPage + 1 }} - 
-            {{ Math.min(pagination.currentPage * pagination.perPage, pagination.total) }} 
-            dari {{ pagination.total }} data
-          </div>
-          <div class="pagination-controls">
-            <button 
-              class="btn-page" 
-              :disabled="pagination.currentPage === 1"
-              @click="handlePageChange(pagination.currentPage - 1)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="15 18 9 12 15 6"></polyline>
-              </svg>
-            </button>
-            
-            <button 
-              v-for="(page, index) in visiblePages" 
-              :key="index"
-              class="btn-page"
-              :class="{ active: page === pagination.currentPage }"
-              @click="page !== '...' ? handlePageChange(page) : null"
-              :disabled="page === '...'"
-            >
-              {{ page }}
-            </button>
-
-            <button 
-              class="btn-page" 
-              :disabled="pagination.currentPage === pagination.lastPage"
-              @click="handlePageChange(pagination.currentPage + 1)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
+    <!-- Modals -->
     <Icd10CodeFormModal
-      v-if="isModalOpen"
+      :is-open="formModalOpen"
       :code="selectedCode"
-      :loading="loading"
-      @close="isModalOpen = false"
-      @submit="handleSubmit"
+      :is-submitting="submitting"
+      :errors="formErrors"
+      @close="closeFormModal"
+      @submit="handleFormSubmit"
+    />
+
+    <MasterDataDeleteDialog
+      :is-open="deleteDialogOpen"
+      title="Hapus ICD-10"
+      :item-name="codeToDelete ? `${codeToDelete.code} - ${codeToDelete.name}` : ''"
+      warning-message="Pastikan data yang dipilih sudah benar. Data yang dihapus tidak dapat dikembalikan."
+      :is-submitting="submitting"
+      @close="closeDeleteDialog"
+      @confirm="handleDeleteConfirm"
     />
   </div>
 </template>
 
 <style scoped>
-.page-header {
+.page-container {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 1.5rem;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-  margin: 0 0 0.25rem 0;
-}
-
-.page-subtitle {
-  color: var(--color-text-secondary);
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.btn {
-  padding: 0.6rem 1.25rem;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.9rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: 1px solid transparent;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: #ffffff;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
-.icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.filters {
+.page-content {
   display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.search-box {
-  position: relative;
-  flex: 1;
-  max-width: 400px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 1.25rem;
-  height: 1.25rem;
-  color: var(--color-text-secondary);
-}
-
-.search-box .form-control {
-  padding-left: 2.5rem;
-  width: 100%;
-}
-
-.form-control {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.form-control:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.1);
-}
-
-.pagination-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  border-top: 1px solid var(--color-border-soft);
-  background: white;
-}
-
-.pagination-info {
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-}
-
-.pagination-controls {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.btn-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-soft);
-  background: white;
-  color: var(--color-text-navy);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-page svg {
-  width: 16px;
-  height: 16px;
-}
-
-.btn-page:hover:not(:disabled) {
-  background: var(--color-page-bg);
-  border-color: var(--color-border);
-}
-
-.btn-page.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
-}
-
-.btn-page:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: var(--color-page-bg);
+  flex-direction: column;
+  gap: 16px;
 }
 </style>

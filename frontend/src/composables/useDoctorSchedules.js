@@ -12,9 +12,7 @@ export function useDoctorSchedules() {
   const filters = reactive({
     search: '',
     doctor_id: null,
-    polyclinic_id: null,
-    day_of_week: null,
-    is_holiday: null,
+    polyclinic_id: null
   });
   const sort = reactive({
     column: 'id',
@@ -40,8 +38,6 @@ export function useDoctorSchedules() {
       if (filters.search) params.search = filters.search;
       if (filters.doctor_id) params.doctor_id = filters.doctor_id;
       if (filters.polyclinic_id) params.polyclinic_id = filters.polyclinic_id;
-      if (filters.day_of_week) params.day_of_week = filters.day_of_week;
-      if (filters.is_holiday !== null && filters.is_holiday !== '') params.is_holiday = filters.is_holiday;
 
       const response = await doctorScheduleService.getDoctorSchedules(params);
 
@@ -97,8 +93,6 @@ export function useDoctorSchedules() {
     filters.search = '';
     filters.doctor_id = null;
     filters.polyclinic_id = null;
-    filters.day_of_week = null;
-    filters.is_holiday = null;
     pagination.current_page = 1;
     fetchSchedules();
   };

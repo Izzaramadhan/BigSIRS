@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateRadiologyTypeRequest extends FormRequest
 {
@@ -23,12 +24,35 @@ class UpdateRadiologyTypeRequest extends FormRequest
     public function rules(): array
     {
         $model = $this->route('radiology_type');
-        $id = $model ? $model->id : null;
+        $id = $model instanceof \App\Models\MasterData\RadiologyType ? $model->id : ($model ? (int) $model : null);
 
         return [
-            'name' => 'required|string|max:255|unique:radiology_types,name,'.$id,
-            'description' => 'nullable|string',
-            'is_active' => 'boolean',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('radiology_types', 'name')->ignore($id)->whereNull('deleted_at'),
+            ],
+            'description' => ['nullable', 'string'],
+            'is_active' => ['boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+
+        if (is_string($this->name)) {
+            $merge['name'] = trim(preg_replace('/\s+/', ' ', $this->name));
+        }
+
+        if ($this->has('description') && is_string($this->input('description'))) {
+            $val = trim($this->input('description'));
+            $merge['description'] = $val === '' ? null : $val;
+        }
+
+        if (! empty($merge)) {
+            $this->merge($merge);
+        }
     }
 }

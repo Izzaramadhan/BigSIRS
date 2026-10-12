@@ -1,4 +1,8 @@
 <script setup>
+import MasterDataSkeletonRow from '@/components/master-data/shared/MasterDataSkeletonRow.vue';
+import MasterDataActionButtons from '@/components/master-data/shared/MasterDataActionButtons.vue';
+import MasterDataStatusBadge from '@/components/master-data/shared/MasterDataStatusBadge.vue';
+
 const props = defineProps({
   items: {
     type: Array,
@@ -10,7 +14,11 @@ const props = defineProps({
   },
   sortConfig: {
     type: Object,
-    default: () => ({ column: 'created_at', direction: 'desc' })
+    required: true
+  },
+  pagination: {
+    type: Object,
+    required: true
   }
 });
 
@@ -18,15 +26,14 @@ const emit = defineEmits(['sort', 'edit', 'delete', 'toggle-status']);
 
 const handleSort = (column) => {
   let direction = 'asc';
-  if (props.sortConfig.column === column && props.sortConfig.direction === 'asc') {
-    direction = 'desc';
+  if (props.sortConfig.column === column) {
+    direction = props.sortConfig.direction === 'asc' ? 'desc' : 'asc';
   }
   emit('sort', { column, direction });
 };
 
-const getSortIcon = (column) => {
-  if (props.sortConfig.column !== column) return 'none';
-  return props.sortConfig.direction === 'asc' ? 'up' : 'down';
+const getRowNumber = (index) => {
+  return (props.pagination.current_page - 1) * props.pagination.per_page + index + 1;
 };
 
 const formatCurrency = (val) => {
@@ -35,134 +42,188 @@ const formatCurrency = (val) => {
 </script>
 
 <template>
-  <div class="table-container">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th width="5%">No</th>
-          <th width="20%" class="sortable" @click="handleSort('name')">
-            <div class="th-content">
-              Nama Tindakan
-              <span class="sort-icon" :class="getSortIcon('name')">
-                <svg v-if="getSortIcon('name') === 'up'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                <svg v-else-if="getSortIcon('name') === 'down'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-300"><polyline points="7 15 12 20 17 15"></polyline><polyline points="7 9 12 4 17 9"></polyline></svg>
-              </span>
-            </div>
-          </th>
-          <th width="10%" class="sortable" @click="handleSort('code')">
-            <div class="th-content">
-              Kode
-              <span class="sort-icon" :class="getSortIcon('code')">
-                <svg v-if="getSortIcon('code') === 'up'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                <svg v-else-if="getSortIcon('code') === 'down'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-300"><polyline points="7 15 12 20 17 15"></polyline><polyline points="7 9 12 4 17 9"></polyline></svg>
-              </span>
-            </div>
-          </th>
-          <th width="15%">Kategori / ICD-9</th>
-          <th width="30%">Tarif (Jenis & Total)</th>
-          <th width="10%">Status</th>
-          <th width="10%">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="loading">
-          <td colspan="7" class="text-center py-4">Memuat data...</td>
-        </tr>
-        <tr v-else-if="items.length === 0">
-          <td colspan="7" class="text-center py-4 text-gray-500">Tidak ada data ditemukan</td>
-        </tr>
-        <tr v-else v-for="(item, index) in items" :key="item.id">
-          <td>{{ index + 1 }}</td>
-          <td>
-            <div class="fw-medium">{{ item.name }}</div>
-          </td>
-          <td>
-            <span v-if="item.code">{{ item.code }}</span>
-            <span v-else class="text-gray-400 italic text-sm">Tidak ada</span>
-          </td>
-          <td>
-            <div class="text-sm">
-              <div v-if="item.category" class="font-medium text-navy">{{ item.category.name }}</div>
-              <div v-if="item.icd9_cm" class="text-gray-500 text-xs mt-1">ICD: {{ item.icd9_cm.code }}</div>
-            </div>
-          </td>
-          <td>
-            <div v-if="!item.tariffs || item.tariffs.length === 0" class="text-red-500 text-sm">
-              Belum memiliki tarif
-            </div>
-            <div v-else class="tariffs-list">
-              <div v-for="tariff in item.tariffs" :key="tariff.id" class="tariff-item">
-                <span class="tariff-name">{{ tariff.tariff_type?.name || 'Unknown' }}</span>
-                <span class="tariff-total">{{ formatCurrency(tariff.total_amount) }}</span>
+  <div class="table-wrapper">
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="col-no text-center">NO</th>
+            <th class="col-category">KATEGORI</th>
+            <th @click="handleSort('name')" class="sortable col-code">
+              <div class="th-content">
+                KODE
+                <span class="sort-icon" v-if="sortConfig.column === 'name'">
+                  <svg v-if="sortConfig.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </span>
               </div>
-            </div>
-          </td>
-          <td>
-            <button 
-              class="status-badge" 
-              :class="item.is_visible ? 'active' : 'inactive'"
-              @click="$emit('toggle-status', item)"
-              title="Klik untuk mengubah status visibilitas"
-            >
-              {{ item.is_visible ? 'Tampil' : 'Sembunyi' }}
-            </button>
-          </td>
-          <td>
-            <div class="action-buttons">
-              <button class="btn-icon text-blue" @click="$emit('edit', item)" title="Edit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-              </button>
-              <button class="btn-icon text-red" @click="$emit('delete', item)" title="Hapus">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </th>
+            <th class="col-icd9">ICD9CM</th>
+            <th @click="handleSort('code')" class="sortable col-name">
+              <div class="th-content">
+                TINDAKAN
+                <span class="sort-icon" v-if="sortConfig.column === 'code'">
+                  <svg v-if="sortConfig.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </span>
+              </div>
+            </th>
+            <th class="col-tariff-type">JENIS TARIF</th>
+            <th class="col-tariff-price">HARGA</th>
+            <th class="col-polyclinic">POLIKLINIK</th>
+            <th @click="handleSort('is_visible')" class="sortable col-status text-center">
+              <div class="th-content justify-center">
+                STATUS
+                <span class="sort-icon" v-if="sortConfig.column === 'is_visible'">
+                  <svg v-if="sortConfig.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </span>
+              </div>
+            </th>
+            <th class="col-actions text-center">AKSI</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-if="loading">
+            <MasterDataSkeletonRow :columns="10" :rows="5" />
+          </template>
+          
+          <template v-else>
+            <tr v-for="(item, index) in items" :key="item.id">
+              <!-- NO -->
+              <td class="col-no text-center text-muted">{{ getRowNumber(index) }}</td>
+              
+              <!-- KATEGORI -->
+              <td class="col-category">
+                <div v-if="item.category" class="text-sm font-medium text-navy category-text" :title="item.category.name">{{ item.category.name }}</div>
+                <div v-else class="text-muted">-</div>
+              </td>
+
+              <!-- KODE (Mapped to item.name based on user requirement) -->
+              <td class="col-code font-medium">
+                <span v-if="item.name" class="code-badge">{{ item.name }}</span>
+                <span v-else class="text-muted">-</span>
+              </td>
+
+              <!-- ICD9CM -->
+              <td class="col-icd9">
+                <span v-if="item.icd9_cm" class="code-badge bg-gray" :title="item.icd9_cm.name">{{ item.icd9_cm.code }}</span>
+                <span v-else class="text-muted">-</span>
+              </td>
+
+              <!-- TINDAKAN (Mapped to item.code based on user requirement) -->
+              <td class="col-name font-medium text-navy">
+                <div class="name-text" :title="item.code">{{ item.code }}</div>
+              </td>
+
+              <!-- JENIS TARIF -->
+              <td class="col-tariff-type p-0">
+                <div v-if="!item.tariffs || item.tariffs.length === 0" class="p-3 text-muted">-</div>
+                <div v-else class="tariff-inner-list">
+                  <div v-for="tariff in item.tariffs" :key="tariff.id" class="tariff-inner-item">
+                    {{ tariff.tariff_type?.name || '-' }}
+                  </div>
+                </div>
+              </td>
+
+              <!-- HARGA -->
+              <td class="col-tariff-price p-0">
+                <div v-if="!item.tariffs || item.tariffs.length === 0" class="p-3 text-muted text-right">-</div>
+                <div v-else class="tariff-inner-list">
+                  <div v-for="tariff in item.tariffs" :key="tariff.id" class="tariff-inner-item text-right font-medium text-navy">
+                    {{ formatCurrency(tariff.total_amount) }}
+                  </div>
+                </div>
+              </td>
+
+              <!-- POLIKLINIK -->
+              <td class="col-polyclinic">
+                <div v-if="!item.polyclinics || item.polyclinics.length === 0" class="text-muted">-</div>
+                <div v-else class="polyclinic-list">
+                  <span v-for="(poly, pIdx) in item.polyclinics" :key="pIdx" class="poly-chip" :title="poly.name">
+                    {{ poly.name }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- STATUS -->
+              <td class="col-status text-center">
+                <MasterDataStatusBadge :is-active="item.is_visible" />
+              </td>
+
+              <!-- AKSI -->
+              <td class="col-actions">
+                <MasterDataActionButtons 
+                  :has-status="true"
+                  :is-active="item.is_visible"
+                  @edit="$emit('edit', item)"
+                  @delete="$emit('delete', item)"
+                  @toggle-status="$emit('toggle-status', item)"
+                />
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.table-container {
-  background: #fff;
-  border-radius: 8px;
+.table-wrapper {
+  background: #ffffff;
   border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.table-container {
+  width: 100%;
   overflow-x: auto;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  white-space: nowrap;
+  min-width: 1200px;
 }
 
 .data-table th,
 .data-table td {
-  padding: 1rem;
-  text-align: left;
+  padding: 0.875rem 1rem;
   border-bottom: 1px solid var(--color-border-soft);
+  vertical-align: middle;
+}
+
+.data-table td.p-0 {
+  padding: 0 !important;
+  vertical-align: top;
+}
+
+.p-3 {
+  padding: 0.875rem 1rem;
 }
 
 .data-table th {
-  background: #f8fafc;
+  background-color: var(--color-page-bg);
+  color: var(--color-text-secondary);
   font-weight: 600;
-  color: var(--color-text-navy);
-  white-space: nowrap;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
 }
 
-.data-table tbody tr:hover {
-  background: #f8fafc;
+.data-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.data-table th.sortable:hover {
+  background-color: var(--color-border-soft);
 }
 
 .th-content {
@@ -171,18 +232,13 @@ const formatCurrency = (val) => {
   gap: 0.5rem;
 }
 
-.sortable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.sortable:hover {
-  background: #f1f5f9;
+.justify-center {
+  justify-content: center;
 }
 
 .sort-icon {
   display: flex;
-  flex-direction: column;
+  color: var(--color-primary);
 }
 
 .sort-icon svg {
@@ -190,146 +246,96 @@ const formatCurrency = (val) => {
   height: 14px;
 }
 
-.sort-icon.up, .sort-icon.down {
-  color: var(--color-primary);
+.data-table tbody tr {
+  transition: background-color 0.2s;
 }
 
-.text-gray-300 {
-  color: #cbd5e1;
+.data-table tbody tr:hover {
+  background-color: var(--color-page-bg);
 }
 
-.text-gray-400 {
-  color: #94a3b8;
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--color-text-secondary); }
+.text-navy { color: var(--color-text-navy); }
+.font-medium { font-weight: 500; }
+.italic { font-style: italic; }
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+
+.code-badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  background-color: #f1f5f9;
+  color: #475569;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
 }
 
-.text-gray-500 {
-  color: #64748b;
+.code-badge.bg-gray {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
 }
 
-.text-red-500 {
-  color: #ef4444;
+.name-text, .category-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  line-height: 1.4;
 }
 
-.text-sm {
-  font-size: 0.8rem;
-}
-.text-xs {
-  font-size: 0.75rem;
-}
-
-.italic {
-  font-style: italic;
-}
-
-.fw-medium {
-  font-weight: 500;
-  color: var(--color-text-navy);
-}
-
-.font-medium {
-  font-weight: 500;
-}
-.text-navy {
-  color: var(--color-text-navy);
-}
-.mt-1 {
-  margin-top: 0.25rem;
-}
-
-/* Tariffs */
-.tariffs-list {
+.tariff-inner-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  height: 100%;
 }
 
-.tariff-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-}
-
-.tariff-name {
-  color: #334155;
-  font-weight: 500;
-}
-
-.tariff-total {
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-/* Badges */
-.status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.status-badge:hover {
-  opacity: 0.8;
-}
-
-.status-badge.active {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-badge.inactive {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-/* Action Buttons */
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn-icon {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0.4rem;
-  border-radius: 4px;
+.tariff-inner-item {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px dashed #e2e8f0;
+  white-space: nowrap;
+  font-size: 0.85rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
+  min-height: 38px;
 }
 
-.btn-icon:hover {
-  background: #f1f5f9;
+.tariff-inner-list .tariff-inner-item:last-child {
+  border-bottom: none;
 }
 
-.btn-icon svg {
-  width: 18px;
-  height: 18px;
+.polyclinic-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: 200px;
 }
 
-.text-blue {
-  color: var(--color-primary);
+.poly-chip {
+  display: inline-flex;
+  padding: 0.15rem 0.5rem;
+  background-color: #e0e7ff;
+  color: #3730a3;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.text-red {
-  color: #ef4444;
-}
-
-.py-4 {
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-}
-
-.text-center {
-  text-align: center;
-}
+.col-no { width: 60px; }
+.col-category { width: 140px; }
+.col-code { width: 100px; }
+.col-icd9 { width: 100px; }
+.col-name { width: 180px; }
+.col-tariff-type { width: 140px; }
+.col-tariff-price { width: 140px; }
+.col-polyclinic { width: 160px; }
+.col-status { width: 100px; }
+.col-actions { width: 100px; padding-right: 1.5rem !important; }
 </style>

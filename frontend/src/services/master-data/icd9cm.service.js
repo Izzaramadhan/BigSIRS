@@ -35,6 +35,12 @@ class Icd9CmService {
     const response = await axios.get('/lookups/icd9-cms', { params })
     return response.data
   }
+
+  getIcd9Cms(params) { return this.getList(params) }
+  getIcd9Cm(id) { return this.getDetail(id) }
+  createIcd9Cm(data) { return this.create(data) }
+  updateIcd9Cm(id, data) { return this.update(id, data) }
+  deleteIcd9Cm(id) { return this.delete(id) }
 }
 
 export default new Icd9CmService()

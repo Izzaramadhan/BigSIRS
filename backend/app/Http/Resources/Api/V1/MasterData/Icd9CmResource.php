@@ -25,6 +25,9 @@ class Icd9CmResource extends JsonResource
             'needs_review' => (bool) $this->needs_review,
             'inacbg_code' => $this->inacbg_code,
             'inacbg_name' => $this->inacbg_name,
+            'class_1_tariff' => $this->class_1_tariff !== null ? (float) $this->class_1_tariff : null,
+            'class_2_tariff' => $this->class_2_tariff !== null ? (float) $this->class_2_tariff : null,
+            'class_3_tariff' => $this->class_3_tariff !== null ? (float) $this->class_3_tariff : null,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

@@ -1,336 +1,649 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
-import { useRadiologyGroups } from '@/composables/master-data/radiology/useRadiologyGroups'
-import axios from '@/utils/axios'
+import { reactive, ref, watch, onMounted } from 'vue';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import SearchableMultiSelect from '@/components/common/SearchableMultiSelect.vue';
+import axios from '@/utils/axios';
 
 const props = defineProps({
-  show: Boolean,
-  item: Object
-})
+  isOpen: {
+    type: Boolean,
+    default: false
+  },
+  // Support both item and group prop name for maximum compatibility
+  group: {
+    type: Object,
+    default: null
+  },
+  item: {
+    type: Object,
+    default: null
+  },
+  isSubmitting: {
+    type: Boolean,
+    default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
+  }
+});
 
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'submit']);
 
-const { createItem, updateItem } = useRadiologyGroups()
-
-const loading = ref(false)
-const errors = ref({})
-
-const form = ref({
+const form = reactive({
   name: '',
-  radiology_category_id: '' ,
-  radiology_type_id: '' ,
-  activity_type_id: '' ,
-  radiology_item_group_ids: [] ,
+  radiology_category_id: '',
+  radiology_type_id: '',
+  activity_type_id: '',
+  radiology_item_group_ids: [],
   price: 0,
   interpretation_price: 0,
+  is_active: true,
   loinc_code: '',
-  loinc_url: '',
-  is_active: true
-})
+  loinc_url: ''
+});
 
-// Options for lookups
-const categories = ref([])
-const types = ref([])
-const activityTypes = ref([])
-const itemGroups = ref([])
+const clientErrors = reactive({});
+
+// Dropdown options
+const categories = ref([]);
+const types = ref([]);
+const activityTypes = ref([]);
+const itemGroups = ref([]);
+
+const isLoadingLookups = ref(false);
+let lookupsLoaded = false;
 
 const fetchLookups = async () => {
+  if (lookupsLoaded) return;
+  isLoadingLookups.value = true;
   try {
-    const [cats, typs, acts, igs] = await Promise.all([
-      axios.get('/lookups/radiology-categories'),
-      axios.get('/lookups/radiology-types'),
-      axios.get('/lookups/activity-types'),
-      axios.get('/master-data/radiology-item-groups', { params: { per_page: 1000 } })
-    ])
-    categories.value = cats.data.data || cats.data
-    types.value = typs.data.data || typs.data
-    activityTypes.value = acts.data.data || acts.data
-    itemGroups.value = igs.data.data || igs.data
-  } catch (e) {
-    console.error('Failed to load lookups', e)
-  }
-}
+    const [catsRes, typesRes, actsRes, igsRes] = await Promise.all([
+      axios.get('/lookups/radiology-categories').catch(() => ({ data: [] })),
+      axios.get('/lookups/radiology-types').catch(() => ({ data: [] })),
+      axios.get('/master-data/activity-types/lookup').catch(() => 
+        axios.get('/master-data/activity-types?per_page=200').catch(() => ({ data: [] }))
+      ),
+      axios.get('/lookups/radiology-item-groups').catch(() => ({ data: [] }))
+    ]);
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    errors.value = {}
-    if (props.item) {
-      form.value = {
-        name: props.item.name,
-        radiology_category_id: props.item.radiology_category_id || '',
-        radiology_type_id: props.item.radiology_type_id || '',
-        activity_type_id: props.item.activity_type_id || '',
-        radiology_item_group_ids: props.item.radiology_item_group_ids || [],
-        price: props.item.price,
-        interpretation_price: props.item.interpretation_price,
-        loinc_code: props.item.loinc_code || '',
-        loinc_url: props.item.loinc_url || '',
-        is_active: props.item.is_active
+    categories.value = Array.isArray(catsRes.data) ? catsRes.data : (catsRes.data?.data || []);
+    types.value = Array.isArray(typesRes.data) ? typesRes.data : (typesRes.data?.data || []);
+    activityTypes.value = Array.isArray(actsRes.data) ? actsRes.data : (actsRes.data?.data || []);
+    itemGroups.value = Array.isArray(igsRes.data) ? igsRes.data : (igsRes.data?.data || []);
+    lookupsLoaded = true;
+  } catch (err) {
+    console.error('Failed to load lookups', err);
+  } finally {
+    isLoadingLookups.value = false;
+  }
+};
+
+const resetForm = () => {
+  form.name = '';
+  form.radiology_category_id = '';
+  form.radiology_type_id = '';
+  form.activity_type_id = '';
+  form.radiology_item_group_ids = [];
+  form.price = 0;
+  form.interpretation_price = 0;
+  form.is_active = true;
+  form.loinc_code = '';
+  form.loinc_url = '';
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+const populateForm = (data) => {
+  if (!data) return;
+  form.name = data.name || '';
+  form.radiology_category_id = data.radiology_category_id !== undefined && data.radiology_category_id !== null
+    ? String(data.radiology_category_id)
+    : (data.category?.id ? String(data.category.id) : '');
+  form.radiology_type_id = data.radiology_type_id !== undefined && data.radiology_type_id !== null
+    ? String(data.radiology_type_id)
+    : (data.type?.id ? String(data.type.id) : '');
+  form.activity_type_id = data.activity_type_id !== undefined && data.activity_type_id !== null
+    ? String(data.activity_type_id)
+    : (data.activity_type?.id ? String(data.activity_type.id) : '');
+
+  if (Array.isArray(data.radiology_item_group_ids)) {
+    form.radiology_item_group_ids = data.radiology_item_group_ids.map(Number);
+  } else if (Array.isArray(data.item_groups)) {
+    form.radiology_item_group_ids = data.item_groups.map((ig) => Number(ig.id));
+  } else {
+    form.radiology_item_group_ids = [];
+  }
+
+  form.price = data.price !== undefined && data.price !== null ? Number(data.price) : 0;
+  form.interpretation_price = data.interpretation_price !== undefined && data.interpretation_price !== null
+    ? Number(data.interpretation_price)
+    : 0;
+  form.is_active = data.is_active !== undefined ? Boolean(data.is_active) : true;
+  form.loinc_code = data.loinc_code || '';
+  form.loinc_url = data.loinc_url || '';
+
+  Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
+};
+
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      if (!lookupsLoaded) {
+        fetchLookups();
+      }
+      const currentItem = props.group || props.item;
+      if (currentItem) {
+        populateForm(currentItem);
+      } else {
+        resetForm();
       }
     } else {
-      form.value = {
-        name: '',
-        radiology_category_id: '',
-        radiology_type_id: '',
-        activity_type_id: '',
-        radiology_item_group_ids: [],
-        price: 0,
-        interpretation_price: 0,
-        loinc_code: '',
-        loinc_url: '',
-        is_active: true
-      }
+      resetForm();
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.group || props.item,
+  (newItem) => {
+    if (props.isOpen && newItem) {
+      populateForm(newItem);
     }
   }
-})
+);
 
 onMounted(() => {
-  fetchLookups()
-})
+  fetchLookups();
+});
 
-const handleSubmit = async () => {
-  loading.value = true
-  errors.value = {}
-
-  try {
-    const payload = {
-      ...form.value,
-      radiology_category_id: form.value.radiology_category_id || null,
-      radiology_type_id: form.value.radiology_type_id || null,
-      activity_type_id: form.value.activity_type_id || null,
-    }
-
-    if (props.item) {
-      await updateItem(props.item.id, payload)
-    } else {
-      await createItem(payload)
-    }
-    emit('saved')
-    emit('close')
-  } catch (e) {
-    if (e.response?.status === 422) {
-      errors.value = e.response.data.errors
-    } else {
-      alert(e.response?.data?.message || 'Terjadi kesalahan sistem')
-    }
-  } finally {
-    loading.value = false
+const clearFieldError = (field) => {
+  if (clientErrors[field]) {
+    delete clientErrors[field];
   }
-}
+};
+
+const fieldError = (field) => {
+  if (clientErrors[field]) {
+    return clientErrors[field];
+  }
+  if (!props.errors || !props.errors[field]) return null;
+  return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field];
+};
+
+const isValidUrl = (url) => {
+  if (!url || typeof url !== 'string' || !url.trim()) return false;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const handleSubmit = () => {
+  Object.keys(clientErrors).forEach((k) => delete clientErrors[k]);
+
+  let hasError = false;
+
+  // 1. Nama Grup Radiologi
+  if (!form.name || !form.name.trim()) {
+    clientErrors.name = 'Nama grup radiologi wajib diisi.';
+    hasError = true;
+  }
+
+  // 2. Kategori Radiologi
+  if (!form.radiology_category_id) {
+    clientErrors.radiology_category_id = 'Kategori radiologi wajib dipilih.';
+    hasError = true;
+  }
+
+  // 3. Tipe Radiologi
+  if (!form.radiology_type_id) {
+    clientErrors.radiology_type_id = 'Tipe radiologi wajib dipilih.';
+    hasError = true;
+  }
+
+  // 4. Jenis Kegiatan
+  if (!form.activity_type_id) {
+    clientErrors.activity_type_id = 'Jenis kegiatan wajib dipilih.';
+    hasError = true;
+  }
+
+  // 6. Harga
+  if (form.price === '' || form.price === null || isNaN(Number(form.price))) {
+    clientErrors.price = 'Harga wajib diisi.';
+    hasError = true;
+  } else if (Number(form.price) < 0) {
+    clientErrors.price = 'Harga tidak boleh bernilai negatif.';
+    hasError = true;
+  }
+
+  // 7. Harga Interpretasi
+  if (form.interpretation_price === '' || form.interpretation_price === null || isNaN(Number(form.interpretation_price))) {
+    clientErrors.interpretation_price = 'Harga interpretasi wajib diisi.';
+    hasError = true;
+  } else if (Number(form.interpretation_price) < 0) {
+    clientErrors.interpretation_price = 'Harga interpretasi tidak boleh bernilai negatif.';
+    hasError = true;
+  }
+
+  // 10. Loinc Url
+  if (form.loinc_url && form.loinc_url.trim() && !isValidUrl(form.loinc_url.trim())) {
+    clientErrors.loinc_url = 'Format URL LOINC tidak valid. Contoh: https://loinc.org/...';
+    hasError = true;
+  }
+
+  if (hasError) return;
+
+  const payload = {
+    name: form.name.trim(),
+    radiology_category_id: Number(form.radiology_category_id),
+    radiology_type_id: Number(form.radiology_type_id),
+    activity_type_id: Number(form.activity_type_id),
+    radiology_item_group_ids: Array.isArray(form.radiology_item_group_ids) 
+      ? form.radiology_item_group_ids.map(Number) 
+      : [],
+    price: Number(form.price),
+    interpretation_price: Number(form.interpretation_price),
+    is_active: Boolean(form.is_active),
+    loinc_code: form.loinc_code ? form.loinc_code.trim() : null,
+    loinc_url: form.loinc_url ? form.loinc_url.trim() : null
+  };
+
+  emit('submit', payload);
+};
 </script>
 
 <template>
-  <div v-if="show" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>
-          {{ item ? 'Edit' : 'Tambah' }} Group Radiologi
-        </h3>
-        <button type="button" class="btn-close" @click="emit('close')">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="(group || item) ? 'Edit Grup Radiologi' : 'Tambah Grup Radiologi'"
+    :is-submitting="isSubmitting"
+    :submit-text="(group || item) ? 'Simpan Perubahan' : 'Simpan'"
+    size="lg"
+    @close="emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form-container">
+      <div v-if="errors && errors.general" class="alert-error">
+        {{ errors.general }}
       </div>
 
-      <div class="modal-body">
-        <form @submit.prevent="handleSubmit">
-          <div class="form-group">
-            <label>Nama Grup Radiologi <span class="text-danger">*</span></label>
-            <input 
-              v-model="form.name"
-              type="text" 
-              class="form-input"
-              :class="{ 'is-invalid': errors.name }"
-              placeholder="Nama Grup Radiologi"
-            >
-            <div v-if="errors.name" class="invalid-feedback">{{ errors.name[0] }}</div>
+      <div class="form-grid">
+        <!-- 1. Nama Grup Radiologi (Baris 1: Full width) -->
+        <div class="form-group form-group--full">
+          <label for="name" class="form-label required">Nama Grup Radiologi</label>
+          <input
+            id="name"
+            v-model="form.name"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('name') }"
+            placeholder="Masukkan nama grup radiologi"
+            maxlength="255"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('name')"
+          />
+          <div v-if="fieldError('name')" class="invalid-feedback">
+            {{ fieldError('name') }}
           </div>
+        </div>
 
-          <div class="form-group mt-3">
-            <label>Kategori Radiologi <span class="text-danger">*</span></label>
-            <select 
-              v-model="form.radiology_category_id"
-              class="form-select"
-              :class="{ 'is-invalid': errors.radiology_category_id }"
-            >
-              <option value="">-- silahkan pilih --</option>
-              <option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </select>
-            <div v-if="errors.radiology_category_id" class="invalid-feedback">{{ errors.radiology_category_id[0] }}</div>
+        <!-- 2. Kategori Radiologi (Baris 2, Kolom 1) -->
+        <div class="form-group">
+          <label for="radiology_category_id" class="form-label required">Kategori Radiologi</label>
+          <select
+            id="radiology_category_id"
+            v-model="form.radiology_category_id"
+            class="form-control form-select"
+            :class="{ 'is-invalid': fieldError('radiology_category_id') }"
+            :disabled="isSubmitting || isLoadingLookups"
+            @change="clearFieldError('radiology_category_id')"
+          >
+            <option value="" disabled>Pilih kategori radiologi</option>
+            <option v-for="cat in categories" :key="cat.id" :value="String(cat.id)">
+              {{ cat.name }}
+            </option>
+          </select>
+          <div v-if="fieldError('radiology_category_id')" class="invalid-feedback">
+            {{ fieldError('radiology_category_id') }}
           </div>
+        </div>
 
-          <div class="form-group mt-3">
-            <label>Tipe Radiologi <span class="text-danger">*</span></label>
-            <select 
-              v-model="form.radiology_type_id"
-              class="form-select"
-              :class="{ 'is-invalid': errors.radiology_type_id }"
-            >
-              <option value="">-- silahkan pilih --</option>
-              <option v-for="typ in types" :key="typ.id" :value="typ.id">
-                {{ typ.name }}
-              </option>
-            </select>
-            <div v-if="errors.radiology_type_id" class="invalid-feedback">{{ errors.radiology_type_id[0] }}</div>
+        <!-- 3. Tipe Radiologi (Baris 2, Kolom 2) -->
+        <div class="form-group">
+          <label for="radiology_type_id" class="form-label required">Tipe Radiologi</label>
+          <select
+            id="radiology_type_id"
+            v-model="form.radiology_type_id"
+            class="form-control form-select"
+            :class="{ 'is-invalid': fieldError('radiology_type_id') }"
+            :disabled="isSubmitting || isLoadingLookups"
+            @change="clearFieldError('radiology_type_id')"
+          >
+            <option value="" disabled>Pilih tipe radiologi</option>
+            <option v-for="typ in types" :key="typ.id" :value="String(typ.id)">
+              {{ typ.name }}
+            </option>
+          </select>
+          <div v-if="fieldError('radiology_type_id')" class="invalid-feedback">
+            {{ fieldError('radiology_type_id') }}
           </div>
+        </div>
 
-          <div class="form-group mt-3">
-            <label>Jenis Kegiatan <span class="text-danger">*</span></label>
-            <select 
-              v-model="form.activity_type_id"
-              class="form-select"
-              :class="{ 'is-invalid': errors.activity_type_id }"
-            >
-              <option value="">-- silahkan pilih --</option>
-              <option v-for="act in activityTypes" :key="act.id" :value="act.id">
-                {{ act.name }}
-              </option>
-            </select>
-            <div v-if="errors.activity_type_id" class="invalid-feedback">{{ errors.activity_type_id[0] }}</div>
+        <!-- 4. Jenis Kegiatan (Baris 3, Kolom 1) -->
+        <div class="form-group">
+          <label for="activity_type_id" class="form-label required">Jenis Kegiatan</label>
+          <select
+            id="activity_type_id"
+            v-model="form.activity_type_id"
+            class="form-control form-select"
+            :class="{ 'is-invalid': fieldError('activity_type_id') }"
+            :disabled="isSubmitting || isLoadingLookups"
+            @change="clearFieldError('activity_type_id')"
+          >
+            <option value="" disabled>Pilih jenis kegiatan</option>
+            <option v-for="act in activityTypes" :key="act.id" :value="String(act.id)">
+              {{ act.name }}
+            </option>
+          </select>
+          <div v-if="fieldError('activity_type_id')" class="invalid-feedback">
+            {{ fieldError('activity_type_id') }}
           </div>
+        </div>
 
-          <div class="form-group mt-3">
-            <label>Kelompok Pemeriksaan</label>
-            <select 
-              v-model="form.radiology_item_group_ids"
-              multiple
-              class="form-select"
-              style="height: 120px;"
-              :class="{ 'is-invalid': errors.radiology_item_group_ids }"
-            >
-              <option v-for="ig in itemGroups" :key="ig.id" :value="ig.id">
-                {{ ig.name }}
-              </option>
-            </select>
-            <p class="text-sm text-muted mt-1" style="font-style: italic;">
-              *) Silahkan pilih item radiologi, item radiologi bisa lebih dari satu. jika tidak memiliki item radiologi silahkan pilih DEFAULT pada item radiologi.
-            </p>
-            <div v-if="errors.radiology_item_group_ids" class="invalid-feedback">{{ errors.radiology_item_group_ids[0] }}</div>
+        <!-- 5. Kelompok Pemeriksaan (Baris 3, Kolom 2) -->
+        <div class="form-group">
+          <label for="radiology_item_group_ids" class="form-label">Kelompok Pemeriksaan</label>
+          <SearchableMultiSelect
+            v-model="form.radiology_item_group_ids"
+            :options="itemGroups"
+            placeholder="Pilih kelompok pemeriksaan"
+            :disabled="isSubmitting || isLoadingLookups"
+          />
+          <div v-if="fieldError('radiology_item_group_ids')" class="invalid-feedback">
+            {{ fieldError('radiology_item_group_ids') }}
           </div>
+        </div>
 
-          <div class="grid-2 mt-3">
-            <div class="form-group">
-              <label>Harga <span class="text-danger">*</span></label>
-              <input 
-                v-model.number="form.price"
-                type="number" 
-                min="0"
-                class="form-input"
-                :class="{ 'is-invalid': errors.price }"
-                placeholder="Harga"
-              >
-              <div v-if="errors.price" class="invalid-feedback">{{ errors.price[0] }}</div>
-            </div>
-
-            <div class="form-group">
-              <label>Harga Interpretasi <span class="text-danger">*</span></label>
-              <input 
-                v-model.number="form.interpretation_price"
-                type="number" 
-                min="0"
-                class="form-input"
-                :class="{ 'is-invalid': errors.interpretation_price }"
-                placeholder="Harga Interpretasi"
-              >
-              <div v-if="errors.interpretation_price" class="invalid-feedback">{{ errors.interpretation_price[0] }}</div>
-            </div>
+        <!-- 6. Harga (Baris 4, Kolom 1) -->
+        <div class="form-group">
+          <label for="price" class="form-label required">Harga</label>
+          <div class="input-prefix-wrapper">
+            <span class="prefix">Rp</span>
+            <input
+              id="price"
+              v-model.number="form.price"
+              type="number"
+              min="0"
+              step="any"
+              class="form-control input-with-prefix font-mono"
+              :class="{ 'is-invalid': fieldError('price') }"
+              placeholder="Masukkan harga"
+              :disabled="isSubmitting"
+              @input="clearFieldError('price')"
+            />
           </div>
-
-          <div class="grid-2 mt-3">
-            <div class="form-group">
-              <label>Loinc Code</label>
-              <input 
-                v-model="form.loinc_code"
-                type="text" 
-                class="form-input"
-                :class="{ 'is-invalid': errors.loinc_code }"
-                placeholder="Loinc Code"
-              >
-              <div v-if="errors.loinc_code" class="invalid-feedback">{{ errors.loinc_code[0] }}</div>
-            </div>
-
-            <div class="form-group">
-              <label>Loinc Url</label>
-              <input 
-                v-model="form.loinc_url"
-                type="text" 
-                class="form-input"
-                :class="{ 'is-invalid': errors.loinc_url }"
-                placeholder="Loinc Url"
-              >
-              <div v-if="errors.loinc_url" class="invalid-feedback">{{ errors.loinc_url[0] }}</div>
-            </div>
+          <div v-if="fieldError('price')" class="invalid-feedback">
+            {{ fieldError('price') }}
           </div>
+        </div>
 
-          <div class="form-group mt-3">
-            <label>Tampil <span class="text-danger">*</span></label>
-            <select 
-              v-model="form.is_active"
-              class="form-select"
-              :class="{ 'is-invalid': errors.is_active }"
-            >
-              <option :value="true">Ya</option>
-              <option :value="false">Tidak</option>
-            </select>
-            <div v-if="errors.is_active" class="invalid-feedback">{{ errors.is_active[0] }}</div>
+        <!-- 7. Harga Interpretasi (Baris 4, Kolom 2) -->
+        <div class="form-group">
+          <label for="interpretation_price" class="form-label required">Harga Interpretasi</label>
+          <div class="input-prefix-wrapper">
+            <span class="prefix">Rp</span>
+            <input
+              id="interpretation_price"
+              v-model.number="form.interpretation_price"
+              type="number"
+              min="0"
+              step="any"
+              class="form-control input-with-prefix font-mono"
+              :class="{ 'is-invalid': fieldError('interpretation_price') }"
+              placeholder="Masukkan harga interpretasi"
+              :disabled="isSubmitting"
+              @input="clearFieldError('interpretation_price')"
+            />
           </div>
-        </form>
-      </div>
+          <div v-if="fieldError('interpretation_price')" class="invalid-feedback">
+            {{ fieldError('interpretation_price') }}
+          </div>
+        </div>
 
-      <div class="modal-footer">
-        <button type="button" class="btn-cancel" @click="emit('close')" :disabled="loading">
-          Batal
-        </button>
-        <button type="button" class="btn-primary" @click="handleSubmit" :disabled="loading">
-          <svg v-if="loading" class="spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-          </svg>
-          {{ loading ? 'Menyimpan...' : 'Simpan' }}
-        </button>
+        <!-- 8. Status Tampil (Baris 5: Full width) -->
+        <div class="form-group form-group--full">
+          <label class="form-label required">Status Tampil</label>
+          <div class="status-radio-group">
+            <label class="status-radio-item" :class="{ 'is-selected': form.is_active === true }">
+              <input
+                id="status_active"
+                type="radio"
+                v-model="form.is_active"
+                :value="true"
+                name="radiology_group_status"
+                :disabled="isSubmitting"
+                @change="clearFieldError('is_active')"
+              />
+              <span class="status-radio-label">Aktif</span>
+            </label>
+            <label class="status-radio-item" :class="{ 'is-selected': form.is_active === false }">
+              <input
+                id="status_inactive"
+                type="radio"
+                v-model="form.is_active"
+                :value="false"
+                name="radiology_group_status"
+                :disabled="isSubmitting"
+                @change="clearFieldError('is_active')"
+              />
+              <span class="status-radio-label">Nonaktif</span>
+            </label>
+          </div>
+          <div v-if="fieldError('is_active')" class="invalid-feedback">
+            {{ fieldError('is_active') }}
+          </div>
+        </div>
+
+        <!-- 9. Loinc Code (Baris 6, Kolom 1) -->
+        <div class="form-group">
+          <label for="loinc_code" class="form-label">Loinc Code</label>
+          <input
+            id="loinc_code"
+            v-model="form.loinc_code"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('loinc_code') }"
+            placeholder="Masukkan LOINC Code"
+            maxlength="255"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('loinc_code')"
+          />
+          <div v-if="fieldError('loinc_code')" class="invalid-feedback">
+            {{ fieldError('loinc_code') }}
+          </div>
+        </div>
+
+        <!-- 10. Loinc Url (Baris 6, Kolom 2) -->
+        <div class="form-group">
+          <label for="loinc_url" class="form-label">Loinc Url</label>
+          <input
+            id="loinc_url"
+            v-model="form.loinc_url"
+            type="url"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('loinc_url') }"
+            placeholder="https://loinc.org/..."
+            maxlength="255"
+            autocomplete="off"
+            :disabled="isSubmitting"
+            @input="clearFieldError('loinc_url')"
+          />
+          <div v-if="fieldError('loinc_url')" class="invalid-feedback">
+            {{ fieldError('loinc_url') }}
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 1rem; backdrop-filter: blur(2px); }
-.modal-content { background: #ffffff; border-radius: 8px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); display: flex; flex-direction: column; }
-.modal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border-soft); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: #ffffff; z-index: 10; }
-.modal-header h3 { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--color-text-navy); }
-.btn-close { background: transparent; border: none; color: var(--color-text-secondary); cursor: pointer; padding: 0.25rem; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-.btn-close:hover { background: var(--color-page-bg); color: var(--color-text-navy); }
-.btn-close svg { width: 20px; height: 20px; }
-.modal-body { padding: 1.5rem; flex: 1; }
-.alert-error { background: #fef2f2; color: #ef4444; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; font-weight: 500; margin-bottom: 1.5rem; border: 1px solid #f87171; }
-.form-group { margin-bottom: 1rem; }
-.form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; color: var(--color-text-navy); }
-.text-danger { color: #ef4444; }
-.form-input, .form-select, .form-textarea { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border-soft); border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; box-sizing: border-box; background-color: #ffffff; }
-.form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-light); }
-.is-invalid { border-color: #ef4444; }
-.is-invalid:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2); }
-.invalid-feedback { color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem; }
-.text-muted { color: #64748b; }
-.text-sm { font-size: 0.8rem; }
-.mt-1 { margin-top: 0.25rem; }
-.mt-3 { margin-top: 1rem; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.modal-footer { padding: 1.25rem 1.5rem; border-top: 1px solid var(--color-border-soft); display: flex; justify-content: flex-end; gap: 0.75rem; position: sticky; bottom: 0; background: #ffffff; z-index: 10; }
-.btn-cancel { padding: 0.5rem 1.25rem; background: #ffffff; border: 1px solid var(--color-border-soft); border-radius: 6px; font-size: 0.9rem; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; }
-.btn-cancel:hover:not(:disabled) { background: var(--color-page-bg); color: var(--color-text-navy); }
-.btn-primary { padding: 0.5rem 1.25rem; background: #06b6d4; border: none; border-radius: 6px; font-size: 0.9rem; font-weight: 500; color: #ffffff; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
-.btn-primary:hover:not(:disabled) { background: #0891b2; }
-.btn-primary:disabled, .btn-cancel:disabled { opacity: 0.7; cursor: not-allowed; }
-.btn-primary svg { width: 18px; height: 18px; }
-.spinner { animation: spin 1s linear infinite; }
-.opacity-25 { opacity: 0.25; }
-.opacity-75 { opacity: 0.75; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.modal-form-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group--full {
+  grid-column: 1 / -1;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-navy, #0f172a);
+  margin-bottom: 0.375rem;
+}
+
+.form-label.required::after {
+  content: " *";
+  color: #ef4444;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-text-navy, #0f172a);
+  background-color: #ffffff;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
+  border-radius: 6px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-sizing: border-box;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--color-primary, #0f766e);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.form-control.is-invalid {
+  border-color: #ef4444;
+}
+
+.form-control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.form-control:disabled {
+  background-color: #f8fafc;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.input-prefix-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-prefix-wrapper .prefix {
+  position: absolute;
+  left: 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #64748b);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.input-with-prefix {
+  padding-left: 2.25rem;
+}
+
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.invalid-feedback {
+  display: block;
+  font-size: 0.8125rem;
+  color: #ef4444;
+  margin-top: 0.375rem;
+}
+
+.status-radio-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.status-radio-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border-soft, #cbd5e1);
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #ffffff;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.status-radio-item:hover {
+  border-color: var(--color-primary, #0f766e);
+  background-color: #f0fdfa;
+}
+
+.status-radio-item.is-selected {
+  border-color: var(--color-primary, #0f766e);
+  background-color: #f0fdfa;
+}
+
+.status-radio-item input[type="radio"] {
+  cursor: pointer;
+  accent-color: var(--color-primary, #0f766e);
+}
+
+.status-radio-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-navy, #0f172a);
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

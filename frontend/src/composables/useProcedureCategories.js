@@ -10,8 +10,7 @@ export function useProcedureCategories() {
     total: 0
   });
   const filters = reactive({
-    search: '',
-    is_active: null
+    search: ''
   });
   const sort = reactive({
     column: 'name',
@@ -35,7 +34,6 @@ export function useProcedureCategories() {
       };
 
       if (filters.search) params.search = filters.search;
-      if (filters.is_active !== null) params.is_active = filters.is_active;
 
       const response = await procedureCategoryService.getProcedureCategories(params);
 
@@ -78,21 +76,15 @@ export function useProcedureCategories() {
     }
   };
 
-  const toggleStatus = async (id, isActive) => {
-    try {
-      await procedureCategoryService.updateProcedureCategoryStatus(id, isActive);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    }
-  };
-
   const archiveProcedureCategory = async (id) => {
+    submitting.value = true;
     try {
       await procedureCategoryService.archiveProcedureCategory(id);
       return { success: true };
     } catch (err) {
       return { success: false, error: err };
+    } finally {
+      submitting.value = false;
     }
   };
 
@@ -124,7 +116,6 @@ export function useProcedureCategories() {
     fetchProcedureCategories,
     createProcedureCategory,
     updateProcedureCategory,
-    toggleStatus,
     archiveProcedureCategory,
     setPage,
     setSort

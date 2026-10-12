@@ -105,4 +105,67 @@ class Icd9CmTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['code']);
     }
+
+    public function test_can_create_and_update_with_tariffs_and_inacbg()
+    {
+        $payload = [
+            'code' => '87.44',
+            'name' => 'Routine chest x-ray, so described',
+            'inacbg_code' => 'U-1-01-I',
+            'inacbg_name' => 'Prosedur Radiologi',
+            'class_1_tariff' => 750000,
+            'class_2_tariff' => 500000,
+            'class_3_tariff' => 350000,
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/icd9-cms', $payload);
+        $response->assertCreated();
+        $this->assertEquals('87.44', $response->json('data.code'));
+        $this->assertEquals('Routine chest x-ray, so described', $response->json('data.name'));
+        $this->assertEquals('U-1-01-I', $response->json('data.inacbg_code'));
+        $this->assertEquals('Prosedur Radiologi', $response->json('data.inacbg_name'));
+        $this->assertEquals(750000, $response->json('data.class_1_tariff'));
+        $this->assertEquals(500000, $response->json('data.class_2_tariff'));
+        $this->assertEquals(350000, $response->json('data.class_3_tariff'));
+
+        $id = $response->json('data.id');
+
+        // Update
+        $updatePayload = [
+            'code' => '87.44',
+            'name' => 'Updated Chest X-Ray',
+            'inacbg_code' => 'U-1-01-II',
+            'inacbg_name' => 'Updated INACBG',
+            'class_1_tariff' => 900000,
+            'class_2_tariff' => 600000,
+            'class_3_tariff' => 400000,
+        ];
+
+        $updateResponse = $this->actingAs($this->user)->putJson("/api/v1/master-data/icd9-cms/{$id}", $updatePayload);
+        $updateResponse->assertOk();
+        $this->assertEquals('Updated Chest X-Ray', $updateResponse->json('data.name'));
+        $this->assertEquals('U-1-01-II', $updateResponse->json('data.inacbg_code'));
+        $this->assertEquals(900000, $updateResponse->json('data.class_1_tariff'));
+    }
+
+    public function test_can_sort_by_column()
+    {
+        Icd9Cm::factory()->create(['code' => '88.01', 'name' => 'Zebra Scan']);
+        Icd9Cm::factory()->create(['code' => '88.02', 'name' => 'Apple Scan']);
+
+        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/icd9-cms?sort=name&direction=asc');
+        $response->assertOk();
+        $this->assertEquals('Apple Scan', $response->json('data.0.name'));
+    }
+
+    public function test_can_search_by_inacbg_code()
+    {
+        Icd9Cm::factory()->create(['code' => '11.01', 'name' => 'Proc 1', 'inacbg_code' => 'INAC-123']);
+        Icd9Cm::factory()->create(['code' => '11.02', 'name' => 'Proc 2', 'inacbg_code' => 'OTHER-456']);
+
+        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/icd9-cms?search=INAC-123');
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertEquals('11.01', $response->json('data.0.code'));
+    }
 }

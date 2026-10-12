@@ -24,14 +24,17 @@ class LaboratoryGroupController extends Controller
         $this->authorize('viewAny', LaboratoryGroup::class);
 
         $groups = LaboratoryGroup::query()
-            ->with(['category'])
+            ->with(['category', 'items'])
             ->withCount('items')
             ->search($request->input('search'))
             ->when($request->input('laboratory_category_id'), function ($query, $categoryId) {
                 $query->where('laboratory_category_id', $categoryId);
             })
-            ->when($request->input('sort_by'), function ($query, $sortBy) use ($request) {
-                $sortDesc = $request->boolean('sort_desc', false);
+            ->when($request->has('is_active') && $request->input('is_active') !== '' && $request->input('is_active') !== null, function ($query) use ($request) {
+                $query->where('is_active', $request->boolean('is_active'));
+            })
+            ->when($request->input('sort_by') ?? $request->input('sortBy'), function ($query, $sortBy) use ($request) {
+                $sortDesc = $request->boolean('sort_desc', false) || $request->boolean('sortDesc', false);
                 $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
             }, function ($query) {
                 $query->orderBy('name');

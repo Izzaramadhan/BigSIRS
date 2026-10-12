@@ -1,286 +1,11 @@
-<template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="employee-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="employee-modal-title" @click.self="close">
-      <div class="employee-modal-backdrop" @click="close"></div>
-      
-      <section class="employee-modal-panel large-modal">
-        <header class="employee-modal-header modal-header">
-          <div>
-            <h3 id="employee-modal-title" class="modal-title">{{ isEditing ? 'Edit Pegawai' : 'Tambah Pegawai' }}</h3>
-          <p class="modal-description text-gray-500 mt-1 mb-0">{{ isEditing ? 'Perbarui data pegawai yang dipilih.' : 'Lengkapi data identitas dan kepegawaian.' }}</p>
-        </div>
-        <button class="btn-close" @click="close" type="button" aria-label="Tutup">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </header>
-
-      <form class="employee-form" @submit.prevent="submitForm">
-      <div class="employee-modal-body modal-body">
-        <div v-if="isLoadingData" class="flex-center py-12" style="flex-direction: column; height: 300px;">
-          <div class="spinner" style="width: 2rem; height: 2rem; margin-bottom: 1rem; border-width: 3px; border-top-color: var(--color-primary);"></div>
-          <p class="text-gray-500">Memuat detail pegawai...</p>
-        </div>
-        <template v-else>
-        <!-- Error Alert -->
-        <div v-if="error" class="alert alert-danger mb-4">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <div class="alert-content">
-            <span class="alert-message">{{ typeof error === 'string' ? error : 'Terdapat kesalahan pada input Anda.' }}</span>
-            <ul v-if="typeof error === 'object' && Object.keys(error).length > 0" class="error-list mt-2">
-              <li v-for="(errMsgs, field) in error" :key="field">
-                {{ errMsgs[0] }}
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        
-          <h4 class="section-title mb-4">Identitas</h4>
-            <div class="form-grid mb-6">
-            <div class="form-group">
-              <label for="national_id" class="form-label">NIK/No. KTP</label>
-              <input 
-                id="national_id" 
-                v-model="form.national_id" 
-                type="text" 
-                class="form-input" 
-                :class="{ 'is-invalid': hasError('national_id') }"
-                placeholder="Masukkan NIK/No. KTP"
-                maxlength="20"
-              />
-              <span v-if="hasError('national_id')" class="error-feedback">{{ getError('national_id') }}</span>
-            </div>
-
-            <div class="form-group">
-              <label for="name" class="form-label">Nama Lengkap <span class="required-indicator">*</span></label>
-              <input 
-                id="name" 
-                v-model="form.name" 
-                type="text" 
-                class="form-input" 
-                :class="{ 'is-invalid': hasError('name') }"
-                placeholder="Masukkan nama lengkap"
-                required
-              />
-              <span v-if="hasError('name')" class="error-feedback">{{ getError('name') }}</span>
-            </div>
-
-            <div class="form-group">
-              <label for="birth_place" class="form-label">Tempat Lahir</label>
-              <input 
-                id="birth_place" 
-                v-model="form.birth_place" 
-                type="text" 
-                class="form-input" 
-                :class="{ 'is-invalid': hasError('birth_place') }"
-                placeholder="Masukkan tempat lahir"
-              />
-              <span v-if="hasError('birth_place')" class="error-feedback">{{ getError('birth_place') }}</span>
-            </div>
-
-            <div class="form-group">
-              <label for="birth_date" class="form-label">Tanggal Lahir</label>
-              <input 
-                id="birth_date" 
-                v-model="form.birth_date" 
-                type="date" 
-                class="form-input" 
-                :class="{ 'is-invalid': hasError('birth_date') }"
-              />
-              <span v-if="hasError('birth_date')" class="error-feedback">{{ getError('birth_date') }}</span>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Jenis Kelamin</label>
-              <div class="radio-group">
-                <label v-for="opt in genderOptions" :key="opt.id" class="radio-label">
-                  <input type="radio" v-model="form.gender" :value="opt.id" name="gender" />
-                  <span>{{ opt.name }}</span>
-                </label>
-              </div>
-              <span v-if="hasError('gender')" class="error-feedback">{{ getError('gender') }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label">Golongan Darah</label>
-              <div class="radio-group">
-                <label v-for="opt in bloodTypeOptions" :key="opt.id" class="radio-label">
-                  <input type="radio" v-model="form.blood_type" :value="opt.id" name="blood_type" />
-                  <span>{{ opt.name }}</span>
-                </label>
-              </div>
-              <span v-if="hasError('blood_type')" class="error-feedback">{{ getError('blood_type') }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label">Agama</label>
-              <div class="radio-group flex-wrap">
-                <label v-for="opt in religionOptions" :key="opt.id" class="radio-label">
-                  <input type="radio" v-model="form.religion" :value="opt.id" name="religion" />
-                  <span>{{ opt.name }}</span>
-                </label>
-              </div>
-              <span v-if="hasError('religion')" class="error-feedback">{{ getError('religion') }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label">Status Perkawinan</label>
-              <div class="radio-group flex-wrap">
-                <label v-for="opt in maritalStatusOptions" :key="opt.id" class="radio-label">
-                  <input type="radio" v-model="form.marital_status" :value="opt.id" name="marital_status" />
-                  <span>{{ opt.name }}</span>
-                </label>
-              </div>
-              <span v-if="hasError('marital_status')" class="error-feedback">{{ getError('marital_status') }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label">Kebangsaan</label>
-              <div class="radio-group">
-                <label v-for="opt in nationalityOptions" :key="opt.id" class="radio-label">
-                  <input type="radio" v-model="form.nationality" :value="opt.id" name="nationality" />
-                  <span>{{ opt.name }}</span>
-                </label>
-              </div>
-              <span v-if="hasError('nationality')" class="error-feedback">{{ getError('nationality') }}</span>
-            </div>
-          </div>
-
-          <h4 class="section-title mb-4 border-t pt-4 mt-2">Alamat & Personal</h4>
-            <div class="form-grid mb-6">
-            <div class="form-group">
-              <label for="address" class="form-label">Alamat</label>
-              <textarea 
-                id="address" 
-                v-model="form.address" 
-                class="form-input" 
-                rows="3"
-                :class="{ 'is-invalid': hasError('address') }"
-                placeholder="Masukkan alamat (desa/jalan)"
-              ></textarea>
-              <span v-if="hasError('address')" class="error-feedback">{{ getError('address') }}</span>
-            </div>
-
-            <div class="form-group">
-              <label for="village_id" class="form-label">Wilayah</label>
-              <AsyncVillageSelect 
-                v-model="form.village_id" 
-                :initialVillage="employee?.village"
-              />
-              <span v-if="hasError('village_id')" class="error-feedback">{{ getError('village_id') }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label for="allergies" class="form-label">Alergi</label>
-              <textarea 
-                id="allergies" 
-                v-model="form.allergies" 
-                class="form-input form-textarea" 
-                :class="{ 'is-invalid': hasError('allergies') }"
-                placeholder="Masukkan alergi (opsional)"
-              ></textarea>
-              <span v-if="hasError('allergies')" class="error-feedback">{{ getError('allergies') }}</span>
-            </div>
-            
-            <div class="form-group">
-              <label for="phone" class="form-label">No. HP</label>
-              <input 
-                id="phone" 
-                v-model="form.phone" 
-                type="text" 
-                class="form-input" 
-                :class="{ 'is-invalid': hasError('phone') }"
-                placeholder="Masukkan nomor HP"
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="occupation_id" class="form-label">Pekerjaan</label>
-              <SearchableSelect 
-                v-model="form.occupation_id" 
-                :options="lookupOccupations"
-                placeholder="Pilih Pekerjaan"
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="education_id" class="form-label">Tingkat Pendidikan</label>
-              <SearchableSelect 
-                v-model="form.education_id" 
-                :options="lookupEducations"
-                placeholder="Pilih Pendidikan"
-              />
-            </div>
-          </div>
-
-          <h4 class="section-title mb-4 border-t pt-4 mt-2">Kepegawaian</h4>
-            <div class="form-grid mb-6">
-            <div class="form-group">
-              <label for="code" class="form-label">NIP</label>
-              <input 
-                id="code" 
-                v-model="form.code" 
-                type="text" 
-                class="form-input" 
-                :class="{ 'is-invalid': hasError('code') }"
-                placeholder="Masukkan NIP"
-              />
-              <span v-if="hasError('code')" class="error-feedback">{{ getError('code') }}</span>
-            </div>
-
-            <div class="form-group">
-              <label for="position_id" class="form-label">Jabatan</label>
-              <SearchableSelect 
-                v-model="form.position_id" 
-                :options="lookupPositions"
-                :loading="isPositionsLoading"
-                :error="positionsError"
-                placeholder="Pilih Jabatan"
-              />
-              <span v-if="hasError('position_id')" class="error-feedback">{{ getError('position_id') }}</span>
-            </div>
-            
-
-            
-
-          </div>
-                </template>
-      </div>
-
-      <footer v-if="!isLoadingData" class="employee-modal-footer modal-footer">
-        <div class="footer-left">
-          <button type="button" class="btn btn-outline" @click="close" :disabled="loading">
-            Batal
-          </button>
-        </div>
-        
-        <div class="footer-right">
-          <button type="submit" class="btn btn-primary" :disabled="loading">
-            <span v-if="loading" class="spinner"></span>
-            <span>{{ isEditing ? 'Simpan Perubahan' : 'Simpan' }}</span>
-          </button>
-        </div>
-      </footer>
-      </form>
-      </section>
-    </div>
-  </Teleport>
-</template>
-
 <script setup>
-import { ref, reactive, watch, onUnmounted } from 'vue';
-import { useEmployees } from '../../composables/useEmployees';
-import employeeService from '../../services/employee.service';
-import lookupService from '../../services/lookup.service';
-import SearchableSelect from '@/components/common/SearchableSelect.vue';
-import AsyncVillageSelect from '@/components/common/AsyncVillageSelect.vue';
+import { ref, reactive, watch, nextTick } from 'vue';
+import { useEmployees } from '@/composables/useEmployees';
+import employeeService from '@/services/employee.service';
+import lookupService from '@/services/lookup.service';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import BaseSelect from '@/components/common/BaseSelect.vue';
+
 const props = defineProps({
   isOpen: {
     type: Boolean,
@@ -293,54 +18,45 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'saved']);
-
 const { createEmployee, updateEmployee } = useEmployees();
 
 const isEditing = ref(false);
-const loading = ref(false);
+const isSubmitting = ref(false);
 const isLoadingData = ref(false);
-const error = ref(null);
+const isHydrating = ref(false);
+const errors = ref({});
+const submitError = ref(null);
 
-const genderOptions = [
-  { id: 'L', name: 'Laki-laki' },
-  { id: 'P', name: 'Perempuan' }
-];
-
-const bloodTypeOptions = [
-  { id: 'A', name: 'A' },
-  { id: 'B', name: 'B' },
-  { id: 'AB', name: 'AB' },
-  { id: 'O', name: 'O' },
-  { id: 'Unknown', name: 'Tidak Tahu' }
-];
-
-const religionOptions = [
-  { id: 'Islam', name: 'Islam' },
-  { id: 'Kristen', name: 'Kristen' },
-  { id: 'Katolik', name: 'Katolik' },
-  { id: 'Hindu', name: 'Hindu' },
-  { id: 'Buddha', name: 'Buddha' },
-  { id: 'Khonghucu', name: 'Khonghucu' }
-];
-
-const maritalStatusOptions = [
-  { id: 'Belum Kawin', name: 'Belum Kawin' },
-  { id: 'Kawin', name: 'Kawin' },
-  { id: 'Cerai Hidup', name: 'Cerai Hidup' },
-  { id: 'Cerai Mati', name: 'Cerai Mati' }
-];
-
-const nationalityOptions = [
-  { id: 'WNI', name: 'WNI' },
-  { id: 'WNA', name: 'WNA' }
-];
-
-// Lookups
 const lookupPositions = ref([]);
 const isPositionsLoading = ref(false);
 const positionsError = ref('');
-const lookupOccupations = ref([]);
-const lookupEducations = ref([]);
+
+const lookups = reactive({
+  occupations: [],
+  educations: [],
+  provinces: [],
+  regencies: [],
+  districts: [],
+  villages: []
+});
+
+const lookupLoading = reactive({
+  occupations: false,
+  educations: false,
+  provinces: false,
+  regencies: false,
+  districts: false,
+  villages: false
+});
+
+const lookupError = reactive({
+  occupations: false,
+  educations: false,
+  provinces: false,
+  regencies: false,
+  districts: false,
+  villages: false
+});
 
 const defaultForm = {
   national_id: '',
@@ -348,89 +64,30 @@ const defaultForm = {
   name: '',
   birth_place: '',
   birth_date: '',
-  gender: '',
   blood_type: '',
   religion: '',
   marital_status: '',
   nationality: 'WNI',
   address: '',
-  village_id: '',
-  phone: '',
   allergies: '',
   position_id: '',
   occupation_id: '',
   education_id: '',
-  is_active: true
+  province_id: '',
+  regency_id: '',
+  district_id: '',
+  village_id: '',
+  postal_code: '',
+  phone: ''
 };
 
 const form = reactive({ ...defaultForm });
 
-const hasError = (field) => {
-  return error.value && typeof error.value === 'object' && error.value[field];
-};
-
-const getError = (field) => {
-  if (hasError(field)) {
-    return error.value[field][0];
-  }
-  return '';
-};
-
-watch(() => props.isOpen, async (newVal) => {
-  if (newVal) {
-    document.body.style.overflow = 'hidden';
-        error.value = null;
-    isLoadingData.value = true;
-    
-    try {
-      if (lookupPositions.value.length === 0) {
-        await loadLookups();
-      }
-      
-      if (props.employee) {
-        isEditing.value = true;
-        // Fetch full employee detail
-        const detail = await employeeService.getEmployee(props.employee.id);
-        const data = detail.data || detail;
-        
-        Object.assign(form, {
-          ...data,
-          position_id: data.position_id || '',
-          occupation_id: data.occupation_id || '',
-          education_id: data.education_id || '',
-          gender: data.gender || '',
-          blood_type: data.blood_type || '',
-          religion: data.religion || '',
-          marital_status: data.marital_status || '',
-          nationality: data.nationality || 'WNI',
-          village_id: data.village_id || '',
-        });
-        
-      } else {
-        isEditing.value = false;
-        Object.assign(form, { ...defaultForm });
-      }
-    } catch (err) {
-      console.error('Failed to load employee details', err);
-      error.value = { global: ['Gagal memuat detail pegawai.'] };
-    } finally {
-      isLoadingData.value = false;
-    }
-  } else {
-    document.body.style.overflow = '';
-  }
-});
-
-onUnmounted(() => {
-  document.body.style.overflow = '';
-});
-
-const loadLookups = async () => {
+const loadInitialLookups = async () => {
   isPositionsLoading.value = true;
   positionsError.value = '';
   try {
     const posRes = await employeeService.getPositions({ is_active: 1 });
-    // Assuming backend returns { data: [...] } or just an array
     lookupPositions.value = Array.isArray(posRes.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
   } catch (err) {
     console.error("Failed to load positions", err);
@@ -439,131 +96,539 @@ const loadLookups = async () => {
     isPositionsLoading.value = false;
   }
 
-  try {
-    const [occRes, eduRes] = await Promise.all([
-      lookupService.getOccupations(),
-      lookupService.getEducations()
-    ]);
-    lookupOccupations.value = occRes || [];
-    lookupEducations.value = eduRes || [];
-  } catch (err) {
-    console.error("Failed to load other lookups", err);
+  const fetchWithState = async (key, fetchFn) => {
+    lookupLoading[key] = true;
+    lookupError[key] = false;
+    try {
+      lookups[key] = await fetchFn();
+    } catch (err) {
+      console.error(`Gagal memuat ${key}:`, err);
+      lookupError[key] = true;
+    } finally {
+      lookupLoading[key] = false;
+    }
+  };
+
+  await Promise.all([
+    fetchWithState('occupations', () => lookupService.getOccupations()),
+    fetchWithState('educations', () => lookupService.getEducations()),
+    fetchWithState('provinces', () => lookupService.getProvinces())
+  ]);
+};
+
+const onProvinceChange = async () => {
+  if (!isHydrating.value) {
+    form.regency_id = '';
+    form.district_id = '';
+    form.village_id = '';
+  }
+  lookups.regencies = [];
+  lookups.districts = [];
+  lookups.villages = [];
+  if (form.province_id) {
+    lookupLoading.regencies = true;
+    lookupError.regencies = false;
+    try {
+      const res = await lookupService.getRegencies({ province_id: form.province_id });
+      lookups.regencies = res.data || res;
+    } catch (err) {
+      console.error(err);
+      lookupError.regencies = true;
+    } finally {
+      lookupLoading.regencies = false;
+    }
   }
 };
 
+const onRegencyChange = async () => {
+  if (!isHydrating.value) {
+    form.district_id = '';
+    form.village_id = '';
+  }
+  lookups.districts = [];
+  lookups.villages = [];
+  if (form.regency_id) {
+    lookupLoading.districts = true;
+    lookupError.districts = false;
+    try {
+      const res = await lookupService.getDistricts({ regency_id: form.regency_id });
+      lookups.districts = res.data || res;
+    } catch (err) {
+      console.error(err);
+      lookupError.districts = true;
+    } finally {
+      lookupLoading.districts = false;
+    }
+  }
+};
 
+const onDistrictChange = async () => {
+  if (!isHydrating.value) {
+    form.village_id = '';
+  }
+  lookups.villages = [];
+  if (form.district_id) {
+    lookupLoading.villages = true;
+    lookupError.villages = false;
+    try {
+      const res = await lookupService.getVillages({ district_id: form.district_id });
+      lookups.villages = res.data || res;
+    } catch (err) {
+      console.error(err);
+      lookupError.villages = true;
+    } finally {
+      lookupLoading.villages = false;
+    }
+  }
+};
 
-
-const submitForm = async () => {
-  loading.value = true;
-  error.value = null;
+watch(() => props.isOpen, async (newVal) => {
+  if (!newVal) return;
   
-  // Clean empty strings for foreign keys
-  const submitData = { ...form };
-  if (!submitData.position_id) submitData.position_id = null;
-  if (!submitData.occupation_id) submitData.occupation_id = null;
-  if (!submitData.education_id) submitData.education_id = null;
-
+  errors.value = {};
+  submitError.value = null;
+  isLoadingData.value = true;
+  isHydrating.value = true;
+  
   try {
-    let success = false;
-    
-    if (isEditing.value) {
-      success = await updateEmployee(props.employee.id, submitData);
-    } else {
-      success = await createEmployee(submitData);
+    if (lookupPositions.value.length === 0 || lookups.provinces.length === 0) {
+      await loadInitialLookups();
     }
+    
+    if (props.employee) {
+      isEditing.value = true;
+      const detail = await employeeService.getEmployee(props.employee.id);
+      const data = detail.data || detail;
+      
+      Object.assign(form, {
+        national_id: data.national_id || '',
+        code: data.code || '',
+        name: data.name || '',
+        birth_place: data.birth_place || '',
+        birth_date: data.birth_date ? String(data.birth_date).substring(0, 10) : '',
+        blood_type: data.blood_type || '',
+        religion: data.religion || '',
+        marital_status: data.marital_status || '',
+        nationality: data.nationality || 'WNI',
+        address: data.address || '',
+        allergies: data.allergies || '',
+        position_id: data.position_id ? Number(data.position_id) : '',
+        occupation_id: data.occupation_id ? Number(data.occupation_id) : '',
+        education_id: data.education_id ? Number(data.education_id) : '',
+        postal_code: data.postal_code || '',
+        phone: data.phone || ''
+      });
 
-    if (success) {
-      emit('saved');
-      close();
+      form.province_id = data.province_id ? String(data.province_id) : '';
+      if (form.province_id) {
+        const res = await lookupService.getRegencies({ province_id: form.province_id });
+        lookups.regencies = res.data || res;
+      }
+      
+      form.regency_id = data.regency_id ? String(data.regency_id) : '';
+      if (form.regency_id) {
+        const res = await lookupService.getDistricts({ regency_id: form.regency_id });
+        lookups.districts = res.data || res;
+      }
+      
+      form.district_id = data.district_id ? String(data.district_id) : '';
+      if (form.district_id) {
+        const res = await lookupService.getVillages({ district_id: form.district_id });
+        lookups.villages = res.data || res;
+      }
+      
+      form.village_id = data.village_id ? String(data.village_id) : '';
+
+    } else {
+      isEditing.value = false;
+      Object.assign(form, { ...defaultForm });
+      lookups.regencies = [];
+      lookups.districts = [];
+      lookups.villages = [];
     }
   } catch (err) {
-    error.value = err;
-    
-    
+    console.error('Failed to load employee details', err);
+    submitError.value = 'Gagal memuat detail pegawai.';
   } finally {
-    loading.value = false;
+    isLoadingData.value = false;
+    isHydrating.value = false;
   }
+});
+
+const focusFirstInvalidField = () => {
+  nextTick(() => {
+    const errorEl = document.querySelector('.has-error');
+    if (errorEl) {
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (typeof errorEl.focus === 'function') {
+        errorEl.focus();
+      }
+    }
+  });
 };
 
-const close = () => {
-  if (!loading.value) {
-    emit('close');
+const fieldError = (...keys) => {
+  for (const key of keys) {
+    const messages = errors.value?.[key];
+    if (Array.isArray(messages) && messages.length) {
+      return messages[0];
+    }
+  }
+  return '';
+};
+
+const toNullableNumber = (val) => {
+  if (val === '' || val === null || val === undefined) return null;
+  const num = Number(val);
+  return isNaN(num) ? null : num;
+};
+
+const toNullableString = (val) => {
+  return (val === '' || val === null || val === undefined) ? null : String(val);
+};
+
+const handleSubmit = async () => {
+  if (isSubmitting.value) return;
+
+  errors.value = {};
+  submitError.value = '';
+  isSubmitting.value = true;
+  
+  const submitData = { 
+    ...form,
+    position_id: toNullableNumber(form.position_id),
+    occupation_id: toNullableNumber(form.occupation_id),
+    education_id: toNullableNumber(form.education_id),
+    province_id: toNullableString(form.province_id),
+    regency_id: toNullableString(form.regency_id),
+    district_id: toNullableString(form.district_id),
+    village_id: toNullableString(form.village_id),
+    phone: toNullableString(form.phone)
+  };
+
+  try {
+    let result;
+    if (isEditing.value) {
+      result = await updateEmployee(props.employee.id, submitData);
+    } else {
+      result = await createEmployee(submitData);
+    }
+
+    if (result.success) {
+      emit('saved');
+    } else {
+      if (result.error?.response?.status === 422) {
+        errors.value = result.error.response.data.errors ?? {};
+        focusFirstInvalidField();
+      } else {
+        submitError.value = result.error?.response?.data?.message ?? 'Data Pegawai gagal disimpan.';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  } catch (err) {
+    submitError.value = 'Terjadi kesalahan sistem.';
+  } finally {
+    isSubmitting.value = false;
   }
 };
 </script>
 
-<style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-  backdrop-filter: blur(2px);
-}
+<template>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="isEditing ? 'Edit Pegawai' : 'Tambah Pegawai'"
+    :is-submitting="isSubmitting || isLoadingData"
+    :submit-text="isEditing ? 'Simpan Perubahan' : 'Simpan'"
+    size="xl"
+    @close="emit('close')"
+    @submit="handleSubmit"
+  >
+    <div v-if="isLoadingData" class="loading-state">
+      <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+      <p>Memuat data Pegawai...</p>
+    </div>
 
-.modal-content {
-  background: #ffffff;
-  border-radius: 12px;
-  width: 100%;
-  max-width: 500px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    <div v-else class="form-content">
+      <div v-if="submitError" class="alert alert-danger" style="background: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+        {{ submitError }}
+      </div>
+      <div v-if="errors.general" class="alert alert-danger" style="background: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+        {{ errors.general }}
+      </div>
+
+      <!-- Identitas Person Section -->
+      <div class="section-card">
+        <h3 class="section-title">1. Identitas Pribadi</h3>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label required">Nomor KTP (NIK)</label>
+            <input type="text" v-model="form.national_id" class="form-input" :class="{ 'has-error': fieldError('national_id') }" required maxlength="20">
+            <div v-if="fieldError('national_id')" class="error-message">{{ fieldError('national_id') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Nama Lengkap</label>
+            <input type="text" v-model="form.name" class="form-input" :class="{ 'has-error': fieldError('name') }" required>
+            <div v-if="fieldError('name')" class="error-message">{{ fieldError('name') }}</div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Tempat Lahir</label>
+            <input type="text" v-model="form.birth_place" class="form-input" :class="{ 'has-error': fieldError('birth_place') }">
+            <div v-if="fieldError('birth_place')" class="error-message">{{ fieldError('birth_place') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tanggal Lahir</label>
+            <input type="date" v-model="form.birth_date" class="form-input" :class="{ 'has-error': fieldError('birth_date') }">
+            <div v-if="fieldError('birth_date')" class="error-message">{{ fieldError('birth_date') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Golongan Darah</label>
+            <select v-model="form.blood_type" class="form-select" :class="{ 'has-error': fieldError('blood_type') }">
+              <option value="">Pilih Golongan Darah</option>
+              <option value="Unknown">Tidak Diketahui</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="AB">AB</option>
+              <option value="O">O</option>
+            </select>
+            <div v-if="fieldError('blood_type')" class="error-message">{{ fieldError('blood_type') }}</div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Agama</label>
+            <select v-model="form.religion" class="form-select" :class="{ 'has-error': fieldError('religion') }">
+              <option value="">Pilih Agama</option>
+              <option value="Islam">Islam</option>
+              <option value="Kristen">Kristen</option>
+              <option value="Katolik">Katolik</option>
+              <option value="Hindu">Hindu</option>
+              <option value="Buddha">Buddha</option>
+              <option value="Khonghucu">Khonghucu</option>
+            </select>
+            <div v-if="fieldError('religion')" class="error-message">{{ fieldError('religion') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status Perkawinan</label>
+            <select v-model="form.marital_status" class="form-select" :class="{ 'has-error': fieldError('marital_status') }">
+              <option value="">Pilih Status</option>
+              <option value="Belum Kawin">Belum Kawin</option>
+              <option value="Kawin">Kawin</option>
+              <option value="Cerai Hidup">Cerai Hidup</option>
+              <option value="Cerai Mati">Cerai Mati</option>
+            </select>
+            <div v-if="fieldError('marital_status')" class="error-message">{{ fieldError('marital_status') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kebangsaan</label>
+            <select v-model="form.nationality" class="form-select" :class="{ 'has-error': fieldError('nationality') }">
+              <option value="WNI">WNI</option>
+              <option value="WNA">WNA</option>
+            </select>
+            <div v-if="fieldError('nationality')" class="error-message">{{ fieldError('nationality') }}</div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label">Alergi</label>
+          <textarea v-model="form.allergies" class="form-textarea" rows="2" placeholder="Tuliskan alergi obat, makanan, atau lainnya jika diketahui" :class="{ 'has-error': fieldError('allergies') }"></textarea>
+          <div v-if="fieldError('allergies')" class="error-message">{{ fieldError('allergies') }}</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Pendidikan</label>
+            <BaseSelect 
+              id="education" 
+              v-model="form.education_id" 
+              :options="lookups.educations" 
+              :loading="lookupLoading.educations" 
+              :hasError="lookupError.educations || !!fieldError('education_id')"
+              placeholder="Pilih Pendidikan"
+              emptyMessage="Data Pendidikan belum tersedia"
+            />
+            <div v-if="fieldError('education_id')" class="error-message">{{ fieldError('education_id') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Pekerjaan</label>
+            <BaseSelect 
+              id="occupation" 
+              v-model="form.occupation_id" 
+              :options="lookups.occupations" 
+              :loading="lookupLoading.occupations" 
+              :hasError="lookupError.occupations || !!fieldError('occupation_id')"
+              placeholder="Pilih Pekerjaan"
+              emptyMessage="Data Pekerjaan belum tersedia"
+            />
+            <div v-if="fieldError('occupation_id')" class="error-message">{{ fieldError('occupation_id') }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alamat dan Kontak Section -->
+      <div class="section-card">
+        <h3 class="section-title">2. Alamat & Kontak</h3>
+        
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label">Alamat Lengkap (Jalan/Blok/RT/RW)</label>
+          <textarea v-model="form.address" class="form-textarea" rows="2" :class="{ 'has-error': fieldError('address') }"></textarea>
+          <div v-if="fieldError('address')" class="error-message">{{ fieldError('address') }}</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Provinsi</label>
+            <BaseSelect 
+              id="province" 
+              v-model="form.province_id" 
+              @change="onProvinceChange"
+              :options="lookups.provinces" 
+              :loading="lookupLoading.provinces" 
+              :hasError="lookupError.provinces || !!fieldError('province_id')"
+              placeholder="Pilih Provinsi"
+              emptyMessage="Data Provinsi belum tersedia"
+            />
+            <div v-if="fieldError('province_id')" class="error-message">{{ fieldError('province_id') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kabupaten / Kota</label>
+            <BaseSelect 
+              id="city" 
+              v-model="form.regency_id" 
+              @change="onRegencyChange"
+              :disabled="!form.province_id"
+              :options="lookups.regencies" 
+              :loading="lookupLoading.regencies" 
+              :hasError="lookupError.regencies || !!fieldError('regency_id')"
+              placeholder="Pilih Kota/Kab"
+              emptyMessage="Data Kota/Kab belum tersedia"
+            />
+            <div v-if="fieldError('regency_id')" class="error-message">{{ fieldError('regency_id') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kecamatan</label>
+            <BaseSelect 
+              id="district" 
+              v-model="form.district_id" 
+              @change="onDistrictChange"
+              :disabled="!form.regency_id"
+              :options="lookups.districts" 
+              :loading="lookupLoading.districts" 
+              :hasError="lookupError.districts || !!fieldError('district_id')"
+              placeholder="Pilih Kecamatan"
+              emptyMessage="Data Kecamatan belum tersedia"
+            />
+            <div v-if="fieldError('district_id')" class="error-message">{{ fieldError('district_id') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kelurahan / Desa</label>
+            <BaseSelect 
+              id="village" 
+              v-model="form.village_id" 
+              :disabled="!form.district_id"
+              :options="lookups.villages" 
+              :loading="lookupLoading.villages" 
+              :hasError="lookupError.villages || !!fieldError('village_id')"
+              placeholder="Pilih Kelurahan"
+              emptyMessage="Data Kelurahan belum tersedia"
+            />
+            <div v-if="fieldError('village_id')" class="error-message">{{ fieldError('village_id') }}</div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Kode Pos</label>
+            <input type="text" v-model="form.postal_code" class="form-input" :class="{ 'has-error': fieldError('postal_code') }" maxlength="10">
+            <div v-if="fieldError('postal_code')" class="error-message">{{ fieldError('postal_code') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nomor HP</label>
+            <input type="tel" v-model="form.phone" class="form-input" :class="{ 'has-error': fieldError('phone') }" maxlength="20" placeholder="Contoh: 081234567890">
+            <div v-if="fieldError('phone')" class="error-message">{{ fieldError('phone') }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Informasi Kepegawaian Section -->
+      <div class="section-card">
+        <h3 class="section-title">3. Informasi Kepegawaian</h3>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label required">NIP</label>
+            <input type="text" v-model="form.code" class="form-input" :class="{ 'has-error': fieldError('code') }" placeholder="Masukkan NIP" required>
+            <div v-if="fieldError('code')" class="error-message">{{ fieldError('code') }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Jabatan</label>
+            <BaseSelect 
+              id="position" 
+              v-model="form.position_id" 
+              :options="lookupPositions" 
+              :loading="isPositionsLoading" 
+              :hasError="!!positionsError || !!fieldError('position_id')"
+              placeholder="Pilih jabatan"
+              emptyMessage="Data Jabatan belum tersedia"
+              required
+            />
+            <div v-if="fieldError('position_id')" class="error-message">{{ fieldError('position_id') }}</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </MasterDataFormModal>
+</template>
+
+<style scoped>
+.form-content {
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
+  gap: 0;
 }
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
+.section-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--color-border-soft);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
-
-.modal-title {
-  font-size: 1.25rem;
+.section-card:last-child {
+  margin-bottom: 0;
+}
+.section-title {
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  color: var(--color-text-navy);
-  margin: 0;
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border-soft);
+  padding-bottom: 0.5rem;
 }
-
-.btn-close {
-  background: transparent;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  color: #94a3b8;
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.2s;
-}
-
-.btn-close:hover {
-  color: #ef4444;
-}
-
-.modal-body {
-  padding: 1.5rem;
-  overflow-y: auto;
-}
-
-.form-group {
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
   margin-bottom: 1.25rem;
 }
-
-.form-group.flex-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0;
-  margin-top: 1.5rem;
+@media (min-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
-
+.form-group {
+  margin-bottom: 0;
+}
 .form-label {
   display: block;
   font-size: 0.875rem;
@@ -571,320 +636,75 @@ const close = () => {
   color: var(--color-text-navy);
   margin-bottom: 0.5rem;
 }
-
-.required {
+.form-label.required::after {
+  content: " *";
   color: #ef4444;
 }
-
-.form-input {
+.form-input,
+.form-select,
+.form-textarea {
   width: 100%;
   padding: 0.625rem 0.875rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 0.875rem;
   color: var(--color-text-navy);
+  background-color: #ffffff;
   transition: all 0.2s;
   font-family: inherit;
 }
-
-.form-input:focus {
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+}
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
-
-.form-input:disabled {
-  background-color: #f1f5f9;
-  cursor: not-allowed;
+.form-input.has-error,
+.form-select.has-error,
+.form-textarea.has-error {
+  border-color: #ef4444;
 }
-
+.form-input.has-error:focus,
+.form-select.has-error:focus,
+.form-textarea.has-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
 .form-textarea {
   resize: vertical;
   min-height: 80px;
 }
-
-.is-invalid {
-  border-color: #ef4444;
-}
-
-.is-invalid:focus {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-.error-feedback {
-  display: block;
-  font-size: 0.75rem;
-  color: #ef4444;
-  margin-top: 0.375rem;
-}
-
-.radio-group {
-  display: flex;
-  gap: 1.5rem;
-  align-items: center;
-  min-height: 38px;
-}
-
-.radio-group.flex-wrap {
-  flex-wrap: wrap;
-  gap: 1rem 1.5rem;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-  cursor: pointer;
-  margin-bottom: 0;
-}
-
-.radio-label input[type="radio"] {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-  margin: 0;
-}
-
-.required-indicator {
-  color: #ef4444;
-}
-
 .error-message {
-  display: block;
   font-size: 0.75rem;
   color: #ef4444;
-  margin-top: 0.375rem;
-}
-
-.bg-gray-100 {
-  background-color: #f3f4f6;
-}
-
-.text-gray-500 {
-  color: #6b7280;
-  font-size: 0.75rem;
-  display: block;
   margin-top: 0.25rem;
 }
-
-/* Toggle Switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #cbd5e1;
-  transition: .4s;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .4s;
-}
-
-input:checked + .slider {
-  background-color: var(--color-primary);
-}
-
-input:focus + .slider {
-  box-shadow: 0 0 1px var(--color-primary);
-}
-
-input:checked + .slider:before {
-  transform: translateX(20px);
-}
-
-.slider.round {
-  border-radius: 24px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
-}
-
-input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toggle-label {
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-}
-
-.modal-footer {
-  padding: 1.25rem 1.5rem;
-  border-top: 1px solid var(--color-border-soft);
+.loading-state {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f8fafc;
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
-}
-
-.footer-left,
-.footer-right {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.btn {
-  padding: 0.625rem 1.25rem;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
-  border: 1px solid transparent;
+  padding: 4rem 0;
+  color: var(--color-text-secondary);
 }
-
-.btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+.loading-state svg {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 1rem;
+  color: var(--color-primary);
 }
-
-.btn-secondary {
-  background: #ffffff;
-  border-color: #cbd5e1;
-  color: #475569;
+.spin {
+  animation: spin 1s linear infinite;
 }
-
-.btn-secondary:hover:not(:disabled) {
-  background: #f1f5f9;
-  color: #0f172a;
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: #ffffff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-}
-
-.spinner {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: #ffffff;
-  animation: spin 0.8s linear infinite;
-  margin-right: 0.5rem;
-}
-
 @keyframes spin {
+  from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-</style>
-
-<style scoped>
-.large-modal {
-  max-width: 1000px;
-  width: 95%;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  align-items: start;
-}
-
-.full-width {
-  grid-column: span 2;
-}
-
-@media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  .full-width {
-    grid-column: span 1;
-  }
-}
-</style>
-
-<style scoped>
-.btn-close svg {
-  width: 24px;
-  height: 24px;
-}
-
-/* Modal Structure */
-.employee-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-}
-
-.employee-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgb(15 23 42 / 55%);
-}
-
-.employee-modal-panel {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  width: min(1080px, 100%);
-  max-height: calc(100vh - 3rem);
-  overflow: hidden;
-  border-radius: 0.75rem;
-  background: #fff;
-  box-shadow: 0 24px 60px rgb(15 23 42 / 25%);
-}
-
-
-.employee-form {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.employee-modal-header,
-.employee-modal-footer {
-  flex: 0 0 auto;
-}
-
-.employee-modal-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
 }
 </style>

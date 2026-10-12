@@ -24,13 +24,29 @@ class RadiologyItemGroupController extends Controller
 
         $query = RadiologyItemGroup::query();
 
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where('name', 'like', "%{$search}%");
+        if ($request->has('search') && trim($request->input('search')) !== '') {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->has('is_active') && $request->input('is_active') !== '' && $request->input('is_active') !== null) {
+            $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
         }
 
         $perPage = $request->input('per_page', 10);
-        $groups = $query->orderBy('name')->paginate($perPage);
+        $sortBy = $request->get('sortBy') ?? $request->get('sort_by', 'name');
+        $sortDesc = filter_var($request->get('sortDesc', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->get('sort_desc', false), FILTER_VALIDATE_BOOLEAN);
+
+        $allowedSorts = ['id', 'name', 'description', 'created_at'];
+        if (!in_array($sortBy, $allowedSorts)) {
+            $sortBy = 'name';
+        }
+
+        $groups = $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc')->paginate($perPage);
 
         return RadiologyItemGroupResource::collection($groups);
     }

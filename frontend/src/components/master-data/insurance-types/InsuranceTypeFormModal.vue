@@ -1,6 +1,6 @@
 <script setup>
-import { reactive, watch} from 'vue'
-import { guarantorsService } from '@/services/master-data/guarantors.service'
+import { ref, watch } from 'vue'
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue'
 
 const props = defineProps({
   isOpen: {
@@ -10,257 +10,137 @@ const props = defineProps({
   insuranceType: {
     type: Object,
     default: null
+  },
+  isSubmitting: {
+    type: Boolean,
+    default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
   }
 })
 
-const emit = defineEmits(['close', 'success'])
+const emit = defineEmits(['close', 'submit'])
 
-const form = reactive({
+const form = ref({
   name: '',
   is_government: false,
-  inacbg_id: '',
-  is_active: true
+  inacbg_id: ''
 })
 
-const loading = reactive({
-  submit: false,
-  detail: false
-})
-
-const errors = reactive({
-  general: null,
-  name: null,
-  is_government: null,
-  inacbg_id: null
-})
-
-const resetForm = () => {
-  form.name = ''
-  form.is_government = false
-  form.inacbg_id = ''
-  form.is_active = true
-  clearErrors()
+const fieldError = (field) => {
+  if (!props.errors || !props.errors[field]) return null
+  return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field]
 }
 
-const clearErrors = () => {
-  errors.general = null
-  errors.name = null
-  errors.is_government = null
-  errors.inacbg_id = null
+const populateForm = () => {
+  if (props.insuranceType) {
+    form.value = {
+      name: props.insuranceType.name || '',
+      is_government: Boolean(props.insuranceType.is_government),
+      inacbg_id: props.insuranceType.inacbg_id !== null && props.insuranceType.inacbg_id !== undefined
+        ? String(props.insuranceType.inacbg_id)
+        : ''
+    }
+  } else {
+    form.value = {
+      name: '',
+      is_government: false,
+      inacbg_id: ''
+    }
+  }
 }
 
-watch(() => props.isOpen, async (newVal) => {
-  if (newVal) {
-    if (props.insuranceType) {
-      loading.detail = true;
-      resetForm();
-      try {
-        const detail = await guarantorsService.getGuarantor(props.insuranceType.id);
-        form.name = detail.data.name;
-        form.is_government = detail.data.is_government;
-        form.inacbg_id = detail.data.inacbg_id === null ? '' : detail.data.inacbg_id;
-        form.is_active = detail.data.is_active;
-        // Keep code and type internally for update
-        form.code = detail.data.code;
-        form.type = detail.data.type;
-      } catch {
-        errors.general = 'Gagal memuat detail data';
-      } finally {
-        loading.detail = false;
-      }
-    } else {
-      resetForm()
+watch(
+  [() => props.isOpen, () => props.insuranceType],
+  ([newOpen]) => {
+    if (newOpen) {
+      populateForm()
     }
+  },
+  { immediate: true }
+)
+
+const handleSubmit = () => {
+  const payload = {
+    name: form.value.name.trim(),
+    is_government: Boolean(form.value.is_government),
+    inacbg_id: form.value.inacbg_id === '' ? null : form.value.inacbg_id.trim()
   }
-})
 
-const handleSubmit = async () => {
-  clearErrors()
-  loading.submit = true
-
-  try {
-    const payload = {
-      name: form.name.trim(),
-      is_government: form.is_government,
-      inacbg_id: form.inacbg_id === '' ? null : (form.inacbg_id == '0' ? '0' : form.inacbg_id),
-      is_active: form.is_active,
-      code: props.insuranceType ? form.code : 'ASR-' + Date.now().toString().slice(-6),
-      type: props.insuranceType ? form.type : 'other'
-    }
-
-    if (props.insuranceType) {
-      await guarantorsService.updateGuarantor(props.insuranceType.id, payload)
-    } else {
-      await guarantorsService.createGuarantor(payload)
-    }
-    
-    emit('success')
-  } catch (err) {
-    if (err.response?.status === 422) {
-      const validationErrors = err.response.data.errors
-      if (validationErrors.name) errors.name = validationErrors.name[0]
-      if (validationErrors.is_government) errors.is_government = validationErrors.is_government[0]
-      if (validationErrors.inacbg_id) errors.inacbg_id = validationErrors.inacbg_id[0]
-    } else {
-      errors.general = err.response?.data?.message || 'Terjadi kesalahan sistem'
-    }
-  } finally {
-    loading.submit = false
+  if (props.insuranceType) {
+    if (props.insuranceType.code) payload.code = props.insuranceType.code
+    if (props.insuranceType.type) payload.type = props.insuranceType.type
   }
+
+  emit('submit', payload)
 }
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-overlay" @click.self="$emit('close')" role="dialog" aria-modal="true">
-      <div class="modal-content modal-md">
-        <div class="modal-header">
-          <h3>{{ insuranceType ? 'Edit Jenis Asuransi' : 'Tambah Jenis Asuransi' }}</h3>
-          <button type="button" class="btn-close" @click="$emit('close')" aria-label="Tutup modal">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="insuranceType ? 'Edit Jenis Asuransi' : 'Tambah Jenis Asuransi'"
+    :is-submitting="isSubmitting"
+    :submit-text="insuranceType ? 'Simpan Perubahan' : 'Simpan'"
+    size="md"
+    @close="$emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form">
+      <div v-if="errors && errors.general" class="alert-error">
+        {{ errors.general }}
+      </div>
+
+      <div class="form-group">
+        <label for="name" class="form-label required">Jenis Asuransi</label>
+        <input
+          id="name"
+          v-model="form.name"
+          type="text"
+          class="form-control"
+          :class="{ 'is-invalid': fieldError('name') }"
+          placeholder="Misal: BPJS KESEHATAN"
+          required
+        />
+        <div v-if="fieldError('name')" class="invalid-feedback">{{ fieldError('name') }}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">Asuransi Pemerintah</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" v-model="form.is_government" :value="false" /> Tidak
+          </label>
+          <label class="radio-label">
+            <input type="radio" v-model="form.is_government" :value="true" /> Ya
+          </label>
         </div>
-        
-        <div v-if="loading.detail" class="modal-body" style="text-align: center; padding: 2rem;">
-          Memuat data...
-        </div>
-        <form v-else @submit.prevent="handleSubmit" class="modal-form">
-          <div v-if="errors.general" class="alert-error">
-            {{ errors.general }}
-          </div>
+        <div v-if="fieldError('is_government')" class="invalid-feedback">{{ fieldError('is_government') }}</div>
+      </div>
 
-          <div class="form-group" style="margin-bottom: 1rem;">
-            <label for="name" class="form-label required">Jenis Asuransi</label>
-            <input
-              id="name"
-              v-model="form.name"
-              type="text"
-              class="form-control"
-              :class="{ 'is-invalid': errors.name }"
-              placeholder="Misal: BPJS KESEHATAN"
-              required
-            >
-            <div v-if="errors.name" class="invalid-feedback">{{ errors.name }}</div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 1rem;">
-            <label class="form-label required">Asuransi Pemerintah</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" v-model="form.is_government" :value="false"> Tidak
-              </label>
-              <label class="radio-label">
-                <input type="radio" v-model="form.is_government" :value="true"> Ya
-              </label>
-            </div>
-            <div v-if="errors.is_government" class="invalid-feedback">{{ errors.is_government }}</div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 1rem;">
-            <label for="inacbg_id" class="form-label">ID INACBG</label>
-            <input
-              id="inacbg_id"
-              v-model="form.inacbg_id"
-              type="text"
-              class="form-control"
-              :class="{ 'is-invalid': errors.inacbg_id }"
-              placeholder="Misal: 3"
-            >
-            <div v-if="errors.inacbg_id" class="invalid-feedback">{{ errors.inacbg_id }}</div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 1.5rem;" v-if="insuranceType">
-            <label class="form-label">Status</label>
-            <div class="toggle-group">
-              <label class="toggle-row">
-                <input type="checkbox" class="toggle-input" v-model="form.is_active">
-                <div class="toggle-track"></div>
-                <span class="toggle-label-text">{{ form.is_active ? 'Aktif' : 'Nonaktif' }}</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn-cancel" @click="$emit('close')" :disabled="loading.submit">
-              Batal
-            </button>
-            <button type="submit" class="btn-submit" :disabled="loading.submit || !form.name.trim()">
-              {{ loading.submit ? 'Menyimpan...' : (insuranceType ? 'Perbarui' : 'Simpan') }}
-            </button>
-          </div>
-        </form>
+      <div class="form-group">
+        <label for="inacbg_id" class="form-label">ID INACBG</label>
+        <input
+          id="inacbg_id"
+          v-model="form.inacbg_id"
+          type="text"
+          class="form-control"
+          :class="{ 'is-invalid': fieldError('inacbg_id') }"
+          placeholder="Misal: 3"
+        />
+        <div v-if="fieldError('inacbg_id')" class="invalid-feedback">{{ fieldError('inacbg_id') }}</div>
       </div>
     </div>
-  </Teleport>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
-  padding: 1rem;
-  backdrop-filter: blur(2px);
-}
-
-.modal-content {
-  background: #ffffff;
-  border-radius: 12px;
-  width: 100%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-}
-
-.modal-content.modal-md {
-  max-width: 500px;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  z-index: 1;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  padding: 0.25rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s;
-}
-
-.btn-close:hover { color: var(--color-text-navy); background: var(--color-page-bg); }
-
-.btn-close svg { width: 20px; height: 20px; }
-
 .modal-form {
-  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .alert-error {
@@ -270,7 +150,6 @@ const handleSubmit = async () => {
   padding: 0.75rem 1rem;
   border-radius: 6px;
   font-size: 0.875rem;
-  margin-bottom: 1rem;
 }
 
 .form-group {
@@ -282,7 +161,7 @@ const handleSubmit = async () => {
 .form-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--color-text-navy);
+  color: var(--color-text-navy, #17243D);
 }
 
 .form-label.required::after {
@@ -292,10 +171,10 @@ const handleSubmit = async () => {
 
 .form-control {
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
+  border: 1px solid var(--color-border-soft, #e2e8f0);
   border-radius: 6px;
   font-size: 0.9rem;
-  color: var(--color-text-navy);
+  color: var(--color-text-navy, #17243D);
   transition: all 0.2s;
   width: 100%;
   box-sizing: border-box;
@@ -303,8 +182,8 @@ const handleSubmit = async () => {
 
 .form-control:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
+  border-color: var(--color-primary, #087f78);
+  box-shadow: 0 0 0 3px var(--color-primary-light, rgba(8, 127, 120, 0.1));
 }
 
 .form-control.is-invalid {
@@ -318,8 +197,9 @@ const handleSubmit = async () => {
 
 .radio-group {
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
   align-items: center;
+  padding: 0.25rem 0;
 }
 
 .radio-label {
@@ -327,106 +207,14 @@ const handleSubmit = async () => {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
-  color: var(--color-text-navy);
+  color: var(--color-text-navy, #17243D);
   cursor: pointer;
 }
 
-/* Toggle styles */
-.toggle-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: pointer;
-}
-
-.toggle-input {
-  display: none;
-}
-
-.toggle-track {
-  width: 38px;
-  height: 22px;
-  background: #cbd5e1;
-  border-radius: 999px;
-  position: relative;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-
-.toggle-track::after {
-  content: '';
-  position: absolute;
+.radio-label input[type="radio"] {
+  accent-color: var(--color-primary, #087f78);
   width: 16px;
   height: 16px;
-  background: #ffffff;
-  border-radius: 50%;
-  top: 3px;
-  left: 3px;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.toggle-input:checked + .toggle-track {
-  background: var(--color-primary);
-}
-
-.toggle-input:checked + .toggle-track::after {
-  transform: translateX(16px);
-}
-
-.toggle-label-text {
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-}
-
-/* Footer */
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding-top: 1.5rem;
-  margin-top: 0.5rem;
-  border-top: 1px solid var(--color-border-soft);
-}
-
-.btn-cancel {
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-soft);
-  padding: 0.55rem 1.25rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
 }
-
-.btn-cancel:hover:not(:disabled) {
-  background: var(--color-page-bg);
-}
-
-.btn-submit {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  padding: 0.55rem 1.5rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-submit:hover:not(:disabled) { opacity: 0.9; }
-.btn-submit:disabled, .btn-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
