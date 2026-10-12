@@ -12,6 +12,8 @@ const router = createRouter({
     { path: '/master-data/polyclinics', name: 'polyclinics', component: { template: '<div>Polyclinics</div>' } },
     { path: '/master-data/procedure-categories', name: 'procedure-categories', component: { template: '<div>Procedure Categories</div>' } },
     { path: '/master-data/laboratory-groups', name: 'laboratory-groups', component: { template: '<div>Laboratory Groups</div>' } },
+    { path: '/master-data/basic-data/regencies', name: 'regencies', component: { template: '<div>Regencies</div>' } },
+    { path: '/master-data/basic-data/districts', name: 'districts', component: { template: '<div>Districts</div>' } },
   ],
 });
 
@@ -201,4 +203,119 @@ describe('AppSidebar.vue', () => {
     const groupLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Grup Lab'));
     expect(groupLink.classes()).toContain('nested-submenu-link--active');
   });
+
+  it('applies smooth collapse classes and rotates chevron icon when submenu is toggled', async () => {
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const chevronIcon = masterDataBtn.find('.submenu-icon');
+    const collapseWrapper = wrapper.find('.submenu-collapse');
+
+    // Initially closed
+    expect(collapseWrapper.classes()).not.toContain('submenu-collapse--open');
+    expect(chevronIcon.classes()).not.toContain('submenu-icon--open');
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('false');
+
+    // Open submenu
+    await masterDataBtn.trigger('click');
+    expect(collapseWrapper.classes()).toContain('submenu-collapse--open');
+    expect(chevronIcon.classes()).toContain('submenu-icon--open');
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+
+    // Close submenu
+    await masterDataBtn.trigger('click');
+    expect(collapseWrapper.classes()).not.toContain('submenu-collapse--open');
+    expect(chevronIcon.classes()).not.toContain('submenu-icon--open');
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('false');
+  });
+
+  it('supports nested submenu collapse with small and large item sets', async () => {
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    await masterDataBtn.trigger('click');
+
+    const mdSubmenu = wrapper.find('#submenu-master-data');
+
+    // Test large submenu: Data Dasar (10 items)
+    const dataDasarBtn = mdSubmenu.findAll('button.submenu-link--group').find(b => b.text().includes('Data Dasar'));
+    expect(dataDasarBtn).toBeDefined();
+
+    const dataDasarSubmenu = mdSubmenu.find('#submenu-data-dasar');
+    expect(dataDasarSubmenu.exists()).toBe(true);
+    const dataDasarLinks = dataDasarSubmenu.findAll('.nested-submenu-link');
+    expect(dataDasarLinks.length).toBe(10);
+
+    const dataDasarCollapse = dataDasarSubmenu.element.closest('.submenu-collapse');
+    expect(dataDasarCollapse.classList.contains('submenu-collapse--open')).toBe(false);
+
+    await dataDasarBtn.trigger('click');
+    expect(dataDasarCollapse.classList.contains('submenu-collapse--open')).toBe(true);
+
+    // Test small submenu: Data Dokter (2 items)
+    const dataDokterBtn = mdSubmenu.findAll('button.submenu-link--group').find(b => b.text().includes('Data Dokter'));
+    expect(dataDokterBtn).toBeDefined();
+
+    const dataDokterSubmenu = mdSubmenu.find('#submenu-data-dokter');
+    expect(dataDokterSubmenu.exists()).toBe(true);
+    const dataDokterLinks = dataDokterSubmenu.findAll('.nested-submenu-link');
+    expect(dataDokterLinks.length).toBe(2);
+
+    const dataDokterCollapse = dataDokterSubmenu.element.closest('.submenu-collapse');
+    expect(dataDokterCollapse.classList.contains('submenu-collapse--open')).toBe(false);
+
+    await dataDokterBtn.trigger('click');
+    expect(dataDokterCollapse.classList.contains('submenu-collapse--open')).toBe(true);
+  });
+
+  it('handles rapid consecutive clicks without getting stuck in a wrong state', async () => {
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const collapseWrapper = wrapper.find('.submenu-collapse');
+
+    // Rapid 5 clicks
+    await masterDataBtn.trigger('click'); // 1: open
+    await masterDataBtn.trigger('click'); // 2: close
+    await masterDataBtn.trigger('click'); // 3: open
+    await masterDataBtn.trigger('click'); // 4: close
+    await masterDataBtn.trigger('click'); // 5: open
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(collapseWrapper.classes()).toContain('submenu-collapse--open');
+
+    // 6th click: closes cleanly
+    await masterDataBtn.trigger('click');
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('false');
+    expect(collapseWrapper.classes()).not.toContain('submenu-collapse--open');
+  });
+
+  it('maintains open state across route transitions within the same group', async () => {
+    await router.push('/master-data/basic-data/regencies');
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataDasarBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Dasar'));
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataDasarBtn.attributes('aria-expanded')).toBe('true');
+
+    // Navigate to another route in the same group
+    await router.push('/master-data/basic-data/districts');
+    await flushPromises();
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataDasarBtn.attributes('aria-expanded')).toBe('true');
+  });
 });
+

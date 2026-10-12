@@ -266,68 +266,83 @@ watch(() => route.path, () => {
             </button>
 
             <!-- Submenu Items (Level 2) -->
-            <ul v-if="item.submenu" v-show="expandedMenus[item.name]" class="submenu-list" :id="'submenu-' + item.name.replace(/\s+/g, '-').toLowerCase()">
-              <li v-for="sub in item.submenu" :key="sub.name" class="submenu-item">
-                
-                <!-- Nested Submenu Parent (Level 2) -->
-                <button
-                  v-if="sub.submenu && !sub.disabled"
-                  class="submenu-link submenu-link--group"
-                  :class="{ 'submenu-link--active-parent': isSubItemActive(sub) }"
-                  type="button"
-                  @click="handleMenuClick(sub)"
-                  :aria-expanded="expandedMenus[sub.name] || false"
-                  :aria-controls="'submenu-' + sub.name.replace(/\s+/g, '-').toLowerCase()"
-                >
-                  <span>{{ sub.name }}</span>
-                  <svg class="submenu-icon" :class="{ 'submenu-icon--open': expandedMenus[sub.name] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </button>
+            <div
+              v-if="item.submenu"
+              class="submenu-collapse"
+              :class="{ 'submenu-collapse--open': expandedMenus[item.name] }"
+            >
+              <div class="submenu-collapse__inner">
+                <ul class="submenu-list" :id="'submenu-' + item.name.replace(/\s+/g, '-').toLowerCase()">
+                  <li v-for="sub in item.submenu" :key="sub.name" class="submenu-item">
+                    <!-- Nested Submenu Group (Level 2 Parent + Level 3 Items) -->
+                    <template v-if="sub.submenu">
+                      <button
+                        v-if="!sub.disabled"
+                        class="submenu-link submenu-link--group"
+                        :class="{ 'submenu-link--active-parent': isSubItemActive(sub) }"
+                        type="button"
+                        @click="handleMenuClick(sub)"
+                        :aria-expanded="expandedMenus[sub.name] || false"
+                        :aria-controls="'submenu-' + sub.name.replace(/\s+/g, '-').toLowerCase()"
+                      >
+                        <span>{{ sub.name }}</span>
+                        <svg class="submenu-icon" :class="{ 'submenu-icon--open': expandedMenus[sub.name] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </button>
 
-                <!-- Nested Submenu Items (Level 3) -->
-                <ul v-if="sub.submenu" v-show="expandedMenus[sub.name]" class="nested-submenu-list" :id="'submenu-' + sub.name.replace(/\s+/g, '-').toLowerCase()">
-                  <li v-for="nestedSub in sub.submenu" :key="nestedSub.name" class="nested-submenu-item">
+                      <div
+                        class="submenu-collapse"
+                        :class="{ 'submenu-collapse--open': expandedMenus[sub.name] }"
+                      >
+                        <div class="submenu-collapse__inner">
+                          <ul class="nested-submenu-list" :id="'submenu-' + sub.name.replace(/\s+/g, '-').toLowerCase()">
+                            <li v-for="nestedSub in sub.submenu" :key="nestedSub.name" class="nested-submenu-item">
+                              <router-link
+                                v-if="!nestedSub.disabled"
+                                :to="nestedSub.path"
+                                class="nested-submenu-link"
+                                :class="{ 'nested-submenu-link--active': route.path === nestedSub.path }"
+                              >
+                                {{ nestedSub.name }}
+                              </router-link>
+                              <button
+                                v-else
+                                class="nested-submenu-link nested-submenu-link--disabled"
+                                type="button"
+                                title="Fitur belum tersedia"
+                              >
+                                {{ nestedSub.name }}
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- Normal Submenu Link -->
                     <router-link
-                      v-if="!nestedSub.disabled"
-                      :to="nestedSub.path"
-                      class="nested-submenu-link"
-                      :class="{ 'nested-submenu-link--active': route.path === nestedSub.path }"
+                      v-else-if="!sub.disabled"
+                      :to="sub.path"
+                      class="submenu-link"
+                      :class="{ 'submenu-link--active': route.path === sub.path }"
                     >
-                      {{ nestedSub.name }}
+                      {{ sub.name }}
                     </router-link>
+                    
+                    <!-- Disabled Submenu Link -->
                     <button
                       v-else
-                      class="nested-submenu-link nested-submenu-link--disabled"
+                      class="submenu-link submenu-link--disabled"
                       type="button"
                       title="Fitur belum tersedia"
                     >
-                      {{ nestedSub.name }}
+                      {{ sub.name }}
                     </button>
                   </li>
                 </ul>
-
-                <!-- Normal Submenu Link -->
-                <router-link
-                  v-else-if="!sub.disabled"
-                  :to="sub.path"
-                  class="submenu-link"
-                  :class="{ 'submenu-link--active': route.path === sub.path }"
-                >
-                  {{ sub.name }}
-                </router-link>
-                
-                <!-- Disabled Submenu Link -->
-                <button
-                  v-else
-                  class="submenu-link submenu-link--disabled"
-                  type="button"
-                  title="Fitur belum tersedia"
-                >
-                  {{ sub.name }}
-                </button>
-              </li>
-            </ul>
+              </div>
+            </div>
           </li>
         </ul>
       </template>
@@ -481,11 +496,48 @@ watch(() => route.path, () => {
 .submenu-icon {
   width: 16px;
   height: 16px;
-  transition: transform 0.2s ease;
+  transition: transform 250ms ease-in-out;
 }
 
 .submenu-icon--open {
   transform: rotate(180deg);
+}
+
+.submenu-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 250ms ease-in-out, visibility 250ms ease-in-out;
+  visibility: hidden;
+}
+
+.submenu-collapse--open {
+  grid-template-rows: 1fr;
+  visibility: visible;
+}
+
+.submenu-collapse__inner {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 250ms ease-in-out, transform 250ms ease-in-out;
+}
+
+.submenu-collapse--open > .submenu-collapse__inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .submenu-collapse,
+  .submenu-collapse__inner,
+  .submenu-icon {
+    transition: none !important;
+  }
+
+  .submenu-collapse__inner {
+    transform: none !important;
+  }
 }
 
 .nav-link--active-parent {
