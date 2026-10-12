@@ -19,12 +19,25 @@ class StoreGuarantorRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $code = $this->code;
+        if ($code === null || trim((string) $code) === '') {
+            $code = 'ASR-' . strtoupper(substr(uniqid(), -6));
+        }
+
+        $type = $this->type;
+        if ($type === null || trim((string) $type) === '') {
+            $type = filter_var($this->is_government, FILTER_VALIDATE_BOOLEAN)
+                ? GuarantorType::Bpjs->value
+                : GuarantorType::Other->value;
+        }
+
         $this->merge([
-            'code' => $this->code !== null ? strtoupper(trim($this->code)) : null,
+            'code' => strtoupper(trim((string) $code)),
+            'type' => $type,
             'name' => $this->name !== null ? preg_replace('/\s+/', ' ', trim($this->name)) : null,
         ]);
 
-        foreach (['legacy_id', 'code', 'name', 'inacbg_id'] as $field) {
+        foreach (['legacy_id', 'inacbg_id'] as $field) {
             if ($this->has($field) && trim((string) $this->get($field)) === '') {
                 $this->merge([$field => null]);
             }

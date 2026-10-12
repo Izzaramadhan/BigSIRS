@@ -79,4 +79,51 @@ describe('LetterTypeView.vue', () => {
     expect(wrapper.vm.isModalOpen).toBe(true);
     expect(wrapper.vm.selectedItem).toBeNull();
   });
+
+  it('renders search input and refresh button in filters toolbar', async () => {
+    const wrapper = mount(LetterTypeView);
+
+    const searchInput = wrapper.find('.search-input');
+    expect(searchInput.exists()).toBe(true);
+
+    const refreshBtn = wrapper.find('.btn-icon');
+    expect(refreshBtn.exists()).toBe(true);
+
+    mockUseLetterTypes.fetchLetterTypes.mockClear();
+    await refreshBtn.trigger('click');
+    expect(mockUseLetterTypes.fetchLetterTypes).toHaveBeenCalled();
+  });
+
+  it('renders pagination at the bottom and handles page change', async () => {
+    mockUseLetterTypes.letterTypes.value = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 1,
+      name: `Surat ${i + 1}`,
+      description: `Deskripsi ${i + 1}`,
+      legacy_resource: null,
+      is_active: 1
+    }));
+    mockUseLetterTypes.meta.value = { current_page: 1, last_page: 2, total: 15, per_page: 10, from: 1, to: 10 };
+
+    const wrapper = mount(LetterTypeView);
+    await wrapper.vm.$nextTick();
+
+    const pagination = wrapper.findComponent({ name: 'MasterDataPagination' });
+    expect(pagination.exists()).toBe(true);
+    expect(pagination.text()).toContain('Menampilkan 1');
+    expect(pagination.text()).toContain('sampai 10');
+    expect(pagination.text()).toContain('dari 15 entri');
+    expect(pagination.text()).toContain('Sebelumnya');
+    expect(pagination.text()).toContain('1');
+    expect(pagination.text()).toContain('2');
+    expect(pagination.text()).toContain('Selanjutnya');
+
+    mockUseLetterTypes.fetchLetterTypes.mockClear();
+    await pagination.vm.$emit('page-change', 2);
+    expect(mockUseLetterTypes.fetchLetterTypes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 2,
+        per_page: 10
+      })
+    );
+  });
 });
