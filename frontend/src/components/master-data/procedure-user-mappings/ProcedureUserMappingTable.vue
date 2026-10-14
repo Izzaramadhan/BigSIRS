@@ -50,57 +50,6 @@ const getRowNumber = (index) => {
         <thead>
           <tr>
             <th class="col-no text-center">No</th>
-            
-            <th @click="handleSort('code')" class="sortable col-code">
-              <span class="th-content">
-                <span>Kode Tindakan</span>
-                <span class="sort-icon-box" :class="{ 'is-active': sortConfig.column === 'code' }">
-                  <svg 
-                    v-if="sortConfig.column === 'code' && sortConfig.direction === 'asc'" 
-                    class="mapping-sort-icon" 
-                    width="14" 
-                    height="14" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    stroke-width="2" 
-                    stroke-linecap="round" 
-                    stroke-linejoin="round"
-                  >
-                    <polyline points="18 15 12 9 6 15"></polyline>
-                  </svg>
-                  <svg 
-                    v-else-if="sortConfig.column === 'code' && sortConfig.direction === 'desc'" 
-                    class="mapping-sort-icon" 
-                    width="14" 
-                    height="14" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    stroke-width="2" 
-                    stroke-linecap="round" 
-                    stroke-linejoin="round"
-                  >
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                  <svg 
-                    v-else 
-                    class="mapping-sort-icon neutral" 
-                    width="14" 
-                    height="14" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    stroke-width="2" 
-                    stroke-linecap="round" 
-                    stroke-linejoin="round"
-                  >
-                    <polyline points="7 15 12 20 17 15"></polyline>
-                    <polyline points="7 9 12 4 17 9"></polyline>
-                  </svg>
-                </span>
-              </span>
-            </th>
 
             <th @click="handleSort('name')" class="sortable col-name">
               <span class="th-content">
@@ -160,13 +109,13 @@ const getRowNumber = (index) => {
         <tbody>
           <!-- Loading skeleton -->
           <template v-if="loading">
-            <MasterDataSkeletonRow :columns="5" :rows="5" />
+            <MasterDataSkeletonRow :columns="4" :rows="5" />
           </template>
 
           <!-- Empty state row -->
           <template v-else-if="items.length === 0">
             <tr>
-              <td colspan="5" class="table-empty-cell">
+              <td colspan="4" class="table-empty-cell">
                 <div class="empty-state-content">
                   <svg 
                     v-if="searchKeyword"
@@ -232,18 +181,12 @@ const getRowNumber = (index) => {
                 {{ getRowNumber(index) }}
               </td>
 
-              <!-- 2. Kode Tindakan -->
-              <td class="col-code">
-                <span class="code-badge" v-if="item.procedure?.code">{{ item.procedure.code }}</span>
-                <span v-else class="text-muted">-</span>
-              </td>
-
-              <!-- 3. Nama Tindakan -->
+              <!-- 2. Nama Tindakan -->
               <td class="col-name font-medium text-navy">
                 {{ item.procedure?.name || '-' }}
               </td>
 
-              <!-- 4. Pegawai Terpetakan -->
+              <!-- 3. Pegawai Terpetakan -->
               <td class="col-employees">
                 <div class="employee-tags" v-if="item.employees && item.employees.length">
                   <span 
@@ -264,7 +207,7 @@ const getRowNumber = (index) => {
                 <span v-else class="text-muted">Belum ada pegawai</span>
               </td>
 
-              <!-- 5. Aksi -->
+              <!-- 4. Aksi -->
               <td class="col-actions text-center">
                 <MasterDataActionButtons 
                   @edit="emit('edit', item)"
@@ -323,23 +266,22 @@ const getRowNumber = (index) => {
 }
 
 .col-no {
-  width: 56px;
-}
-
-.col-code {
-  width: 150px;
+  width: 60px;
 }
 
 .col-name {
-  width: 280px;
+  width: 320px;
+  min-width: 220px;
 }
 
 .col-employees {
   width: auto;
+  min-width: 260px;
 }
 
 .col-actions {
   width: 100px;
+  white-space: nowrap;
 }
 
 .sortable {
@@ -381,18 +323,6 @@ const getRowNumber = (index) => {
 .mapping-sort-icon.neutral {
   color: #94a3b8;
   opacity: 0.6;
-}
-
-.code-badge {
-  display: inline-block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  background-color: #f1f5f9;
-  color: #334155;
-  border-radius: 4px;
-  border: 1px solid #cbd5e1;
 }
 
 .employee-tags {
