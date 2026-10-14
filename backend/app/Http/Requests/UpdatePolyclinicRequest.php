@@ -16,9 +16,15 @@ class UpdatePolyclinicRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $bpjsCode = $this->bpjs_code !== null ? trim((string) $this->bpjs_code) : null;
+        if ($bpjsCode === '') {
+            $bpjsCode = null;
+        }
+
         $this->merge([
             'code' => $this->code !== null ? strtoupper(trim($this->code)) : null,
             'name' => $this->name !== null ? preg_replace('/\s+/', ' ', trim($this->name)) : null,
+            'bpjs_code' => $bpjsCode,
         ]);
     }
 
@@ -38,6 +44,7 @@ class UpdatePolyclinicRequest extends FormRequest
             'is_online_visible' => ['boolean'],
             'quota' => ['integer', 'min:0'],
             'jkn_quota' => ['integer', 'min:0'],
+            'bpjs_code' => ['nullable', 'string', 'max:50'],
             'warehouse_id' => ['nullable', 'integer', Rule::exists('warehouses', 'id')->whereNull('deleted_at')],
             'is_active' => ['boolean'],
             // parent_id, satusehat_code, legacy_id not accepted from user form

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1\MasterData;
 
+use App\Models\MasterData\Warehouse;
 use App\Models\Polyclinic;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -289,4 +290,214 @@ class PolyclinicTest extends TestCase
         $this->assertDatabaseCount('polyclinics', 6);
     }
 
+    // ------------------------------------------------------------------ //
+    // BPJS Code
+    // ------------------------------------------------------------------ //
+    public function test_can_create_polyclinic_with_bpjs_code(): void
+    {
+        $payload = $this->validPayload([
+            'code' => 'POLI-BPJS-01',
+            'bpjs_code' => '001',
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $payload);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.bpjs_code', '001');
+
+        $this->assertDatabaseHas('polyclinics', [
+            'code' => 'POLI-BPJS-01',
+            'bpjs_code' => '001',
+        ]);
+    }
+
+    public function test_can_create_polyclinic_with_null_bpjs_code(): void
+    {
+        $payload = $this->validPayload([
+            'code' => 'POLI-BPJS-NULL',
+            'bpjs_code' => null,
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $payload);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.bpjs_code', null);
+
+        $this->assertDatabaseHas('polyclinics', [
+            'code' => 'POLI-BPJS-NULL',
+            'bpjs_code' => null,
+        ]);
+    }
+
+    public function test_create_trims_bpjs_code_whitespace(): void
+    {
+        $payload = $this->validPayload([
+            'code' => 'POLI-BPJS-TRIM',
+            'bpjs_code' => '   BPJS-TRIMMED   ',
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $payload);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.bpjs_code', 'BPJS-TRIMMED');
+
+        $this->assertDatabaseHas('polyclinics', [
+            'code' => 'POLI-BPJS-TRIM',
+            'bpjs_code' => 'BPJS-TRIMMED',
+        ]);
+    }
+
+    public function test_create_stores_empty_bpjs_code_as_null(): void
+    {
+        $payload = $this->validPayload([
+            'code' => 'POLI-BPJS-EMPTY',
+            'bpjs_code' => '   ',
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $payload);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.bpjs_code', null);
+
+        $this->assertDatabaseHas('polyclinics', [
+            'code' => 'POLI-BPJS-EMPTY',
+            'bpjs_code' => null,
+        ]);
+    }
+
+    public function test_create_rejects_bpjs_code_longer_than_50_chars(): void
+    {
+        $payload = $this->validPayload([
+            'code' => 'POLI-BPJS-TOOLONG',
+            'bpjs_code' => str_repeat('A', 51),
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $payload);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['bpjs_code']);
+    }
+
+    public function test_can_update_bpjs_code(): void
+    {
+        $polyclinic = Polyclinic::factory()->create([
+            'bpjs_code' => 'BPJS-OLD',
+        ]);
+
+        $payload = $this->validPayload([
+            'code' => $polyclinic->code,
+            'bpjs_code' => 'BPJS-NEW',
+        ]);
+
+        $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/polyclinics/{$polyclinic->id}", $payload);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.bpjs_code', 'BPJS-NEW');
+
+        $this->assertDatabaseHas('polyclinics', [
+            'id' => $polyclinic->id,
+            'bpjs_code' => 'BPJS-NEW',
+        ]);
+    }
+
+    public function test_update_can_clear_bpjs_code_to_null(): void
+    {
+        $polyclinic = Polyclinic::factory()->create([
+            'bpjs_code' => 'BPJS-EXISTING',
+        ]);
+
+        $payload = $this->validPayload([
+            'code' => $polyclinic->code,
+            'bpjs_code' => null,
+        ]);
+
+        $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/polyclinics/{$polyclinic->id}", $payload);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.bpjs_code', null);
+
+        $this->assertDatabaseHas('polyclinics', [
+            'id' => $polyclinic->id,
+            'bpjs_code' => null,
+        ]);
+
+        // Also test with empty string converted to null
+        $polyclinic->update(['bpjs_code' => 'BPJS-EXISTING-2']);
+        $payload2 = $this->validPayload([
+            'code' => $polyclinic->code,
+            'bpjs_code' => '   ',
+        ]);
+
+        $response2 = $this->actingAs($this->user)->putJson("/api/v1/master-data/polyclinics/{$polyclinic->id}", $payload2);
+        $response2->assertOk();
+        $response2->assertJsonPath('data.bpjs_code', null);
+        $this->assertDatabaseHas('polyclinics', [
+            'id' => $polyclinic->id,
+            'bpjs_code' => null,
+        ]);
+    }
+
+    public function test_show_polyclinic_returns_bpjs_code(): void
+    {
+        $polyclinic = Polyclinic::factory()->create([
+            'code' => 'POLI-SHOW',
+            'name' => 'Poli Show Test',
+            'bpjs_code' => 'BPJS-SHOW-01',
+        ]);
+
+        $response = $this->actingAs($this->user)->getJson("/api/v1/master-data/polyclinics/{$polyclinic->id}");
+
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $polyclinic->id);
+        $response->assertJsonPath('data.code', 'POLI-SHOW');
+        $response->assertJsonPath('data.bpjs_code', 'BPJS-SHOW-01');
+    }
+
+    public function test_bpjs_code_does_not_break_warehouse_id_and_relation(): void
+    {
+        $warehouse = Warehouse::factory()->create([
+            'code' => 'GD-01',
+            'name' => 'Gudang Utama',
+        ]);
+
+        // 1. Create with bpjs_code and warehouse_id
+        $createPayload = $this->validPayload([
+            'code' => 'POLI-WH-01',
+            'name' => 'Poli Gudang',
+            'bpjs_code' => '001',
+            'warehouse_id' => $warehouse->id,
+        ]);
+
+        $createResponse = $this->actingAs($this->user)->postJson('/api/v1/master-data/polyclinics', $createPayload);
+
+        $createResponse->assertCreated();
+        $createResponse->assertJsonPath('data.bpjs_code', '001');
+        $createResponse->assertJsonPath('data.warehouse_id', $warehouse->id);
+        $createResponse->assertJsonPath('data.warehouse.id', $warehouse->id);
+        $createResponse->assertJsonPath('data.warehouse.name', 'Gudang Utama');
+
+        $polyclinicId = $createResponse->json('data.id');
+
+        // 2. Show returns both bpjs_code and warehouse
+        $showResponse = $this->actingAs($this->user)->getJson("/api/v1/master-data/polyclinics/{$polyclinicId}");
+        $showResponse->assertOk();
+        $showResponse->assertJsonPath('data.bpjs_code', '001');
+        $showResponse->assertJsonPath('data.warehouse_id', $warehouse->id);
+        $showResponse->assertJsonPath('data.warehouse.id', $warehouse->id);
+
+        // 3. Update bpjs_code while preserving warehouse_id
+        $updatePayload = $this->validPayload([
+            'code' => 'POLI-WH-01',
+            'name' => 'Poli Gudang Update',
+            'bpjs_code' => '002',
+            'warehouse_id' => $warehouse->id,
+        ]);
+
+        $updateResponse = $this->actingAs($this->user)->putJson("/api/v1/master-data/polyclinics/{$polyclinicId}", $updatePayload);
+
+        $updateResponse->assertOk();
+        $updateResponse->assertJsonPath('data.bpjs_code', '002');
+        $updateResponse->assertJsonPath('data.warehouse_id', $warehouse->id);
+        $updateResponse->assertJsonPath('data.warehouse.id', $warehouse->id);
+    }
 }
