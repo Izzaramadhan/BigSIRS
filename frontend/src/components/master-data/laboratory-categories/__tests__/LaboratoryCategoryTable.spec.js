@@ -35,7 +35,7 @@ describe('LaboratoryCategoryTable.vue', () => {
     last_page: 1
   };
 
-  it('renders exact 9 columns in the specified order', () => {
+  it('renders exact 10 columns in the specified order', () => {
     const wrapper = mount(LaboratoryCategoryTable, {
       props: {
         items: mockItems,
@@ -45,7 +45,7 @@ describe('LaboratoryCategoryTable.vue', () => {
     });
 
     const headers = wrapper.findAll('thead th');
-    expect(headers.length).toBe(9);
+    expect(headers.length).toBe(10);
     expect(headers[0].text()).toContain('No');
     expect(headers[1].text()).toContain('Kategori');
     expect(headers[2].text()).toContain('Deskripsi');
@@ -54,10 +54,11 @@ describe('LaboratoryCategoryTable.vue', () => {
     expect(headers[5].text()).toContain('LOINC Code');
     expect(headers[6].text()).toContain('LOINC URL');
     expect(headers[7].text()).toContain('SNOMED Code');
-    expect(headers[8].text()).toContain('Aksi');
+    expect(headers[8].text()).toContain('SNOMED URL');
+    expect(headers[9].text()).toContain('Aksi');
   });
 
-  it('renders row data correctly including valid LOINC URL link', () => {
+  it('renders row data correctly including valid LOINC URL and SNOMED URL links', () => {
     const wrapper = mount(LaboratoryCategoryTable, {
       props: {
         items: mockItems,
@@ -71,6 +72,7 @@ describe('LaboratoryCategoryTable.vue', () => {
 
     // Row 1
     const firstRowCells = rows[0].findAll('td');
+    expect(firstRowCells.length).toBe(10);
     expect(firstRowCells[0].text()).toBe('1');
     expect(firstRowCells[1].text()).toContain('Hematologi Rutin');
     expect(firstRowCells[2].text()).toContain('Pemeriksaan darah lengkap');
@@ -86,25 +88,73 @@ describe('LaboratoryCategoryTable.vue', () => {
     expect(loincLink.attributes('rel')).toContain('noopener');
 
     expect(firstRowCells[7].text()).toContain('252275004');
+
+    // Link check for SNOMED URL
+    const snomedLink = firstRowCells[8].find('a.table-link');
+    expect(snomedLink.exists()).toBe(true);
+    expect(snomedLink.text()).toContain('Buka tautan');
+    expect(snomedLink.attributes('href')).toBe('https://snomed.info/id/252275004');
+    expect(snomedLink.attributes('target')).toBe('_blank');
+    expect(snomedLink.attributes('rel')).toContain('noopener');
+    expect(snomedLink.attributes('title')).toBe('Buka SNOMED URL');
   });
 
-  it('renders "-" for null or empty values', () => {
+  it('renders "-" for null, empty, or invalid values', () => {
+    const invalidItem = {
+      id: 3,
+      name: 'Invalid URLs',
+      is_active: false,
+      snomed_url: 'invalid-url',
+      loinc_url: null
+    };
+
     const wrapper = mount(LaboratoryCategoryTable, {
       props: {
-        items: mockItems,
+        items: [mockItems[1], invalidItem],
         pagination: mockPagination,
         loading: false
       }
     });
 
     const rows = wrapper.findAll('tbody tr');
-    // Row 2 has null fields
+    // Row 1 (mockItems[1]) has null fields
+    const firstRowCells = rows[0].findAll('td');
+    expect(firstRowCells[2].text()).toBe('-');
+    expect(firstRowCells[3].text()).toBe('-');
+    expect(firstRowCells[5].text()).toBe('-');
+    expect(firstRowCells[6].text()).toBe('-');
+    expect(firstRowCells[7].text()).toBe('-');
+    expect(firstRowCells[8].text()).toBe('-');
+
+    // Row 2 (invalidItem) has invalid SNOMED URL which should render "-"
     const secondRowCells = rows[1].findAll('td');
-    expect(secondRowCells[2].text()).toBe('-');
-    expect(secondRowCells[3].text()).toBe('-');
-    expect(secondRowCells[5].text()).toBe('-');
-    expect(secondRowCells[6].text()).toBe('-');
-    expect(secondRowCells[7].text()).toBe('-');
+    expect(secondRowCells[8].text()).toBe('-');
+    expect(secondRowCells[8].find('a').exists()).toBe(false);
+  });
+
+  it('renders 10 columns for skeleton loading and colspan 10 for empty state', () => {
+    // Empty state
+    const emptyWrapper = mount(LaboratoryCategoryTable, {
+      props: {
+        items: [],
+        pagination: mockPagination,
+        loading: false
+      }
+    });
+    const emptyCell = emptyWrapper.find('td[colspan="10"]');
+    expect(emptyCell.exists()).toBe(true);
+
+    // Skeleton loading
+    const skeletonWrapper = mount(LaboratoryCategoryTable, {
+      props: {
+        items: [],
+        pagination: mockPagination,
+        loading: true
+      }
+    });
+    const skeletonRow = skeletonWrapper.findComponent({ name: 'MasterDataSkeletonRow' });
+    expect(skeletonRow.exists()).toBe(true);
+    expect(skeletonRow.props('columns')).toBe(10);
   });
 
   it('emits sort event when clicking on sortable header', async () => {
