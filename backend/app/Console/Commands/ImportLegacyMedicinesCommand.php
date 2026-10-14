@@ -144,6 +144,19 @@ class ImportLegacyMedicinesCommand extends Command
             }
         }
 
+        // 5b. Medicine Selling Prices from logistics log stok
+        $latestPrices = DB::connection('legacy')->table('lgs_faktur_detail as fd')
+            ->join('lgs_log_stok as ls', 'ls.id_lgs_faktur_detail', '=', 'fd.id')
+            ->where('ls.harga_jual', '>', 0)
+            ->whereNull('ls.deleted_at')
+            ->whereNull('fd.deleted_at')
+            ->select('fd.id_obat', 'ls.harga_jual')
+            ->orderBy('fd.id_obat')
+            ->orderByDesc('ls.id')
+            ->get()
+            ->unique('id_obat')
+            ->keyBy('id_obat');
+
         // 6. Medicines
         $legacyMedicines = DB::connection('legacy')->table('ref_obat')->get();
         $this->info("Importing {$legacyMedicines->count()} Medicines...");
@@ -180,6 +193,7 @@ class ImportLegacyMedicinesCommand extends Command
                 'medicine_classification_id' => $mapClassifications[$med->id_golongan] ?? null,
                 'medicine_route_id' => $mapRoutes[$med->id_obat_jalur_masuk] ?? null,
                 'generic_medicine_id' => $genericMedicineId,
+                'selling_price_per_unit' => $latestPrices[$med->id]->harga_jual ?? null,
                 'description' => $med->deskripsi,
                 'is_active' => $med->status == '1',
             ];

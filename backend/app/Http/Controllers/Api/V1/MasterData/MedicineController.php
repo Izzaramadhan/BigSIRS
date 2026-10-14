@@ -64,6 +64,7 @@ class MedicineController extends Controller
             'medicine_classification_id' => 'nullable|exists:medicine_classifications,id',
             'medicine_route_id' => 'nullable|exists:medicine_routes,id',
             'generic_medicine_id' => 'nullable|exists:generic_medicines,id',
+            'selling_price_per_unit' => 'nullable|numeric|min:0',
             'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
         ]);
@@ -97,6 +98,7 @@ class MedicineController extends Controller
             'medicine_classification_id' => 'nullable|exists:medicine_classifications,id',
             'medicine_route_id' => 'nullable|exists:medicine_routes,id',
             'generic_medicine_id' => 'nullable|exists:generic_medicines,id',
+            'selling_price_per_unit' => 'nullable|numeric|min:0',
             'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
         ]);

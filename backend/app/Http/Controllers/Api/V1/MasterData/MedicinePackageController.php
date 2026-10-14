@@ -58,12 +58,34 @@ class MedicinePackageController extends Controller
         Gate::authorize('create', MedicinePackage::class);
 
         $medicinePackage = DB::transaction(function () use ($request) {
-            $package = MedicinePackage::create($request->safe()->except('items'));
-            
-            foreach ($request->validated('items') as $item) {
+            $items = $request->validated('items');
+            $calculatedItemsTotal = 0;
+
+            $processedItems = array_map(function ($item) use (&$calculatedItemsTotal) {
+                $qty = (int) $item['quantity'];
+                $unitPrice = (float) $item['unit_price'];
+                $subtotal = round($qty * $unitPrice, 2);
+                $calculatedItemsTotal += $subtotal;
+
+                return [
+                    'medicine_id' => $item['medicine_id'],
+                    'quantity' => $qty,
+                    'unit_price' => $unitPrice,
+                    'subtotal' => $subtotal,
+                ];
+            }, $items);
+
+            $packageData = $request->safe()->except('items');
+            if (!isset($packageData['price']) || $packageData['price'] <= 0) {
+                $packageData['price'] = $calculatedItemsTotal;
+            }
+
+            $package = MedicinePackage::create($packageData);
+
+            foreach ($processedItems as $item) {
                 $package->items()->create($item);
             }
-            
+
             return $package->load('items.medicine');
         });
 
@@ -82,13 +104,35 @@ class MedicinePackageController extends Controller
         Gate::authorize('update', $medicinePackage);
 
         $medicinePackage = DB::transaction(function () use ($request, $medicinePackage) {
-            $medicinePackage->update($request->safe()->except('items'));
-            
+            $items = $request->validated('items');
+            $calculatedItemsTotal = 0;
+
+            $processedItems = array_map(function ($item) use (&$calculatedItemsTotal) {
+                $qty = (int) $item['quantity'];
+                $unitPrice = (float) $item['unit_price'];
+                $subtotal = round($qty * $unitPrice, 2);
+                $calculatedItemsTotal += $subtotal;
+
+                return [
+                    'medicine_id' => $item['medicine_id'],
+                    'quantity' => $qty,
+                    'unit_price' => $unitPrice,
+                    'subtotal' => $subtotal,
+                ];
+            }, $items);
+
+            $packageData = $request->safe()->except('items');
+            if (!isset($packageData['price']) || $packageData['price'] <= 0) {
+                $packageData['price'] = $calculatedItemsTotal;
+            }
+
+            $medicinePackage->update($packageData);
+
             $medicinePackage->items()->delete();
-            foreach ($request->validated('items') as $item) {
+            foreach ($processedItems as $item) {
                 $medicinePackage->items()->create($item);
             }
-            
+
             return $medicinePackage->load('items.medicine');
         });
 

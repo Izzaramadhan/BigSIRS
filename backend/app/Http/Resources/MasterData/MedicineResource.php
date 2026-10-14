@@ -26,6 +26,9 @@ class MedicineResource extends JsonResource
             'medicine_classification_id' => $this->medicine_classification_id,
             'medicine_route_id' => $this->medicine_route_id,
             'generic_medicine_id' => $this->generic_medicine_id,
+            'selling_price_per_unit' => $this->selling_price_per_unit !== null ? (float) $this->selling_price_per_unit : null,
+            'price' => $this->selling_price_per_unit !== null ? (float) $this->selling_price_per_unit : null,
+            'unit_price' => $this->selling_price_per_unit !== null ? (float) $this->selling_price_per_unit : null,
 
             'unit' => $this->whenLoaded('unit'),
             'category' => $this->whenLoaded('category'),

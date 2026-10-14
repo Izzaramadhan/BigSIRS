@@ -170,4 +170,67 @@ class MedicinePackageTest extends TestCase
             'id' => $package->id,
         ]);
     }
+
+    public function test_can_create_medicine_package_with_decimal_price_and_verifies_subtotal()
+    {
+        $medicine = Medicine::create([
+            'name' => 'Amoxan Drop',
+            'selling_price_per_unit' => 2251.70,
+            'is_active' => true,
+        ]);
+
+        $payload = [
+            'name' => 'Paket Amoxan',
+            'price' => 4503.40,
+            'quantity' => 1,
+            'items' => [
+                [
+                    'medicine_id' => $medicine->id,
+                    'quantity' => 2,
+                    'unit_price' => 2251.70,
+                    'subtotal' => 4503.40,
+                ]
+            ]
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/master-data/medicine-packages', $payload);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.price', 4503.4)
+            ->assertJsonPath('data.items.0.unit_price', 2251.7)
+            ->assertJsonPath('data.items.0.subtotal', 4503.4);
+
+        $this->assertDatabaseHas('medicine_package_items', [
+            'medicine_id' => $medicine->id,
+            'quantity' => 2,
+            'unit_price' => 2251.70,
+            'subtotal' => 4503.40,
+        ]);
+    }
+
+    public function test_show_loads_items_with_snapshot_unit_price()
+    {
+        $package = MedicinePackage::create([
+            'name' => 'Paket Snapshot',
+            'price' => 2251.70,
+            'quantity' => 1,
+            'is_active' => true,
+        ]);
+
+        $item = MedicinePackageItem::create([
+            'medicine_package_id' => $package->id,
+            'medicine_id' => $this->medicine->id,
+            'quantity' => 1,
+            'unit_price' => 2251.70,
+            'subtotal' => 2251.70,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson("/api/v1/master-data/medicine-packages/{$package->id}");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.items.0.unit_price', 2251.7)
+            ->assertJsonPath('data.items.0.subtotal', 2251.7);
+    }
 }

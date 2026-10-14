@@ -132,6 +132,27 @@ class MedicineControllerTest extends TestCase
         $this->assertSoftDeleted('medicines', ['id' => $medicine->id]);
     }
 
+    public function test_can_create_and_return_medicine_with_selling_price_per_unit()
+    {
+        $data = [
+            'name' => 'Amoxan Drop',
+            'selling_price_per_unit' => 2251.7,
+        ];
+
+        $response = $this->postJson('/api/v1/master-data/medicines', $data);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.name', 'Amoxan Drop')
+            ->assertJsonPath('data.selling_price_per_unit', 2251.7)
+            ->assertJsonPath('data.unit_price', 2251.7)
+            ->assertJsonPath('data.price', 2251.7);
+
+        $this->assertDatabaseHas('medicines', [
+            'name' => 'Amoxan Drop',
+            'selling_price_per_unit' => 2251.7,
+        ]);
+    }
+
     public function test_can_create_medicine_with_valid_generic_medicine_id()
     {
         $generic = GenericMedicine::create(['name' => 'Paracetamol', 'is_active' => true]);

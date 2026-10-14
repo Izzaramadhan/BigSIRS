@@ -229,4 +229,113 @@ describe('MedicinePackageFormModal.vue', () => {
 
     expect(wrapper.emitted('close')).toBeTruthy();
   });
+
+  it('automatically fills unit price and calculates subtotal when medicine with price (e.g. Amoxan Drop) is selected', async () => {
+    medicinesService.getMedicines.mockResolvedValue({
+      data: [
+        {
+          id: 303,
+          name: 'Amoxan Drop',
+          code: 'DRG000002151',
+          selling_price_per_unit: 2251.7,
+          unit: { name: 'Botol 15 ml' }
+        }
+      ]
+    });
+
+    const wrapper = mountModal();
+
+    // Type query to search
+    const searchInput = wrapper.find('input#medicine_search');
+    await searchInput.setValue('Amoxan');
+    await searchInput.trigger('input');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await flushPromises();
+
+    // Autocomplete item should show price tag
+    const autocompleteBtn = wrapper.find('.autocomplete-item');
+    expect(autocompleteBtn.exists()).toBe(true);
+    expect(autocompleteBtn.text()).toContain('Amoxan Drop');
+    expect(autocompleteBtn.text()).toContain('2.251,7');
+
+    // Click to add medicine
+    await autocompleteBtn.trigger('click');
+    await flushPromises();
+
+    // Table row should be populated
+    const rows = wrapper.findAll('.items-table tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain('Amoxan Drop');
+    expect(rows[0].text()).toContain('Satuan: Botol 15 ml');
+
+    // Unit price should be 2251.7 and subtotal 2251.7
+    const priceInput = rows[0].find('.col-item-price input');
+    expect(Number(priceInput.element.value)).toBe(2251.7);
+    expect(rows[0].find('.col-item-subtotal').text()).toContain('2.251,7');
+    expect(wrapper.find('input#price').element.value).toBe('2251.7');
+
+    // Change quantity to 2
+    const qtyInput = wrapper.find('.col-item-qty input');
+    await qtyInput.setValue(2);
+    await flushPromises();
+
+    // Subtotal should be 4503.4 and total 4503.4
+    expect(wrapper.find('tbody .col-item-subtotal').text()).toContain('4.503,4');
+    expect(wrapper.find('input#price').element.value).toBe('4503.4');
+  });
+
+  it('handles medicine with missing price by showing warning indicator and blocking submit until price entered', async () => {
+    medicinesService.getMedicines.mockResolvedValue({
+      data: [
+        {
+          id: 99,
+          name: 'Obat Tanpa Harga',
+          code: 'MED-NOL',
+          selling_price_per_unit: null,
+          unit: { name: 'Vial' }
+        }
+      ]
+    });
+
+    const wrapper = mountModal();
+    const searchInput = wrapper.find('input#medicine_search');
+    await searchInput.setValue('Obat');
+    await searchInput.trigger('input');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await flushPromises();
+
+    // Dropdown shows warning
+    expect(wrapper.find('.no-price-tag').text()).toContain('Harga belum tersedia');
+
+    // Add medicine
+    await wrapper.find('.autocomplete-item').trigger('click');
+    await flushPromises();
+
+    // Row should show warning
+    expect(wrapper.text()).toContain('Harga belum tersedia');
+
+    // Fill package name and attempt submit
+    await wrapper.find('input#name').setValue('Paket Baru');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    // Should block submission with error
+    expect(wrapper.emitted('submit')).toBeFalsy();
+    expect(wrapper.text()).toContain('Harga satuan obat belum tersedia atau wajib diisi.');
+
+    // User manually enters price 5000
+    const priceInput = wrapper.find('.col-item-price input');
+    await priceInput.setValue(5000);
+    await flushPromises();
+
+    expect(wrapper.find('tbody .col-item-subtotal').text()).toContain('5.000');
+    expect(wrapper.find('input#price').element.value).toBe('5000');
+
+    // Submit should now succeed
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(wrapper.emitted('submit')).toBeTruthy();
+    expect(wrapper.emitted('submit')[0][0].items[0].unit_price).toBe(5000);
+  });
 });
