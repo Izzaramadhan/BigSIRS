@@ -38,6 +38,11 @@ class TariffTypeController extends Controller
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');
         }
 
+        if ($request->boolean('all')) {
+            $tariffTypes = $query->get();
+            return TariffTypeResource::collection($tariffTypes);
+        }
+
         $perPage = $request->input('per_page', 10);
         $tariffTypes = $query->paginate($perPage);
 

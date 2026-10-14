@@ -35,6 +35,12 @@ class ProcedureCategoryController extends Controller
             $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
         }
 
+        if ($request->boolean('all')) {
+            $categories = $query->orderBy($sort, $direction)->get();
+            return ProcedureCategoryResource::collection($categories);
+        }
+
+        $perPage = min((int) $request->query('per_page', 15), 500);
         $categories = $query->orderBy($sort, $direction)->paginate($perPage);
 
         return ProcedureCategoryResource::collection($categories);

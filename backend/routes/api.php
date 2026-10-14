@@ -75,6 +75,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('tariff-types/{tariffType}/status', [TariffTypeController::class, 'updateStatus']);
             Route::apiResource('tariff-types', TariffTypeController::class);
 
+            Route::get('procedures/export', [MedicalProcedureController::class, 'export']);
             Route::patch('procedures/{procedure}/visibility', [MedicalProcedureController::class, 'updateVisibility']);
             Route::apiResource('procedures', MedicalProcedureController::class);
 

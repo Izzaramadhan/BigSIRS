@@ -26,6 +26,13 @@ class ProcedureService {
     deleteProcedure(id) {
         return axios.delete(`${API_URL}/${id}`);
     }
+
+    exportProcedures(params) {
+        return axios.get(`${API_URL}/export`, {
+            params,
+            responseType: 'blob'
+        });
+    }
 }
 
 export default new ProcedureService();
