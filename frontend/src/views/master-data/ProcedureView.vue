@@ -1,6 +1,8 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useProcedures } from '@/composables/useProcedures';
+import { procedureCategoryService } from '@/services/procedureCategory';
+import tariffTypeService from '@/services/tariffType';
 import ProcedureTable from '@/components/master-data/procedures/ProcedureTable.vue';
 import ProcedureFormModal from '@/components/master-data/procedures/ProcedureFormModal.vue';
 import ProcedureFilters from '@/components/master-data/procedures/ProcedureFilters.vue';
@@ -14,13 +16,15 @@ const {
   procedures,
   pagination,
   loading,
+  exporting,
   error,
   fetchProcedures,
   getProcedure,
   createProcedure,
   updateProcedure,
   updateProcedureVisibility,
-  deleteProcedure
+  deleteProcedure,
+  exportProcedures
 } = useProcedures();
 
 const toast = ref({
@@ -49,21 +53,105 @@ const isDeleting = ref(false);
 
 const filters = ref({
   search: '',
+  category_id: '',
+  tariff_type_id: '',
   is_visible: ''
 });
+
+const categories = ref([]);
+const categoriesLoading = ref(false);
+const categoriesError = ref(null);
+
+const tariffTypes = ref([]);
+const tariffTypesLoading = ref(false);
+const tariffTypesError = ref(null);
 
 const sortConfig = ref({
   column: 'created_at',
   direction: 'desc'
 });
 
+const hasActiveFilter = computed(() => {
+  return Boolean(
+    filters.value.search || 
+    filters.value.category_id || 
+    filters.value.tariff_type_id || 
+    (filters.value.is_visible !== '' && filters.value.is_visible !== null && filters.value.is_visible !== undefined)
+  );
+});
+
+const loadCategories = async () => {
+  categoriesLoading.value = true;
+  categoriesError.value = null;
+  try {
+    const res = await procedureCategoryService.getProcedureCategories({ all: true, per_page: 500, sort: 'name', direction: 'asc' });
+    const rawList = res.data?.data || res.data || [];
+    const uniqueMap = new Map();
+    for (const item of rawList) {
+      if (item && item.id && !uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, {
+          value: item.id,
+          label: item.name || `Kategori #${item.id}`
+        });
+      }
+    }
+    categories.value = Array.from(uniqueMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'id'));
+  } catch (err) {
+    console.error('Gagal memuat kategori tindakan:', err);
+    categoriesError.value = 'Gagal memuat kategori tindakan.';
+    showToast({ title: 'Peringatan', message: 'Gagal memuat data referensi kategori tindakan.', type: 'warning' });
+  } finally {
+    categoriesLoading.value = false;
+  }
+};
+
+const loadTariffTypes = async () => {
+  tariffTypesLoading.value = true;
+  tariffTypesError.value = null;
+  try {
+    const res = await tariffTypeService.getTariffTypes({ all: true, per_page: 500, sort_by: 'name', sort_dir: 'asc' });
+    const rawList = res.data?.data || res.data || [];
+    const uniqueMap = new Map();
+    for (const item of rawList) {
+      if (item && item.id && !uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, {
+          value: item.id,
+          label: item.name || `Jenis Tarif #${item.id}`
+        });
+      }
+    }
+    tariffTypes.value = Array.from(uniqueMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'id'));
+  } catch (err) {
+    console.error('Gagal memuat jenis tarif:', err);
+    tariffTypesError.value = 'Gagal memuat jenis tarif.';
+    showToast({ title: 'Peringatan', message: 'Gagal memuat data referensi jenis tarif.', type: 'warning' });
+  } finally {
+    tariffTypesLoading.value = false;
+  }
+};
+
 const loadData = () => {
-  fetchProcedures({
-    search: filters.value.search,
-    is_visible: filters.value.is_visible,
+  const params = {
     sort_by: sortConfig.value.column,
     sort_dir: sortConfig.value.direction
-  });
+  };
+
+  if (filters.value.search) params.search = filters.value.search;
+  if (filters.value.category_id) params.category_id = filters.value.category_id;
+  if (filters.value.tariff_type_id) params.tariff_type_id = filters.value.tariff_type_id;
+  if (filters.value.is_visible !== '' && filters.value.is_visible !== null && filters.value.is_visible !== undefined) {
+    params.is_visible = filters.value.is_visible;
+  }
+
+  fetchProcedures(params);
+};
+
+const handleRefresh = async () => {
+  await Promise.all([
+    loadCategories(),
+    loadTariffTypes(),
+    loadData()
+  ]);
 };
 
 const handleFilter = ({ key, value }) => {
@@ -75,6 +163,29 @@ const handleFilter = ({ key, value }) => {
 const handleSort = ({ column, direction }) => {
   sortConfig.value = { column, direction };
   loadData();
+};
+
+const handleExport = async () => {
+  const params = {
+    sort_by: sortConfig.value.column,
+    sort_dir: sortConfig.value.direction
+  };
+
+  if (filters.value.search) params.search = filters.value.search;
+  if (filters.value.category_id) params.category_id = filters.value.category_id;
+  if (filters.value.tariff_type_id) params.tariff_type_id = filters.value.tariff_type_id;
+  if (filters.value.is_visible !== '' && filters.value.is_visible !== null && filters.value.is_visible !== undefined) {
+    params.is_visible = filters.value.is_visible;
+  }
+
+  const result = await exportProcedures(params);
+  if (result.empty) {
+    showToast({ title: 'Informasi', message: result.message || 'Tidak ada data tindakan yang dapat diunduh.', type: 'info' });
+  } else if (result.success) {
+    showToast({ title: 'Sukses', message: 'Data tindakan berhasil diunduh.', type: 'success' });
+  } else {
+    showToast({ title: 'Error', message: result.message || 'Data tindakan gagal diunduh. Silakan coba lagi.', type: 'error' });
+  }
 };
 
 const openAddModal = () => {
@@ -181,6 +292,8 @@ const handlePageChange = (page) => {
 };
 
 onMounted(() => {
+  loadCategories();
+  loadTariffTypes();
   loadData();
 });
 </script>
@@ -206,17 +319,24 @@ onMounted(() => {
       <ProcedureFilters 
         :filters="filters" 
         :loading="loading" 
+        :exporting="exporting"
+        :categories="categories"
+        :categories-loading="categoriesLoading"
+        :tariff-types="tariffTypes"
+        :tariff-types-loading="tariffTypesLoading"
         @filter="handleFilter" 
-        @refresh="loadData" 
+        @refresh="handleRefresh" 
+        @export="handleExport"
       />
       
       <MasterDataEmptyState 
         v-if="!loading && procedures.length === 0" 
-        :is-search="!!filters.search || filters.is_visible !== ''"
-        title="Tidak ada data Tindakan"
-        message="Belum ada data tindakan yang tersedia atau tidak ada hasil pencarian yang cocok."
+        :is-search="hasActiveFilter"
+        title="Belum ada data tindakan"
+        message="Belum ada data tindakan."
+        search-message="Tidak ada tindakan yang sesuai dengan filter."
       >
-        <template #action v-if="!filters.search && filters.is_visible === ''">
+        <template #action v-if="!hasActiveFilter">
           <button class="btn-primary" @click="openAddModal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; margin-right: 8px; vertical-align: middle;">
               <line x1="12" y1="5" x2="12" y2="19"></line>
