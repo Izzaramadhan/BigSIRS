@@ -21,12 +21,14 @@ class Medicine extends Model
         'medicine_classification_id',
         'medicine_route_id',
         'generic_medicine_id',
+        'selling_price_per_unit',
         'description',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'selling_price_per_unit' => 'decimal:2',
     ];
 
     public function unit()

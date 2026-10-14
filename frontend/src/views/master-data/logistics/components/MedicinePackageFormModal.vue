@@ -48,14 +48,15 @@ const searchErrorMessage = ref(null);
 let searchDebounceTimer = null;
 
 const calculatedTotal = computed(() => {
-  return form.items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+  const sum = form.items.reduce((total, item) => total + (Number(item.subtotal) || 0), 0);
+  return Number(sum.toFixed(2));
 });
 
 const formatRupiah = (val) => {
   if (val === null || val === undefined || val === '') return 'Rp0';
   const num = Number(val);
   if (isNaN(num)) return 'Rp0';
-  return 'Rp' + new Intl.NumberFormat('id-ID').format(num);
+  return 'Rp' + new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num);
 };
 
 const resetForm = () => {
@@ -76,16 +77,30 @@ const populateForm = (data) => {
   form.price = Number(data.price) || 0;
   form.quantity = data.quantity !== null && data.quantity !== undefined ? Number(data.quantity) : 0;
   form.description = data.description || '';
-  
+
   if (Array.isArray(data.items)) {
-    form.items = data.items.map((item) => ({
-      medicine_id: item.medicine_id,
-      medicine_name: item.medicine?.name || item.medicine_name || `Obat #${item.medicine_id}`,
-      medicine_unit: item.medicine?.unit?.name || item.medicine_unit || '',
-      quantity: Number(item.quantity) || 1,
-      unit_price: Number(item.unit_price) || 0,
-      subtotal: Number(item.subtotal) || (Number(item.quantity) * Number(item.unit_price))
-    }));
+    form.items = data.items.map((item) => {
+      const qty = Number(item.quantity) || 1;
+      // In edit mode: snapshot price saved on package item detail takes precedence
+      const rawPrice = item.unit_price !== undefined && item.unit_price !== null
+        ? item.unit_price
+        : (item.medicine?.selling_price_per_unit ?? item.medicine?.unit_price ?? item.medicine?.price);
+      const hasValidPrice = rawPrice !== null && rawPrice !== undefined && rawPrice !== '' && !isNaN(Number(rawPrice));
+      const unitPrice = hasValidPrice ? Number(rawPrice) : 0;
+      const subtotal = item.subtotal !== null && item.subtotal !== undefined
+        ? Number(item.subtotal)
+        : Number((qty * unitPrice).toFixed(2));
+
+      return {
+        medicine_id: item.medicine_id,
+        medicine_name: item.medicine?.name || item.medicine_name || `Obat #${item.medicine_id}`,
+        medicine_unit: item.medicine?.unit?.name || item.medicine_unit || '',
+        quantity: qty,
+        unit_price: unitPrice,
+        subtotal: subtotal,
+        has_no_price: !hasValidPrice && unitPrice === 0
+      };
+    });
   } else {
     form.items = [];
   }
@@ -170,9 +185,12 @@ const addMedicine = (medicine) => {
   delete clientErrors.search;
   delete clientErrors.items;
 
-  const unitPrice = Number(medicine.selling_price_per_unit) || 0;
+  // Resolve price from medicine response (selling_price_per_unit / unit_price / price)
+  const rawPrice = medicine.selling_price_per_unit ?? medicine.unit_price ?? medicine.price;
+  const hasValidPrice = rawPrice !== null && rawPrice !== undefined && rawPrice !== '' && !isNaN(Number(rawPrice));
+  const unitPrice = hasValidPrice ? Number(rawPrice) : null;
   const qty = 1;
-  const subtotal = qty * unitPrice;
+  const subtotal = unitPrice !== null ? Number((qty * unitPrice).toFixed(2)) : 0;
 
   form.items.push({
     medicine_id: medicine.id,
@@ -180,7 +198,8 @@ const addMedicine = (medicine) => {
     medicine_unit: medicine.unit?.name || '',
     quantity: qty,
     unit_price: unitPrice,
-    subtotal: subtotal
+    subtotal: subtotal,
+    has_no_price: !hasValidPrice
   });
 
   // Automatically update package total price
@@ -193,9 +212,14 @@ const addMedicine = (medicine) => {
 const updateItemSubtotal = (item) => {
   const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
   item.quantity = qty;
-  const price = Math.max(0, Number(item.unit_price) || 0);
-  item.unit_price = price;
-  item.subtotal = qty * price;
+  if (item.unit_price !== null && item.unit_price !== '' && !isNaN(Number(item.unit_price))) {
+    const price = Math.max(0, Number(item.unit_price));
+    item.unit_price = price;
+    item.subtotal = Number((qty * price).toFixed(2));
+    item.has_no_price = false;
+  } else {
+    item.subtotal = 0;
+  }
 
   form.price = calculatedTotal.value;
 };
@@ -239,13 +263,16 @@ const validateClient = () => {
       clientErrors[`items.${i}.quantity`] = 'Jumlah obat harus lebih dari 0.';
       isValid = false;
     }
-    if (item.unit_price < 0) {
+    if (item.unit_price === null || item.unit_price === undefined || item.unit_price === '' || isNaN(Number(item.unit_price))) {
+      clientErrors[`items.${i}.unit_price`] = 'Harga satuan obat belum tersedia atau wajib diisi.';
+      isValid = false;
+    } else if (Number(item.unit_price) < 0) {
       clientErrors[`items.${i}.unit_price`] = 'Harga satuan tidak boleh negatif.';
       isValid = false;
     }
   }
 
-  if (form.price < 0) {
+  if (form.price === null || form.price === undefined || form.price < 0) {
     clientErrors.price = 'Harga paket tidak boleh negatif.';
     isValid = false;
   }
@@ -359,11 +386,21 @@ const handleSubmit = () => {
               class="autocomplete-item"
               @click="addMedicine(med)"
             >
-              <div class="autocomplete-title">{{ med.name }}</div>
-              <div class="autocomplete-subtitle">
-                <span v-if="med.code" class="code-badge">{{ med.code }}</span>
-                <span v-if="med.unit?.name">{{ med.unit.name }}</span>
-                <span v-if="med.category?.name">• {{ med.category.name }}</span>
+              <div class="autocomplete-item-content">
+                <div class="autocomplete-title">{{ med.name }}</div>
+                <div class="autocomplete-subtitle">
+                  <span v-if="med.code" class="code-badge">{{ med.code }}</span>
+                  <span v-if="med.unit?.name">{{ med.unit.name }}</span>
+                  <span v-if="med.category?.name">• {{ med.category.name }}</span>
+                </div>
+              </div>
+              <div class="autocomplete-price">
+                <span v-if="med.selling_price_per_unit !== null && med.selling_price_per_unit !== undefined" class="price-tag">
+                  {{ formatRupiah(med.selling_price_per_unit) }}
+                </span>
+                <span v-else class="no-price-tag">
+                  Harga belum tersedia
+                </span>
               </div>
             </button>
           </div>
@@ -431,16 +468,26 @@ const handleSubmit = () => {
 
                   <!-- 3. Harga Satuan -->
                   <td class="col-item-price text-right">
-                    <input
-                      v-model.number="item.unit_price"
-                      type="number"
-                      min="0"
-                      step="any"
-                      class="form-control form-control-sm text-right"
-                      :disabled="isSubmitting"
-                      @input="updateItemSubtotal(item)"
-                      required
-                    />
+                    <div class="price-cell-wrapper">
+                      <input
+                        v-model.number="item.unit_price"
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="form-control form-control-sm text-right"
+                        :class="{ 'is-invalid': fieldError(`items.${index}.unit_price`) || item.unit_price === null }"
+                        :disabled="isSubmitting"
+                        placeholder="0"
+                        @input="updateItemSubtotal(item)"
+                        required
+                      />
+                      <div v-if="item.unit_price !== null && item.unit_price !== undefined" class="formatted-hint text-xs text-muted mt-1">
+                        {{ formatRupiah(item.unit_price) }}
+                      </div>
+                      <div v-else class="text-xs text-warning-badge mt-1">
+                        Harga belum tersedia
+                      </div>
+                    </div>
                     <div v-if="fieldError(`items.${index}.unit_price`)" class="invalid-feedback text-xs">
                       {{ fieldError(`items.${index}.unit_price`) }}
                     </div>
@@ -448,7 +495,10 @@ const handleSubmit = () => {
 
                   <!-- 4. Subtotal -->
                   <td class="col-item-subtotal text-right font-medium text-navy">
-                    {{ formatRupiah(item.subtotal) }}
+                    <div>{{ formatRupiah(item.subtotal) }}</div>
+                    <div v-if="item.quantity > 1 && item.unit_price" class="text-xs text-muted">
+                      {{ item.quantity }} × {{ formatRupiah(item.unit_price) }}
+                    </div>
                   </td>
 
                   <!-- 5. Hapus -->
@@ -687,7 +737,9 @@ const handleSubmit = () => {
 
 .autocomplete-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   padding: 0.625rem 1rem;
   border: none;
@@ -696,6 +748,55 @@ const handleSubmit = () => {
   cursor: pointer;
   border-bottom: 1px solid #f1f5f9;
   transition: background-color 0.15s;
+  gap: 0.75rem;
+}
+
+.autocomplete-item-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.autocomplete-price {
+  flex-shrink: 0;
+}
+
+.price-tag {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-primary, #0f766e);
+  background: #f0fdfa;
+  border: 1px solid #ccfbf1;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.no-price-tag {
+  font-size: 0.75rem;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.price-cell-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.text-warning-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
 }
 
 .autocomplete-item:last-child {
