@@ -23,6 +23,10 @@ export function useDoctorSchedules() {
   const submitting = ref(false);
   const error = ref(null);
 
+  const recapItems = ref([]);
+  const recapLoading = ref(false);
+  const recapError = ref(null);
+
   const fetchSchedules = async () => {
     loading.value = true;
     error.value = null;
@@ -53,6 +57,22 @@ export function useDoctorSchedules() {
       error.value = err.response?.data?.message || 'Data Jadwal Dokter gagal dimuat.';
     } finally {
       loading.value = false;
+    }
+  };
+
+  const fetchRecap = async () => {
+    recapLoading.value = true;
+    recapError.value = null;
+
+    try {
+      const response = await doctorScheduleService.getRecap();
+      recapItems.value = response.data || [];
+      return { success: true };
+    } catch (err) {
+      recapError.value = err.response?.data?.message || 'Data Rekap Jadwal Dokter gagal dimuat.';
+      return { success: false, error: err };
+    } finally {
+      recapLoading.value = false;
     }
   };
 
@@ -105,7 +125,11 @@ export function useDoctorSchedules() {
     loading,
     submitting,
     error,
+    recapItems,
+    recapLoading,
+    recapError,
     fetchSchedules,
+    fetchRecap,
     createSchedule,
     updateSchedule,
     deleteSchedule,

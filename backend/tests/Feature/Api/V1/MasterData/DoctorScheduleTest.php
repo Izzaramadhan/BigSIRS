@@ -156,4 +156,41 @@ class DoctorScheduleTest extends TestCase
         $response->assertStatus(204);
         $this->assertSoftDeleted('doctor_schedules', ['id' => $schedule->id]);
     }
+
+    public function test_recap_requires_authentication()
+    {
+        $response = $this->getJson('/api/v1/master-data/doctor-schedules/recap');
+        $response->assertStatus(401);
+    }
+
+    public function test_can_get_unpaginated_recap_schedules()
+    {
+        // Create 15 schedules (more than the standard 10 per page)
+        DoctorSchedule::factory()->count(14)->create(['is_holiday' => false]);
+        DoctorSchedule::factory()->create(['is_holiday' => true]);
+
+        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/doctor-schedules/recap');
+
+        $response->assertStatus(200)
+            ->assertJsonCount(15, 'data')
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'doctor_id',
+                        'doctor' => ['id', 'name'],
+                        'polyclinic_id',
+                        'polyclinic' => ['id', 'name'],
+                        'day_of_week',
+                        'start_time',
+                        'end_time',
+                        'is_holiday',
+                    ],
+                ],
+            ]);
+
+        // Assert that at least one holiday record is present in recap
+        $hasHoliday = collect($response->json('data'))->contains('is_holiday', true);
+        $this->assertTrue($hasHoliday);
+    }
 }
