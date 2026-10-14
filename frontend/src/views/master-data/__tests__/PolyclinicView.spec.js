@@ -177,6 +177,13 @@ describe('Master Data Polyclinic Frontend', () => {
       expect(wrapper.text()).not.toContain('SatuSehat')
     })
 
+    it('does NOT display Kode BPJS column in main table', async () => {
+      const wrapper = await mountView()
+      const headers = wrapper.findAll('.data-table thead th').map(th => th.text().trim())
+      expect(headers).not.toContain('Kode BPJS')
+      expect(headers).not.toContain('BPJS')
+    })
+
     it('displays Kuota column in table', async () => {
       const wrapper = await mountView()
       expect(wrapper.text()).toContain('Kuota JKN')
@@ -239,7 +246,7 @@ describe('Master Data Polyclinic Frontend', () => {
       expect(toast.find('.toast-message').text()).toBe('Data Poliklinik gagal ditambahkan. Silakan periksa kembali data yang dimasukkan.')
     })
 
-    it('shows success toast on successful creation', async () => {
+    it('shows success toast on successful creation and includes bpjs_code in payload', async () => {
       const wrapper = await mountView()
       polyclinicService.createPolyclinic.mockResolvedValue({ success: true })
 
@@ -249,10 +256,18 @@ describe('Master Data Polyclinic Frontend', () => {
       // Fill and submit form
       await wrapper.find('input[id="code"]').setValue('NEW-01')
       await wrapper.find('input[id="name"]').setValue('Poliklinik Baru')
+      await wrapper.find('select[id="service_type"]').setValue('rawat-jalan')
+      await wrapper.find('input[id="bpjs_code"]').setValue('  BPJS-01  ')
       await wrapper.find('form').trigger('submit.prevent')
       
-      // Toast shouldn't exist before API resolves (Wait, mock resolves immediately, but we can check if we want)
       await flushPromises()
+
+      expect(polyclinicService.createPolyclinic).toHaveBeenCalledWith(expect.objectContaining({
+        code: 'NEW-01',
+        name: 'Poliklinik Baru',
+        service_type: 'rawat-jalan',
+        bpjs_code: 'BPJS-01'
+      }))
 
       const toast = wrapper.find('.app-toast')
       expect(toast.exists()).toBe(true)
@@ -261,16 +276,38 @@ describe('Master Data Polyclinic Frontend', () => {
       expect(toast.find('.toast-message').text()).toBe('Data Poliklinik berhasil ditambahkan.')
     })
 
-    it('shows success toast on successful update', async () => {
+    it('shows success toast on successful update and includes bpjs_code in payload', async () => {
       const wrapper = await mountView()
+      polyclinicService.getPolyclinic.mockResolvedValue({
+        data: {
+          data: {
+            id: 1,
+            code: 'POLI-01',
+            name: 'Umum',
+            service_type: 'rawat-jalan',
+            quota: 20,
+            jkn_quota: 10,
+            bpjs_code: 'B-01',
+            warehouse_id: null
+          }
+        }
+      })
       polyclinicService.updatePolyclinic.mockResolvedValue({ success: true })
 
       // Click Edit button on the first item
       await wrapper.find('.actions-cell .edit').trigger('click')
       await flushPromises()
 
+      const bpjsInput = wrapper.find('input[id="bpjs_code"]')
+      expect(bpjsInput.element.value).toBe('B-01')
+
+      await bpjsInput.setValue('B-01-UPDATED')
       await wrapper.find('form').trigger('submit.prevent')
       await flushPromises()
+
+      expect(polyclinicService.updatePolyclinic).toHaveBeenCalledWith(1, expect.objectContaining({
+        bpjs_code: 'B-01-UPDATED'
+      }))
 
       const toast = wrapper.find('.app-toast')
       expect(toast.exists()).toBe(true)

@@ -6,6 +6,11 @@ class Icd10Service {
     return response.data
   }
 
+  async getIcd10Code(id) {
+    const response = await axios.get(`/master-data/icd10/${id}`)
+    return response.data
+  }
+
   async createIcd10Code(data) {
     const response = await axios.post('/master-data/icd10', data)
     return response.data

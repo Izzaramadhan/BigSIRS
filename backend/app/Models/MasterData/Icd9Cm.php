@@ -15,6 +15,9 @@ class Icd9Cm extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'needs_review' => 'boolean',
+        'class_1_tariff' => 'float',
+        'class_2_tariff' => 'float',
+        'class_3_tariff' => 'float',
     ];
 
     public function scopeActive($query)
@@ -27,7 +30,8 @@ class Icd9Cm extends Model
         return $query->where(function ($q) use ($search) {
             $q->where('code', 'like', "%{$search}%")
                 ->orWhere('name', 'like', "%{$search}%")
-                ->orWhere('english_name', 'like', "%{$search}%");
+                ->orWhere('english_name', 'like', "%{$search}%")
+                ->orWhere('inacbg_code', 'like', "%{$search}%");
         });
     }
 }

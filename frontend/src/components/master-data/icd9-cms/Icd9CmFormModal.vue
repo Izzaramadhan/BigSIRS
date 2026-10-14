@@ -1,347 +1,399 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { reactive, watch } from 'vue';
+import icd9cmService from '@/services/master-data/icd9cm.service';
+import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
 
 const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false
+  },
   item: {
     type: Object,
     default: null
   },
-  loading: {
+  code: {
+    type: Object,
+    default: null
+  },
+  isSubmitting: {
     type: Boolean,
     default: false
+  },
+  errors: {
+    type: Object,
+    default: () => ({})
   }
-})
+});
 
-const emit = defineEmits(['close', 'submit'])
+const emit = defineEmits(['close', 'submit']);
 
-const form = ref({
+const form = reactive({
   code: '',
   name: '',
-  english_name: '',
-  description: '',
-  is_active: true,
   inacbg_code: '',
-  inacbg_name: ''
-})
+  inacbg_name: '',
+  class_1_tariff: '',
+  class_2_tariff: '',
+  class_3_tariff: ''
+});
 
-const errors = ref({})
+const populateForm = (data) => {
+  form.code = data?.code || '';
+  form.name = data?.name || '';
+  form.inacbg_code = data?.inacbg_code || '';
+  form.inacbg_name = data?.inacbg_name || '';
+  form.class_1_tariff = data?.class_1_tariff ?? '';
+  form.class_2_tariff = data?.class_2_tariff ?? '';
+  form.class_3_tariff = data?.class_3_tariff ?? '';
+};
 
-onMounted(() => {
-  if (props.item) {
-    form.value = { ...props.item }
+const resetForm = () => {
+  form.code = '';
+  form.name = '';
+  form.inacbg_code = '';
+  form.inacbg_name = '';
+  form.class_1_tariff = '';
+  form.class_2_tariff = '';
+  form.class_3_tariff = '';
+};
+
+watch(() => props.isOpen, async (isOpen) => {
+  if (!isOpen) {
+    resetForm();
+    return;
   }
-})
 
-const validate = () => {
-  errors.value = {}
-  if (!form.value.code) errors.value.code = 'Kode wajib diisi'
-  if (!form.value.name) errors.value.name = 'Nama prosedur wajib diisi'
-  return Object.keys(errors.value).length === 0
-}
+  const targetItem = props.item || props.code;
+  if (targetItem) {
+    if (targetItem.id) {
+      try {
+        const response = await icd9cmService.getDetail(targetItem.id);
+        populateForm(response?.data || targetItem);
+      } catch (err) {
+        console.error('Failed to load fresh ICD-9 data:', err);
+        populateForm(targetItem);
+      }
+    } else {
+      populateForm(targetItem);
+    }
+  } else {
+    resetForm();
+  }
+}, { immediate: true });
 
-const onSubmit = () => {
-  if (!validate()) return
-  emit('submit', { ...form.value })
-}
+const parseTariff = (val) => {
+  if (val === '' || val === null || val === undefined) return null;
+  const num = typeof val === 'string' ? Number(val.replace(/[^0-9.-]/g, '')) : Number(val);
+  return isNaN(num) ? null : Math.max(0, num);
+};
+
+const handleSubmit = () => {
+  const payload = {
+    code: form.code.trim(),
+    name: form.name.trim(),
+    inacbg_code: form.inacbg_code.trim() || null,
+    inacbg_name: form.inacbg_name.trim() || null,
+    class_1_tariff: parseTariff(form.class_1_tariff),
+    class_2_tariff: parseTariff(form.class_2_tariff),
+    class_3_tariff: parseTariff(form.class_3_tariff)
+  };
+
+  emit('submit', payload);
+};
+
+const fieldError = (field) => {
+  const err = props.errors?.[field];
+  if (Array.isArray(err)) return err[0];
+  if (typeof err === 'string') return err;
+  return null;
+};
 </script>
 
 <template>
-  <div class="modal-backdrop">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h3 class="modal-title">{{ item ? 'Edit ICD-9-CM' : 'Tambah ICD-9-CM' }}</h3>
-        <button class="modal-close" @click="emit('close')" :disabled="loading">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+  <MasterDataFormModal
+    :is-open="isOpen"
+    :title="item ? 'Edit ICD-9' : 'Tambah ICD-9'"
+    :submit-text="item ? 'Perbarui' : 'Simpan'"
+    :is-submitting="isSubmitting"
+    size="md"
+    @close="$emit('close')"
+    @submit="handleSubmit"
+  >
+    <div class="modal-form">
+      <!-- General Error Alert -->
+      <div v-if="errors.general" class="alert-error">
+        {{ errors.general }}
       </div>
 
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Kode ICD-9-CM <span class="text-danger">*</span></label>
-            <input 
-              type="text" 
-              class="form-control" 
-              v-model="form.code"
-              :class="{ 'is-invalid': errors.code }"
-              placeholder="Contoh: 00.00"
-            >
-            <span class="error-text" v-if="errors.code">{{ errors.code }}</span>
+      <div class="form-grid">
+        <!-- 1. Kode -->
+        <div class="form-group form-group--full">
+          <label for="code" class="form-label required">Kode</label>
+          <input
+            id="code"
+            v-model="form.code"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('code') }"
+            placeholder="Contoh: 87.44"
+            maxlength="50"
+            required
+          >
+          <div v-if="fieldError('code')" class="invalid-feedback">{{ fieldError('code') }}</div>
+        </div>
+
+        <!-- 2. Nama -->
+        <div class="form-group form-group--full">
+          <label for="name" class="form-label required">Nama</label>
+          <textarea
+            id="name"
+            v-model="form.name"
+            class="form-control form-textarea"
+            :class="{ 'is-invalid': fieldError('name') }"
+            placeholder="Nama lengkap prosedur ICD-9"
+            rows="3"
+            maxlength="255"
+            required
+          ></textarea>
+          <div v-if="fieldError('name')" class="invalid-feedback">{{ fieldError('name') }}</div>
+        </div>
+
+        <!-- 3. Kode INACBG -->
+        <div class="form-group">
+          <label for="inacbg_code" class="form-label">Kode INACBG</label>
+          <input
+            id="inacbg_code"
+            v-model="form.inacbg_code"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('inacbg_code') }"
+            placeholder="Contoh: U-1-01-I"
+            maxlength="100"
+          >
+          <div v-if="fieldError('inacbg_code')" class="invalid-feedback">{{ fieldError('inacbg_code') }}</div>
+        </div>
+
+        <!-- 4. Nama INACBG -->
+        <div class="form-group">
+          <label for="inacbg_name" class="form-label">Nama INACBG</label>
+          <input
+            id="inacbg_name"
+            v-model="form.inacbg_name"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('inacbg_name') }"
+            placeholder="Deskripsi kelompok INACBG (opsional)"
+          >
+          <div v-if="fieldError('inacbg_name')" class="invalid-feedback">{{ fieldError('inacbg_name') }}</div>
+        </div>
+
+        <!-- Section: Tarif Kelas 1, 2, 3 -->
+        <div class="tariff-section form-group--full">
+          <div class="tariff-header">
+            <span class="tariff-title">Tarif Kelas INACBG</span>
+            <span class="tariff-subtitle">Nominal tarif per kelas perawatan (dalam Rupiah)</span>
           </div>
+          <div class="tariff-inputs-grid">
+            <!-- 5. Tarif Kelas 1 -->
+            <div class="form-group">
+              <label for="class_1_tariff" class="form-label">Tarif Kelas 1</label>
+              <div class="input-currency-wrapper">
+                <span class="currency-prefix">Rp</span>
+                <input
+                  id="class_1_tariff"
+                  v-model="form.class_1_tariff"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  class="form-control currency-input"
+                  :class="{ 'is-invalid': fieldError('class_1_tariff') }"
+                  placeholder="0"
+                >
+              </div>
+              <div v-if="fieldError('class_1_tariff')" class="invalid-feedback">{{ fieldError('class_1_tariff') }}</div>
+            </div>
 
-          <div class="form-group">
-            <label class="form-label">Nama Prosedur <span class="text-danger">*</span></label>
-            <input 
-              type="text" 
-              class="form-control" 
-              v-model="form.name"
-              :class="{ 'is-invalid': errors.name }"
-              placeholder="Nama prosedur dalam bahasa Indonesia"
-            >
-            <span class="error-text" v-if="errors.name">{{ errors.name }}</span>
-          </div>
+            <!-- 6. Tarif Kelas 2 -->
+            <div class="form-group">
+              <label for="class_2_tariff" class="form-label">Tarif Kelas 2</label>
+              <div class="input-currency-wrapper">
+                <span class="currency-prefix">Rp</span>
+                <input
+                  id="class_2_tariff"
+                  v-model="form.class_2_tariff"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  class="form-control currency-input"
+                  :class="{ 'is-invalid': fieldError('class_2_tariff') }"
+                  placeholder="0"
+                >
+              </div>
+              <div v-if="fieldError('class_2_tariff')" class="invalid-feedback">{{ fieldError('class_2_tariff') }}</div>
+            </div>
 
-          <div class="form-group">
-            <label class="form-label">Nama Prosedur (EN)</label>
-            <input 
-              type="text" 
-              class="form-control" 
-              v-model="form.english_name"
-              placeholder="Nama prosedur dalam bahasa Inggris"
-            >
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Deskripsi Tambahan</label>
-            <textarea 
-              class="form-control" 
-              v-model="form.description"
-              rows="2"
-              placeholder="Keterangan opsional"
-            ></textarea>
-          </div>
-          
-          <hr class="section-divider">
-
-          <div class="form-group">
-            <label class="form-label">Kode INACBG</label>
-            <input 
-              type="text" 
-              class="form-control" 
-              v-model="form.inacbg_code"
-              placeholder="Kode mapping INACBG"
-            >
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Nama INACBG</label>
-            <input 
-              type="text" 
-              class="form-control" 
-              v-model="form.inacbg_name"
-              placeholder="Deskripsi mapping INACBG"
-            >
-          </div>
-
-          <hr class="section-divider">
-
-          <div class="form-check">
-            <input 
-              type="checkbox" 
-              class="form-checkbox" 
-              id="is_active"
-              v-model="form.is_active"
-            >
-            <label class="form-check-label" for="is_active">
-              Status Aktif
-            </label>
+            <!-- 7. Tarif Kelas 3 -->
+            <div class="form-group">
+              <label for="class_3_tariff" class="form-label">Tarif Kelas 3</label>
+              <div class="input-currency-wrapper">
+                <span class="currency-prefix">Rp</span>
+                <input
+                  id="class_3_tariff"
+                  v-model="form.class_3_tariff"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  class="form-control currency-input"
+                  :class="{ 'is-invalid': fieldError('class_3_tariff') }"
+                  placeholder="0"
+                >
+              </div>
+              <div v-if="fieldError('class_3_tariff')" class="invalid-feedback">{{ fieldError('class_3_tariff') }}</div>
+            </div>
           </div>
         </div>
       </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-secondary" @click="emit('close')" :disabled="loading">
-          Batal
-        </button>
-        <button class="btn btn-primary" @click="onSubmit" :disabled="loading">
-          {{ loading ? 'Menyimpan...' : 'Simpan' }}
-        </button>
-      </div>
     </div>
-  </div>
+  </MasterDataFormModal>
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(15, 23, 42, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  backdrop-filter: blur(4px);
+.modal-form {
+  padding: 0.25rem 0;
 }
 
-.modal-dialog {
-  background: white;
-  width: 100%;
-  max-width: 600px;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-header {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-text-navy);
-}
-
-.modal-close {
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 6px;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-close:hover {
-  background: var(--color-page-bg);
-  color: var(--color-text-navy);
-}
-
-.modal-body {
-  padding: 1.5rem;
-  overflow-y: auto;
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
 }
 
 .form-grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
+}
+
+.form-group--full {
+  grid-column: 1 / -1;
 }
 
 .form-label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--color-text-navy);
+  color: var(--color-text-navy, #17243D);
 }
 
-.text-danger {
-  color: #ef4444;
+.form-label.required::after {
+  content: ' *';
+  color: var(--color-danger, #ef4444);
 }
 
 .form-control {
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.95rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border-soft, #e2e8f0);
+  border-radius: 8px;
+  font-size: 0.875rem;
   font-family: inherit;
+  color: var(--color-text-navy, #17243D);
+  background-color: #ffffff;
   transition: all 0.2s;
-  background: white;
+  box-sizing: border-box;
 }
 
 .form-control:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.1);
+  border-color: var(--color-primary, #087f78);
+  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.12);
 }
 
 .form-control.is-invalid {
-  border-color: #ef4444;
+  border-color: var(--color-danger, #ef4444);
 }
 
 .form-control.is-invalid:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
 }
 
-textarea.form-control {
+.form-textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 70px;
 }
 
-.error-text {
+.invalid-feedback {
   font-size: 0.75rem;
-  color: #ef4444;
+  color: var(--color-danger, #ef4444);
+  margin-top: 0.125rem;
 }
 
-.section-divider {
-  border: none;
-  border-top: 1px solid var(--color-border-soft);
-  margin: 0.5rem 0;
+.tariff-section {
+  background: var(--color-page-bg, #f8fafc);
+  border: 1px solid var(--color-border-soft, #e2e8f0);
+  border-radius: 10px;
+  padding: 1rem;
 }
 
-.form-check {
+.tariff-header {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tariff-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-navy, #17243D);
+}
+
+.tariff-subtitle {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.tariff-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.input-currency-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
 }
 
-.form-checkbox {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 4px;
-  border: 1px solid var(--color-border-soft);
-  accent-color: var(--color-primary);
-  cursor: pointer;
+.currency-prefix {
+  position: absolute;
+  left: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #64748b);
+  pointer-events: none;
 }
 
-.form-check-label {
-  font-size: 0.95rem;
-  color: var(--color-text-navy);
-  cursor: pointer;
+.currency-input {
+  padding-left: 2.25rem;
 }
 
-.modal-footer {
-  padding: 1.25rem 1.5rem;
-  border-top: 1px solid var(--color-border-soft);
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  background: #f8fafc;
-  border-radius: 0 0 12px 12px;
-}
-
-.btn {
-  padding: 0.625rem 1.25rem;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
-}
-
-.btn-secondary {
-  background: white;
-  border-color: var(--color-border);
-  color: var(--color-text-navy);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--color-page-bg);
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .tariff-inputs-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

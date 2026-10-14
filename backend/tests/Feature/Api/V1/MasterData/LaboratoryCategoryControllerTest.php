@@ -39,15 +39,37 @@ class LaboratoryCategoryControllerTest extends TestCase
             'description' => 'Pemeriksaan darah lengkap',
             'type' => 'lab klinik',
             'loinc_code' => '123-4',
+            'loinc_url' => 'https://loinc.org/123-4',
+            'snomed_code' => '252275004',
+            'snomed_url' => 'https://snomed.info/id/252275004',
             'is_active' => true,
         ];
 
         $response = $this->postJson('/api/v1/master-data/laboratory-categories', $payload);
 
         $response->assertStatus(201)
-            ->assertJsonPath('data.name', 'Hematologi Rutin');
+            ->assertJsonPath('data.name', 'Hematologi Rutin')
+            ->assertJsonPath('data.snomed_url', 'https://snomed.info/id/252275004');
 
-        $this->assertDatabaseHas('laboratory_categories', ['name' => 'Hematologi Rutin', 'type' => 'lab klinik', 'loinc_code' => '123-4']);
+        $this->assertDatabaseHas('laboratory_categories', [
+            'name' => 'Hematologi Rutin',
+            'type' => 'lab klinik',
+            'loinc_code' => '123-4',
+            'snomed_url' => 'https://snomed.info/id/252275004',
+        ]);
+    }
+
+    public function test_cannot_create_category_with_invalid_snomed_url()
+    {
+        $response = $this->postJson('/api/v1/master-data/laboratory-categories', [
+            'name' => 'Patologi Anatomi',
+            'snomed_url' => 'invalid-not-a-url',
+            'is_active' => true,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['snomed_url'])
+            ->assertJsonPath('errors.snomed_url.0', 'Format SNOMED URL tidak valid.');
     }
 
     public function test_cannot_create_duplicate_category()
@@ -65,16 +87,25 @@ class LaboratoryCategoryControllerTest extends TestCase
 
     public function test_can_update_category()
     {
-        $category = LaboratoryCategory::factory()->create(['name' => 'Old Name']);
+        $category = LaboratoryCategory::factory()->create([
+            'name' => 'Old Name',
+            'snomed_url' => 'https://old.snomed.info/1',
+        ]);
 
         $response = $this->putJson("/api/v1/master-data/laboratory-categories/{$category->id}", [
             'name' => 'New Name',
+            'snomed_url' => 'https://new.snomed.info/2',
         ]);
 
         $response->assertStatus(200)
-            ->assertJsonPath('data.name', 'New Name');
+            ->assertJsonPath('data.name', 'New Name')
+            ->assertJsonPath('data.snomed_url', 'https://new.snomed.info/2');
 
-        $this->assertDatabaseHas('laboratory_categories', ['name' => 'New Name']);
+        $this->assertDatabaseHas('laboratory_categories', [
+            'id' => $category->id,
+            'name' => 'New Name',
+            'snomed_url' => 'https://new.snomed.info/2',
+        ]);
     }
 
     public function test_can_update_status()

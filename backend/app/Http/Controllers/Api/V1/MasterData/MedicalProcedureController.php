@@ -12,10 +12,11 @@ use App\Models\TariffType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Shuchkin\SimpleXLSXGen;
 
 class MedicalProcedureController extends Controller
 {
-    public function index(Request $request)
+    protected function buildFilteredQuery(Request $request)
     {
         $query = MedicalProcedure::with([
             'procedureCategory',
@@ -36,14 +37,24 @@ class MedicalProcedureController extends Controller
             });
         }
 
-        if ($request->filled('procedure_category_id')) {
-            $query->where('procedure_category_id', $request->procedure_category_id);
+        $categoryId = $request->input('category_id') ?? $request->input('procedure_category_id');
+        if ($categoryId !== null && $categoryId !== '') {
+            if (is_numeric($categoryId) && (int) $categoryId > 0) {
+                $query->where('procedure_category_id', (int) $categoryId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         if ($request->filled('tariff_type_id')) {
-            $query->whereHas('tariffs', function ($q) use ($request) {
-                $q->where('tariff_type_id', $request->tariff_type_id);
-            });
+            $tariffTypeId = $request->input('tariff_type_id');
+            if (is_numeric($tariffTypeId) && (int) $tariffTypeId > 0) {
+                $query->whereHas('tariffs', function ($q) use ($tariffTypeId) {
+                    $q->where('tariff_type_id', (int) $tariffTypeId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         if ($request->filled('polyclinic_id')) {
@@ -52,7 +63,7 @@ class MedicalProcedureController extends Controller
             });
         }
 
-        if ($request->has('is_visible') && $request->is_visible !== null) {
+        if ($request->has('is_visible') && $request->is_visible !== null && $request->is_visible !== '') {
             $query->where('is_visible', $request->is_visible === 'true' || $request->is_visible === '1');
         }
 
@@ -64,10 +75,148 @@ class MedicalProcedureController extends Controller
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');
         }
 
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
+        $query = $this->buildFilteredQuery($request);
         $perPage = $request->input('per_page', 10);
         $procedures = $query->paginate($perPage);
 
         return MedicalProcedureResource::collection($procedures);
+    }
+
+    public function export(Request $request)
+    {
+        if (! class_exists(SimpleXLSXGen::class)) {
+            $fallbackPath = base_path('vendor/shuchkin/simplexlsxgen/src/SimpleXLSXGen.php');
+            if (file_exists($fallbackPath)) {
+                require_once $fallbackPath;
+            }
+        }
+
+        $query = $this->buildFilteredQuery($request);
+        $procedures = $query->get();
+
+        if ($procedures->isEmpty()) {
+            return response()->json([
+                'message' => 'Tidak ada data tindakan yang dapat diunduh.',
+                'data' => [],
+            ], 200);
+        }
+
+        $rows = [
+            [
+                '<b><style bgcolor="#E2E8F0"><top><center>No</b>',
+                '<b><style bgcolor="#E2E8F0"><top>Kategori</b>',
+                '<b><style bgcolor="#E2E8F0"><top><center>Kode</b>',
+                '<b><style bgcolor="#E2E8F0"><top><center>ICD-9-CM</b>',
+                '<b><style bgcolor="#E2E8F0"><top>Tindakan</b>',
+                '<b><style bgcolor="#E2E8F0"><top>Jenis Tarif</b>',
+                '<b><style bgcolor="#E2E8F0"><top><right>Harga</b>',
+                '<b><style bgcolor="#E2E8F0"><top>Poliklinik</b>',
+                '<b><style bgcolor="#E2E8F0"><top><center>Status</b>',
+            ],
+        ];
+
+        $tariffTypeId = $request->input('tariff_type_id');
+        $hasTariffTypeFilter = is_numeric($tariffTypeId) && (int) $tariffTypeId > 0;
+
+        $rowNo = 1;
+        foreach ($procedures as $procedure) {
+            $categoryName = $procedure->procedureCategory?->name;
+            $codeVal = $procedure->name;
+            $icdVal = $procedure->icd9Cm?->code;
+            $nameVal = $procedure->code;
+            $polyclinics = $procedure->polyclinics->pluck('name')->filter()->values();
+            $polyclinicsStr = $polyclinics->isNotEmpty() ? $polyclinics->implode(', ') : '-';
+            $statusStr = $procedure->is_visible ? 'Aktif' : 'Nonaktif';
+
+            $tariffs = $procedure->tariffs;
+            if ($hasTariffTypeFilter) {
+                $tariffs = $tariffs->filter(fn ($t) => (int) $t->tariff_type_id === (int) $tariffTypeId);
+            }
+
+            if ($tariffs->isEmpty()) {
+                $rows[] = [
+                    $rowNo++,
+                    '<top><raw>' . htmlspecialchars($this->sanitizeForExcel($categoryName)) . '</raw>',
+                    "\0" . $this->sanitizeForExcel($codeVal),
+                    "\0" . $this->sanitizeForExcel($icdVal),
+                    '<top><wraptext><raw>' . htmlspecialchars($this->sanitizeForExcel($nameVal)) . '</raw>',
+                    '<top>-',
+                    '<top><right>-',
+                    '<top><wraptext><raw>' . htmlspecialchars($this->sanitizeForExcel($polyclinicsStr)) . '</raw>',
+                    '<top><center>' . $statusStr,
+                ];
+            } else {
+                foreach ($tariffs as $tariff) {
+                    $tariffTypeName = $tariff->tariffType?->name;
+                    $amount = (float) $tariff->total_amount;
+
+                    $rows[] = [
+                        $rowNo++,
+                        '<top><raw>' . htmlspecialchars($this->sanitizeForExcel($categoryName)) . '</raw>',
+                        "\0" . $this->sanitizeForExcel($codeVal),
+                        "\0" . $this->sanitizeForExcel($icdVal),
+                        '<top><wraptext><raw>' . htmlspecialchars($this->sanitizeForExcel($nameVal)) . '</raw>',
+                        '<top><raw>' . htmlspecialchars($this->sanitizeForExcel($tariffTypeName)) . '</raw>',
+                        '<style nf="Rp #,##0"><top><right>' . $amount,
+                        '<top><wraptext><raw>' . htmlspecialchars($this->sanitizeForExcel($polyclinicsStr)) . '</raw>',
+                        '<top><center>' . $statusStr,
+                    ];
+                }
+            }
+        }
+
+        $xlsx = SimpleXLSXGen::fromArray($rows, 'Data Tindakan');
+        $xlsx->freezePanes('A2');
+        $xlsx->autoFilter('A1:I1');
+        $xlsx->setColWidth(1, 6)
+            ->setColWidth(2, 20)
+            ->setColWidth(3, 16)
+            ->setColWidth(4, 16)
+            ->setColWidth(5, 36)
+            ->setColWidth(6, 20)
+            ->setColWidth(7, 18)
+            ->setColWidth(8, 30)
+            ->setColWidth(9, 14);
+
+        $filename = 'data-tindakan-' . now()->format('Y-m-d-His') . '.xlsx';
+        $headers = [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'max-age=0, must-revalidate',
+            'Pragma' => 'public',
+        ];
+
+        return response()->streamDownload(function () use ($xlsx) {
+            echo (string) $xlsx;
+        }, $filename, $headers);
+    }
+
+    protected function sanitizeForExcel(?string $value): string
+    {
+        if ($value === null || $value === '') {
+            return '-';
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return '-';
+        }
+
+        if ($trimmed === '-') {
+            return '-';
+        }
+
+        $firstChar = $trimmed[0];
+        if (in_array($firstChar, ['=', '+', '-', '@'], true)) {
+            return "'" . $trimmed;
+        }
+
+        return $trimmed;
     }
 
     public function store(StoreMedicalProcedureRequest $request)

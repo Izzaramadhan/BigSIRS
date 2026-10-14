@@ -61,6 +61,25 @@ class DoctorScheduleController extends Controller
     }
 
     /**
+     * Display a full unpaginated listing for weekly recap.
+     */
+    public function recap(Request $request)
+    {
+        $schedules = DoctorSchedule::with([
+            'doctor.employee',
+            'doctor.specialization',
+            'polyclinic'
+        ])
+            ->orderBy('polyclinic_id')
+            ->orderBy('doctor_id')
+            ->orderBy('day_of_week')
+            ->orderBy('start_time')
+            ->get();
+
+        return DoctorScheduleResource::collection($schedules);
+    }
+
+    /**
      * Store a newly created resource in storage.
      */
     public function store(StoreDoctorScheduleRequest $request)

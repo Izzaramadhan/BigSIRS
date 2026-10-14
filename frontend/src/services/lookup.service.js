@@ -79,6 +79,11 @@ class LookupService {
     const response = await axios.get('/lookups/generic-medicines', { params })
     return extractCollection(response)
   }
+
+  async createGenericMedicine(data) {
+    const response = await axios.post('/master-data/generic-medicines', data)
+    return response.data?.data ?? response.data
+  }
 }
 
 export default new LookupService()

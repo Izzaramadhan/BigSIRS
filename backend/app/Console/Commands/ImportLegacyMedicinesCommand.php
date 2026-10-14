@@ -82,28 +82,43 @@ class ImportLegacyMedicinesCommand extends Command
             $insertedRoutes++;
         }
 
-        // 5. Generic Medicines (Chunked)
+        // 5. Generic Medicines (Chunked) - Exclude medical equipment (sediaan = '0')
         $this->info('Importing Generic Medicines...');
         $insertedGenerics = 0;
-        DB::connection('legacy')->table('ref_generik')->orderBy('id')->chunk(1000, function ($generics) use (&$insertedGenerics) {
-            $genericsData = [];
-            foreach ($generics as $gen) {
-                $name = trim($gen->nama_objek ?? 'Tanpa Nama');
-                if (empty($name)) {
-                    continue;
-                }
 
-                $genericsData[] = [
-                    'legacy_id' => $gen->id,
-                    'name' => $name,
-                    'is_active' => $gen->status == 1,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-                $insertedGenerics++;
-            }
-            GenericMedicine::upsert($genericsData, ['legacy_id'], ['name', 'is_active', 'updated_at']);
-        });
+        // Clean any existing equipment records that were previously imported
+        $equipmentLegacyIds = DB::connection('legacy')->table('ref_generik')
+            ->where('sediaan', '0')
+            ->pluck('id')
+            ->toArray();
+        if (! empty($equipmentLegacyIds)) {
+            GenericMedicine::whereIn('legacy_id', $equipmentLegacyIds)->forceDelete();
+        }
+
+        DB::connection('legacy')->table('ref_generik')
+            ->where(function ($q) {
+                $q->whereNull('sediaan')->orWhere('sediaan', '!=', '0');
+            })
+            ->orderBy('id')
+            ->chunk(1000, function ($generics) use (&$insertedGenerics) {
+                $genericsData = [];
+                foreach ($generics as $gen) {
+                    $name = trim($gen->nama_objek ?? 'Tanpa Nama', " \t\n\r\0\x0B\"'");
+                    if (empty($name)) {
+                        continue;
+                    }
+
+                    $genericsData[] = [
+                        'legacy_id' => $gen->id,
+                        'name' => $name,
+                        'is_active' => $gen->status == 1,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                    $insertedGenerics++;
+                }
+                GenericMedicine::upsert($genericsData, ['legacy_id'], ['name', 'is_active', 'updated_at']);
+            });
 
         $this->info('Dependencies imported.');
 
@@ -112,7 +127,22 @@ class ImportLegacyMedicinesCommand extends Command
         $mapUnits = MedicineUnit::pluck('id', 'legacy_id')->toArray();
         $mapClassifications = MedicineClassification::pluck('id', 'legacy_id')->toArray();
         $mapRoutes = MedicineRoute::pluck('id', 'legacy_id')->toArray();
-        $mapGenerics = GenericMedicine::pluck('id', 'legacy_id')->toArray();
+        $mapGenericsByLegacyId = GenericMedicine::pluck('id', 'legacy_id')->toArray();
+
+        // Build generic mapping: ref_obat.id_generik primarily stores ref_generik.id_hlp.
+        // If id_hlp is null/empty, it references ref_generik.id directly.
+        $validLegacyGenerics = DB::connection('legacy')->table('ref_generik')
+            ->where(function ($q) {
+                $q->whereNull('sediaan')->orWhere('sediaan', '!=', '0');
+            })
+            ->get(['id', 'id_hlp']);
+
+        $mapGenericsByHlp = [];
+        foreach ($validLegacyGenerics as $lg) {
+            if (! empty($lg->id_hlp) && (int) $lg->id_hlp > 0 && isset($mapGenericsByLegacyId[$lg->id])) {
+                $mapGenericsByHlp[(int) $lg->id_hlp] = $mapGenericsByLegacyId[$lg->id];
+            }
+        }
 
         // 5b. Medicine Selling Prices from logistics log stok
         $latestPrices = DB::connection('legacy')->table('lgs_faktur_detail as fd')
@@ -143,6 +173,16 @@ class ImportLegacyMedicinesCommand extends Command
                 continue;
             }
 
+            $genericMedicineId = null;
+            if (! empty($med->id_generik)) {
+                $idGen = (int) $med->id_generik;
+                if (isset($mapGenericsByHlp[$idGen])) {
+                    $genericMedicineId = $mapGenericsByHlp[$idGen];
+                } elseif (isset($mapGenericsByLegacyId[$idGen])) {
+                    $genericMedicineId = $mapGenericsByLegacyId[$idGen];
+                }
+            }
+
             $data = [
                 'code' => $med->kode,
                 'name' => $name,
@@ -152,7 +192,7 @@ class ImportLegacyMedicinesCommand extends Command
                 'medicine_category_id' => $mapCategories[$med->id_kategori_obat] ?? null,
                 'medicine_classification_id' => $mapClassifications[$med->id_golongan] ?? null,
                 'medicine_route_id' => $mapRoutes[$med->id_obat_jalur_masuk] ?? null,
-                'generic_medicine_id' => $mapGenerics[$med->id_generik] ?? null,
+                'generic_medicine_id' => $genericMedicineId,
                 'selling_price_per_unit' => $latestPrices[$med->id]->harga_jual ?? null,
                 'description' => $med->deskripsi,
                 'is_active' => $med->status == '1',

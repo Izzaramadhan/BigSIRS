@@ -233,7 +233,7 @@ const viewLegacy = (item) => {
           v-model="searchQuery" 
           placeholder="Cari nama, deskripsi, atau resource..." 
         />
-        <div class="filter-controls">
+        <div class="filter-actions">
           <button 
             type="button" 
             class="btn-icon" 
@@ -322,11 +322,11 @@ const viewLegacy = (item) => {
           </div>
           
           <MasterDataPagination 
-            v-if="meta && meta.last_page > 1"
+            v-if="meta"
             :pagination="{
               current_page: currentPage,
-              last_page: meta.last_page,
-              total: meta.total,
+              last_page: meta.last_page || 1,
+              total: meta.total || 0,
               per_page: perPage,
               from: meta.from,
               to: meta.to
@@ -349,9 +349,9 @@ const viewLegacy = (item) => {
 
     <MasterDataDeleteDialog 
       :is-open="isDeleteModalOpen"
+      title="Hapus Surat?"
       :item-name="itemToDelete?.name"
-      :is-deleting="formLoading"
-      item-type="Surat"
+      :is-submitting="formLoading"
       @close="isDeleteModalOpen = false"
       @confirm="handleDelete"
     />
@@ -367,58 +367,7 @@ const viewLegacy = (item) => {
 .col-resource { min-width: 150px; }
 .col-actions { width: 140px; text-align: center; }
 
-.filters-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-}
 
-.filter-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover:not(:disabled) {
-  background: var(--color-page-bg);
-  color: var(--color-text-navy);
-}
-
-.btn-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 
 .code-text {
   font-family: monospace;

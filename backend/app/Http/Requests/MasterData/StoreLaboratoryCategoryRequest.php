@@ -34,12 +34,34 @@ class StoreLaboratoryCategoryRequest extends FormRequest
         ];
     }
 
+    public function messages(): array
+    {
+        return [
+            'snomed_url.url' => 'Format SNOMED URL tidak valid.',
+            'loinc_url.url' => 'Format LOINC URL tidak valid.',
+        ];
+    }
+
     public function prepareForValidation()
     {
+        $merge = [];
         if ($this->has('name')) {
-            $this->merge([
-                'name' => trim(preg_replace('/\s+/', ' ', $this->name)),
-            ]);
+            $merge['name'] = trim(preg_replace('/\s+/', ' ', (string) $this->name));
+        }
+        if ($this->has('snomed_url')) {
+            $merge['snomed_url'] = is_string($this->snomed_url) ? trim($this->snomed_url) : $this->snomed_url;
+            if ($merge['snomed_url'] === '') {
+                $merge['snomed_url'] = null;
+            }
+        }
+        if ($this->has('loinc_url')) {
+            $merge['loinc_url'] = is_string($this->loinc_url) ? trim($this->loinc_url) : $this->loinc_url;
+            if ($merge['loinc_url'] === '') {
+                $merge['loinc_url'] = null;
+            }
+        }
+        if (!empty($merge)) {
+            $this->merge($merge);
         }
     }
 }

@@ -152,4 +152,81 @@ class MedicineControllerTest extends TestCase
             'selling_price_per_unit' => 2251.7,
         ]);
     }
+
+    public function test_can_create_medicine_with_valid_generic_medicine_id()
+    {
+        $generic = GenericMedicine::create(['name' => 'Paracetamol', 'is_active' => true]);
+
+        $data = [
+            'name' => 'Paracetamol 500mg',
+            'generic_medicine_id' => $generic->id,
+        ];
+
+        $response = $this->postJson('/api/v1/master-data/medicines', $data);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.generic_medicine_id', $generic->id)
+            ->assertJsonPath('data.generic.name', 'Paracetamol');
+
+        $this->assertDatabaseHas('medicines', [
+            'name' => 'Paracetamol 500mg',
+            'generic_medicine_id' => $generic->id,
+        ]);
+    }
+
+    public function test_rejects_create_medicine_with_invalid_generic_medicine_id()
+    {
+        $data = [
+            'name' => 'Obat Abal',
+            'generic_medicine_id' => 999999,
+        ];
+
+        $response = $this->postJson('/api/v1/master-data/medicines', $data);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['generic_medicine_id']);
+    }
+
+    public function test_show_medicine_includes_generic_relation()
+    {
+        $generic = GenericMedicine::create(['name' => 'Amoxicillin Trihydrate', 'is_active' => true]);
+        $medicine = Medicine::create([
+            'name' => 'Amoxicillin 500mg',
+            'generic_medicine_id' => $generic->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->getJson("/api/v1/master-data/medicines/{$medicine->id}");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.generic_medicine_id', $generic->id)
+            ->assertJsonPath('data.generic.id', $generic->id)
+            ->assertJsonPath('data.generic.name', 'Amoxicillin Trihydrate');
+    }
+
+    public function test_can_update_medicine_generic_medicine_id()
+    {
+        $gen1 = GenericMedicine::create(['name' => 'Generik Lama', 'is_active' => true]);
+        $gen2 = GenericMedicine::create(['name' => 'Generik Baru', 'is_active' => true]);
+
+        $medicine = Medicine::create([
+            'name' => 'Obat Uji',
+            'generic_medicine_id' => $gen1->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->putJson("/api/v1/master-data/medicines/{$medicine->id}", [
+            'name' => 'Obat Uji',
+            'generic_medicine_id' => $gen2->id,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.generic_medicine_id', $gen2->id)
+            ->assertJsonPath('data.generic.name', 'Generik Baru');
+
+        $this->assertDatabaseHas('medicines', [
+            'id' => $medicine->id,
+            'generic_medicine_id' => $gen2->id,
+        ]);
+    }
 }

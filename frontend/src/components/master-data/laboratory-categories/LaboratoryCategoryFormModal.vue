@@ -34,6 +34,18 @@ const form = reactive({
   is_active: true
 });
 
+const clientErrors = reactive({});
+
+const isValidHttpUrl = (string) => {
+  if (!string) return true;
+  try {
+    const url = new URL(string);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const resetForm = () => {
   form.name = '';
   form.description = '';
@@ -43,6 +55,7 @@ const resetForm = () => {
   form.snomed_code = '';
   form.snomed_url = '';
   form.is_active = true;
+  Object.keys(clientErrors).forEach(key => delete clientErrors[key]);
 };
 
 const populateForm = (data) => {
@@ -54,6 +67,7 @@ const populateForm = (data) => {
   form.snomed_code = data.snomed_code || '';
   form.snomed_url = data.snomed_url || '';
   form.is_active = data.is_active !== undefined ? Boolean(data.is_active) : true;
+  Object.keys(clientErrors).forEach(key => delete clientErrors[key]);
 };
 
 watch(
@@ -82,11 +96,26 @@ watch(
 );
 
 const fieldError = (field) => {
+  if (clientErrors[field]) return clientErrors[field];
   if (!props.errors || !props.errors[field]) return null;
   return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field];
 };
 
 const handleSubmit = () => {
+  Object.keys(clientErrors).forEach(key => delete clientErrors[key]);
+
+  if (form.loinc_url && form.loinc_url.trim() && !isValidHttpUrl(form.loinc_url.trim())) {
+    clientErrors.loinc_url = 'Format LOINC URL tidak valid.';
+  }
+
+  if (form.snomed_url && form.snomed_url.trim() && !isValidHttpUrl(form.snomed_url.trim())) {
+    clientErrors.snomed_url = 'Format SNOMED URL tidak valid.';
+  }
+
+  if (Object.keys(clientErrors).length > 0) {
+    return;
+  }
+
   const payload = {
     name: form.name.trim(),
     description: form.description && form.description.trim() ? form.description.trim() : null,
@@ -211,7 +240,26 @@ const handleSubmit = () => {
           </div>
         </div>
 
-        <!-- 6. Status -->
+        <!-- 6. SNOMED URL -->
+        <div class="form-group">
+          <label for="snomed_url" class="form-label">SNOMED URL</label>
+          <input
+            id="snomed_url"
+            v-model="form.snomed_url"
+            type="url"
+            class="form-control"
+            :class="{ 'is-invalid': fieldError('snomed_url') }"
+            placeholder="https://..."
+            maxlength="255"
+            :disabled="isSubmitting"
+            @input="delete clientErrors.snomed_url"
+          />
+          <div v-if="fieldError('snomed_url')" class="invalid-feedback">
+            {{ fieldError('snomed_url') }}
+          </div>
+        </div>
+
+        <!-- 7. Status -->
         <div class="form-group">
           <span class="form-label">Status</span>
           <div class="toggle-group">
@@ -231,7 +279,7 @@ const handleSubmit = () => {
           </div>
         </div>
 
-        <!-- 7. Deskripsi -->
+        <!-- 8. Deskripsi -->
         <div class="form-group form-group--full">
           <label for="description" class="form-label">Deskripsi</label>
           <textarea

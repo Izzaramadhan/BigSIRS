@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import PolyclinicFormModal from '../PolyclinicFormModal.vue'
+import { polyclinicService } from '@/services/polyclinic'
 
 vi.mock('@/services/polyclinic', () => {
   return {
@@ -77,6 +78,61 @@ describe('PolyclinicFormModal', () => {
     expect(wrapper.find('#quota').exists()).toBe(true)
     expect(wrapper.find('#jkn_quota').exists()).toBe(true)
     expect(wrapper.find('#warehouse_id').exists()).toBe(true)
+    expect(wrapper.find('#bpjs_code').exists()).toBe(true)
+  })
+
+  it('renders bpjs_code input as optional without required attribute or label indicator', () => {
+    const wrapper = mountModal()
+    const input = wrapper.find('input#bpjs_code')
+    const label = wrapper.find('label[for="bpjs_code"]')
+
+    expect(input.exists()).toBe(true)
+    expect(input.attributes('required')).toBeUndefined()
+    expect(input.attributes('placeholder')).toBe('Masukkan kode BPJS')
+    expect(input.attributes('maxlength')).toBe('50')
+    expect(label.classes()).not.toContain('required')
+  })
+
+  it('displays stored bpjs_code value on Edit modal', async () => {
+    polyclinicService.getPolyclinic.mockResolvedValue({
+      data: {
+        data: {
+          id: 10,
+          code: 'POLI-10',
+          name: 'Poli Jantung',
+          bpjs_code: 'BPJS-10'
+        }
+      }
+    })
+
+    const wrapper = mountModal({
+      polyclinic: { id: 10, code: 'POLI-10', bpjs_code: 'BPJS-10' }
+    })
+    await flushPromises()
+
+    const input = wrapper.find('input#bpjs_code')
+    expect(input.element.value).toBe('BPJS-10')
+  })
+
+  it('displays empty string if stored bpjs_code is null on Edit modal', async () => {
+    polyclinicService.getPolyclinic.mockResolvedValue({
+      data: {
+        data: {
+          id: 11,
+          code: 'POLI-11',
+          name: 'Poli Kulit',
+          bpjs_code: null
+        }
+      }
+    })
+
+    const wrapper = mountModal({
+      polyclinic: { id: 11, code: 'POLI-11', bpjs_code: null }
+    })
+    await flushPromises()
+
+    const input = wrapper.find('input#bpjs_code')
+    expect(input.element.value).toBe('')
   })
 
   it('service_type dropdown lists all service types', () => {
@@ -106,6 +162,7 @@ describe('PolyclinicFormModal', () => {
     await wrapper.find('input#name').setValue('Test Name')
     await wrapper.find('#service_type').setValue('rawat-jalan')
     await wrapper.find('textarea#description').setValue(' desc ')
+    await wrapper.find('input#bpjs_code').setValue('  BPJS-01  ')
     
     await wrapper.find('form').trigger('submit.prevent')
     
@@ -117,7 +174,23 @@ describe('PolyclinicFormModal', () => {
       service_type: 'rawat-jalan',
       description: 'desc',
       warehouse_id: null,
+      bpjs_code: 'BPJS-01',
     }))
+  })
+
+  it('sends bpjs_code as null when input is empty or contains only whitespace', async () => {
+    const wrapper = mountModal()
+    
+    await wrapper.find('input#code').setValue('TEST01')
+    await wrapper.find('input#name').setValue('Test Name')
+    await wrapper.find('#service_type').setValue('rawat-jalan')
+    await wrapper.find('input#bpjs_code').setValue('    ')
+    
+    await wrapper.find('form').trigger('submit.prevent')
+    
+    const emitted = wrapper.emitted('submit')
+    expect(emitted).toBeTruthy()
+    expect(emitted[0][0].bpjs_code).toBeNull()
   })
 
   it('payload does NOT include parent_id', async () => {
@@ -132,12 +205,18 @@ describe('PolyclinicFormModal', () => {
     expect(emitted[0][0]).not.toHaveProperty('parent_id')
   })
 
-  it('maps validation errors to fields', () => {
+  it('maps validation errors to fields including bpjs_code', () => {
     const wrapper = mountModal({
-      errors: { code: ['Code is taken'] }
+      errors: {
+        code: ['Code is taken'],
+        bpjs_code: ['Kode BPJS maksimal 50 karakter.'],
+      }
     })
     
-    expect(wrapper.find('.invalid-feedback').text()).toBe('Code is taken')
     expect(wrapper.find('#code').classes()).toContain('is-invalid')
+    const bpjsInput = wrapper.find('#bpjs_code')
+    expect(bpjsInput.classes()).toContain('is-invalid')
+    const bpjsError = wrapper.findAll('.invalid-feedback').find(el => el.text() === 'Kode BPJS maksimal 50 karakter.')
+    expect(bpjsError).toBeDefined()
   })
 })

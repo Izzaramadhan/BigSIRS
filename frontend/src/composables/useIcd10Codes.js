@@ -1,138 +1,182 @@
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import icd10Service from '@/services/master-data/icd10.service'
 
 export function useIcd10Codes() {
-  const codes = ref([])
+  const items = ref([])
   const loading = ref(false)
+  const submitting = ref(false)
   const error = ref(null)
-  
-  const pagination = ref({
-    currentPage: 1,
-    perPage: 10,
+
+  const pagination = reactive({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
     total: 0,
-    lastPage: 1
-  })
-  
-  const filters = ref({
-    search: '',
-    is_active: null
+    from: 0,
+    to: 0,
+    get currentPage() {
+      return this.current_page
+    },
+    set currentPage(val) {
+      this.current_page = val
+    },
+    get lastPage() {
+      return this.last_page
+    },
+    set lastPage(val) {
+      this.last_page = val
+    },
+    get perPage() {
+      return this.per_page
+    },
+    set perPage(val) {
+      this.per_page = val
+    }
   })
 
-  const fetchCodes = async (page = 1) => {
+  const filters = reactive({
+    search: ''
+  })
+
+  const sort = reactive({
+    column: 'code',
+    direction: 'asc'
+  })
+
+  const fetchIcd10Codes = async (page = 1) => {
     loading.value = true
     error.value = null
     try {
+      const targetPage = typeof page === 'number' ? page : pagination.current_page || 1
       const params = {
-        page,
-        per_page: pagination.value.perPage,
-        ...(filters.value.search ? { search: filters.value.search } : {}),
-        ...(filters.value.is_active !== null ? { is_active: filters.value.is_active ? 1 : 0 } : {})
+        page: targetPage,
+        per_page: pagination.per_page,
+        sort: sort.column,
+        direction: sort.direction
       }
-      
+
+      if (filters.search && filters.search.trim()) {
+        params.search = filters.search.trim()
+      }
+
       const response = await icd10Service.getIcd10Codes(params)
-      codes.value = response.data
-      
+      items.value = response.data || []
+
       if (response.meta) {
-        pagination.value = {
-          currentPage: response.meta.current_page,
-          perPage: response.meta.per_page,
-          total: response.meta.total,
-          lastPage: response.meta.last_page
-        }
+        pagination.current_page = response.meta.current_page ?? targetPage
+        pagination.last_page = response.meta.last_page ?? 1
+        pagination.per_page = response.meta.per_page ?? 10
+        pagination.total = response.meta.total ?? items.value.length
+        pagination.from = response.meta.from ?? (items.value.length > 0 ? (pagination.current_page - 1) * pagination.per_page + 1 : 0)
+        pagination.to = response.meta.to ?? Math.min(pagination.current_page * pagination.per_page, pagination.total)
+      } else {
+        pagination.current_page = targetPage
+        pagination.last_page = 1
+        pagination.total = items.value.length
+        pagination.from = items.value.length > 0 ? 1 : 0
+        pagination.to = items.value.length
       }
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal mengambil data ICD-10'
+      error.value = err.response?.data?.message || 'Data ICD-10 gagal dimuat.'
       console.error(err)
     } finally {
       loading.value = false
     }
   }
 
-  const createCode = async (data) => {
-    loading.value = true
+  const createIcd10Code = async (payload) => {
+    submitting.value = true
     error.value = null
     try {
-      await icd10Service.createIcd10Code(data)
-      await fetchCodes(1)
-      return true
+      const response = await icd10Service.createIcd10Code(payload)
+      return { success: true, data: response.data }
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menambahkan ICD-10'
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const updateCode = async (id, data) => {
-    loading.value = true
-    error.value = null
-    try {
-      await icd10Service.updateIcd10Code(id, data)
-      await fetchCodes(pagination.value.currentPage)
-      return true
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui ICD-10'
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const updateStatus = async (id, isActive) => {
-    loading.value = true
-    error.value = null
-    try {
-      await icd10Service.updateStatus(id, isActive)
-      
-      const idx = codes.value.findIndex(c => c.id === id)
-      if (idx !== -1) {
-        codes.value[idx].is_active = isActive
+      return {
+        success: false,
+        error: err,
+        errors: err.response?.data?.errors || {}
       }
-      return true
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal mengubah status ICD-10'
-      return false
     } finally {
-      loading.value = false
+      submitting.value = false
     }
   }
 
-  const deleteCode = async (id) => {
-    loading.value = true
+  const updateIcd10Code = async (id, payload) => {
+    submitting.value = true
     error.value = null
     try {
-      await icd10Service.deleteIcd10Code(id)
-      await fetchCodes(pagination.value.currentPage)
-      return true
+      const response = await icd10Service.updateIcd10Code(id, payload)
+      return { success: true, data: response.data }
     } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menghapus ICD-10'
-      return false
+      return {
+        success: false,
+        error: err,
+        errors: err.response?.data?.errors || {}
+      }
     } finally {
-      loading.value = false
+      submitting.value = false
     }
   }
 
-  const handlePageChange = (page) => {
-    fetchCodes(page)
+  const deleteIcd10Code = async (id) => {
+    submitting.value = true
+    error.value = null
+    try {
+      const response = await icd10Service.deleteIcd10Code(id)
+      return { success: true, data: response }
+    } catch (err) {
+      return {
+        success: false,
+        error: err
+      }
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  const setPage = (page) => {
+    if (page >= 1 && page <= pagination.last_page) {
+      pagination.current_page = page
+      fetchIcd10Codes(page)
+    }
+  }
+
+  const setSort = (column) => {
+    if (sort.column === column) {
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      sort.column = column
+      sort.direction = 'asc'
+    }
+    fetchIcd10Codes(1)
   }
 
   const setFilter = (key, value) => {
-    filters.value[key] = value
-    fetchCodes(1)
+    filters[key] = value
+    pagination.current_page = 1
+    fetchIcd10Codes(1)
   }
 
   return {
-    codes,
+    items,
+    codes: items,
     loading,
+    submitting,
     error,
     pagination,
     filters,
-    fetchCodes,
-    createCode,
-    updateCode,
-    updateStatus,
-    deleteCode,
-    handlePageChange,
+    sort,
+    fetchCodes: fetchIcd10Codes,
+    fetchIcd10Codes,
+    createCode: createIcd10Code,
+    createIcd10Code,
+    updateCode: updateIcd10Code,
+    updateIcd10Code,
+    deleteCode: deleteIcd10Code,
+    deleteIcd10Code,
+    setPage,
+    handlePageChange: setPage,
+    setSort,
     setFilter
   }
 }

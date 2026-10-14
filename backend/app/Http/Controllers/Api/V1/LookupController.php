@@ -357,15 +357,28 @@ class LookupController extends Controller
 
     public function genericMedicines(Request $request)
     {
-        $query = GenericMedicine::where('is_active', true);
+        $query = GenericMedicine::query();
+
+        if ($request->has('is_active')) {
+            $query->where('is_active', $request->boolean('is_active'));
+        } else {
+            $query->where('is_active', true);
+        }
+
         if ($search = $request->get('search')) {
             $query->where('name', 'like', "%{$search}%");
         }
-        if ($request->has('ids')) {
+
+        $limit = (int) $request->get('limit', $request->get('per_page', 50));
+
+        if ($request->filled('ids')) {
             $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
-            $query->orWhereIn('id', $ids);
+            $selected = GenericMedicine::whereIn('id', $ids)->get();
+            $items = $query->orderBy('name')->limit($limit)->get();
+
+            return response()->json($selected->merge($items)->unique('id')->values());
         }
 
-        return response()->json($query->limit(50)->orderBy('name')->get());
+        return response()->json($query->orderBy('name')->limit($limit)->get());
     }
 }

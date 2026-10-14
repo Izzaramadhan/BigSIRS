@@ -20,11 +20,16 @@ export function useProcedures() {
         loading.value = true;
         error.value = null;
         try {
-            const response = await procedureService.getProcedures({
+            const cleanParams = {
                 page: pagination.current_page,
-                per_page: pagination.per_page,
-                ...params
+                per_page: pagination.per_page
+            };
+            Object.keys(params).forEach(key => {
+                if (params[key] !== null && params[key] !== undefined && params[key] !== '') {
+                    cleanParams[key] = params[key];
+                }
             });
+            const response = await procedureService.getProcedures(cleanParams);
             procedures.value = response.data.data;
             if (response.data.meta) {
               pagination.current_page = response.data.meta.current_page;
@@ -109,16 +114,111 @@ export function useProcedures() {
         }
     };
 
+    const exporting = ref(false);
+
+    const exportProcedures = async (params = {}) => {
+        exporting.value = true;
+        try {
+            const cleanParams = {};
+            Object.keys(params).forEach(key => {
+                if (key !== 'page' && key !== 'per_page') {
+                    if (params[key] !== null && params[key] !== undefined && params[key] !== '') {
+                        cleanParams[key] = params[key];
+                    }
+                }
+            });
+
+            const response = await procedureService.exportProcedures(cleanParams);
+
+            // If backend returned a JSON response (e.g. empty results or message)
+            if (response.data?.type?.includes('application/json') || response.headers?.['content-type']?.includes('application/json')) {
+                let json = {};
+                try {
+                    const text = typeof response.data.text === 'function' ? await response.data.text() : JSON.stringify(response.data);
+                    json = JSON.parse(text);
+                } catch {
+                    // ignore
+                }
+                return {
+                    success: false,
+                    empty: true,
+                    message: json.message || 'Tidak ada data tindakan yang dapat diunduh.'
+                };
+            }
+
+            // Extract filename from Content-Disposition if present
+            let filename = `data-tindakan-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.xlsx`;
+            const disposition = response.headers?.['content-disposition'];
+            if (disposition) {
+                const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+                if (match && match[1]) {
+                    filename = match[1].trim();
+                }
+            }
+
+            // Trigger browser download safely
+            const blob = new Blob([response.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+
+            return {
+                success: true,
+                message: 'Data tindakan berhasil diunduh.'
+            };
+        } catch (err) {
+            let errorMessage = 'Data tindakan gagal diunduh. Silakan coba lagi.';
+            let isEmpty = false;
+
+            if (err.response?.data instanceof Blob) {
+                try {
+                    const text = await err.response.data.text();
+                    const json = JSON.parse(text);
+                    if (json.message) {
+                        errorMessage = json.message;
+                        if (json.message.includes('Tidak ada data')) {
+                            isEmpty = true;
+                        }
+                    }
+                } catch {
+                    // Not JSON blob
+                }
+            } else if (err.response?.data?.message) {
+                errorMessage = err.response.data.message;
+                if (errorMessage.includes('Tidak ada data')) {
+                    isEmpty = true;
+                }
+            }
+
+            return {
+                success: false,
+                empty: isEmpty,
+                message: errorMessage
+            };
+        } finally {
+            exporting.value = false;
+        }
+    };
+
     return {
         procedures,
         pagination,
         loading,
+        exporting,
         error,
         fetchProcedures,
         getProcedure,
         createProcedure,
         updateProcedure,
         updateProcedureVisibility,
-        deleteProcedure
+        deleteProcedure,
+        exportProcedures
     };
 }
