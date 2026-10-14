@@ -1,7 +1,10 @@
 <script setup>
 import { reactive, watch, ref } from 'vue';
 import lookupService from '@/services/lookup.service';
+import genericMedicinesService from '@/services/master-data/genericMedicines.service';
 import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import SearchableSelect from '@/components/common/SearchableSelect.vue';
+import AddGenericDialog from './AddGenericDialog.vue';
 
 const props = defineProps({
   isOpen: {
@@ -26,7 +29,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'submit']);
+const emit = defineEmits(['close', 'submit', 'toast']);
 
 const currentMedicine = () => props.medicine || props.item || null;
 
@@ -53,57 +56,123 @@ const routes = ref([]);
 const generics = ref([]);
 
 const genericSearchQuery = ref('');
+const genericError = ref('');
 const loadingLookups = ref(false);
 const loadingGenerics = ref(false);
 
 const fetchLookups = async () => {
   loadingLookups.value = true;
+  genericError.value = '';
   try {
+    const currentMed = currentMedicine();
+    const genericParams = { search: '' };
+    if (currentMed?.generic_medicine_id) {
+      genericParams.ids = currentMed.generic_medicine_id;
+    }
+
     const [uns, cats, clss, rts, gens] = await Promise.all([
       lookupService.getMedicineUnits(),
       lookupService.getMedicineCategories(),
       lookupService.getMedicineClassifications(),
       lookupService.getMedicineRoutes(),
-      lookupService.getGenericMedicines({ search: '' })
+      lookupService.getGenericMedicines(genericParams)
     ]);
     units.value = uns || [];
     categories.value = cats || [];
     classifications.value = clss || [];
     routes.value = rts || [];
     generics.value = gens || [];
+
+    // Ensure selected generic is in generics options
+    if (currentMed?.generic_medicine_id && currentMed.generic) {
+      const exists = generics.value.some((g) => String(g.id) === String(currentMed.generic_medicine_id));
+      if (!exists) {
+        generics.value.unshift(currentMed.generic);
+      }
+    }
   } catch (err) {
     console.error('Gagal memuat referensi obat:', err);
+    genericError.value = 'Gagal memuat referensi obat.';
   } finally {
     loadingLookups.value = false;
   }
 };
 
-let genericSearchTimeout = null;
-const handleSearchGeneric = (event) => {
-  const query = event.target.value;
+const handleSearchGeneric = async (query) => {
   genericSearchQuery.value = query;
-  if (genericSearchTimeout) clearTimeout(genericSearchTimeout);
+  loadingGenerics.value = true;
+  genericError.value = '';
+  try {
+    const res = await lookupService.getGenericMedicines({ search: query });
+    generics.value = res || [];
 
-  genericSearchTimeout = setTimeout(async () => {
-    loadingGenerics.value = true;
-    try {
-      const res = await lookupService.getGenericMedicines({ search: query });
-      generics.value = res || [];
-
-      // If form already has a selected generic that is not in the new search results, keep it
-      const currentGenId = form.generic_medicine_id;
-      if (currentGenId && !generics.value.some((g) => g.id === Number(currentGenId))) {
-        const itemObj = currentMedicine();
-        if (itemObj?.generic && itemObj.generic.id === Number(currentGenId)) {
-          generics.value.unshift(itemObj.generic);
-        }
+    // If form already has a selected generic that is not in the new search results, keep it
+    const currentGenId = form.generic_medicine_id;
+    if (currentGenId && !generics.value.some((g) => String(g.id) === String(currentGenId))) {
+      const itemObj = currentMedicine();
+      if (itemObj?.generic && String(itemObj.generic.id) === String(currentGenId)) {
+        generics.value.unshift(itemObj.generic);
       }
-    } catch (err) {
-      console.error('Gagal mencari obat generik:', err);
-    } finally {
-      loadingGenerics.value = false;
     }
-  }, 400);
+  } catch (err) {
+    console.error('Gagal mencari obat generik:', err);
+    genericError.value = 'Gagal memuat data generik.';
+  } finally {
+    loadingGenerics.value = false;
+  }
+};
+
+const addGenericDialog = reactive({
+  isOpen: false,
+  initialName: '',
+  isSubmitting: false,
+  errorMessage: ''
+});
+
+const handleCreateGeneric = (name) => {
+  addGenericDialog.initialName = name;
+  addGenericDialog.errorMessage = '';
+  addGenericDialog.isOpen = true;
+};
+
+const handleCloseAddGeneric = () => {
+  if (addGenericDialog.isSubmitting) return;
+  addGenericDialog.isOpen = false;
+  addGenericDialog.errorMessage = '';
+};
+
+const handleSubmitAddGeneric = async (name) => {
+  addGenericDialog.isSubmitting = true;
+  addGenericDialog.errorMessage = '';
+  try {
+    const res = await genericMedicinesService.createGenericMedicine({ name });
+    const newGeneric = res?.data ?? res;
+
+    if (newGeneric?.id) {
+      const exists = generics.value.some((g) => String(g.id) === String(newGeneric.id));
+      if (!exists) {
+        generics.value.unshift(newGeneric);
+      }
+      form.generic_medicine_id = String(newGeneric.id);
+      clearFieldError('generic_medicine_id');
+      addGenericDialog.isOpen = false;
+
+      emit('toast', {
+        type: 'success',
+        title: 'Berhasil',
+        message: 'Data generik berhasil ditambahkan.'
+      });
+    }
+  } catch (err) {
+    console.error('Gagal menambahkan data generik:', err);
+    const msg =
+      err.response?.data?.errors?.name?.[0] ||
+      err.response?.data?.message ||
+      'Gagal menambahkan data generik.';
+    addGenericDialog.errorMessage = msg;
+  } finally {
+    addGenericDialog.isSubmitting = false;
+  }
 };
 
 const resetForm = () => {
@@ -118,6 +187,9 @@ const resetForm = () => {
   form.generic_medicine_id = '';
   form.description = '';
   genericSearchQuery.value = '';
+  genericError.value = '';
+  addGenericDialog.isOpen = false;
+  addGenericDialog.errorMessage = '';
   Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
 };
 
@@ -133,11 +205,12 @@ const populateForm = (data) => {
   form.generic_medicine_id = data.generic_medicine_id ? String(data.generic_medicine_id) : '';
   form.description = data.description || '';
   genericSearchQuery.value = '';
+  genericError.value = '';
   Object.keys(clientErrors).forEach((key) => delete clientErrors[key]);
 
   // Ensure selected generic is in generics options
   if (data.generic_medicine_id && data.generic) {
-    const exists = generics.value.some((g) => g.id === data.generic_medicine_id);
+    const exists = generics.value.some((g) => String(g.id) === String(data.generic_medicine_id));
     if (!exists) {
       generics.value.unshift(data.generic);
     }
@@ -414,30 +487,24 @@ const handleSubmit = () => {
         <!-- 9. Generik (Full Width) -->
         <div class="form-group form-group--full">
           <label for="generic_medicine_id" class="form-label">Generik</label>
-          <div class="searchable-lookup">
-            <input
-              type="text"
-              class="form-control form-search-sub"
-              placeholder="Cari obat generik..."
-              :value="genericSearchQuery"
-              :disabled="isSubmitting"
-              @input="handleSearchGeneric"
-            />
-            <select
-              id="generic_medicine_id"
-              v-model="form.generic_medicine_id"
-              class="form-control form-select"
-              :class="{ 'is-invalid': fieldError('generic_medicine_id') }"
-              :disabled="isSubmitting || loadingLookups"
-              @change="clearFieldError('generic_medicine_id')"
-            >
-              <option value="">-- Pilih Obat Generik --</option>
-              <option v-for="gen in generics" :key="gen.id" :value="String(gen.id)">
-                {{ gen.name }}
-              </option>
-            </select>
-          </div>
-          <div v-if="loadingGenerics" class="lookup-hint">Mencari obat generik...</div>
+          <SearchableSelect
+            id="generic_medicine_id"
+            v-model="form.generic_medicine_id"
+            :options="generics"
+            placeholder="Cari atau tambahkan generik"
+            search-placeholder="Cari generik..."
+            empty-text="Data generik tidak ditemukan"
+            :loading="loadingGenerics || loadingLookups"
+            :error="genericError"
+            :is-invalid="!!fieldError('generic_medicine_id')"
+            :disabled="isSubmitting"
+            server-search
+            clearable
+            creatable
+            @search="handleSearchGeneric"
+            @create="handleCreateGeneric"
+            @update:model-value="clearFieldError('generic_medicine_id')"
+          />
           <div v-if="fieldError('generic_medicine_id')" class="invalid-feedback">
             {{ fieldError('generic_medicine_id') }}
           </div>
@@ -464,6 +531,15 @@ const handleSubmit = () => {
       </div>
     </div>
   </MasterDataFormModal>
+
+  <AddGenericDialog
+    :is-open="addGenericDialog.isOpen"
+    :initial-name="addGenericDialog.initialName"
+    :is-submitting="addGenericDialog.isSubmitting"
+    :error-message="addGenericDialog.errorMessage"
+    @close="handleCloseAddGeneric"
+    @submit="handleSubmitAddGeneric"
+  />
 </template>
 
 <style scoped>
@@ -548,24 +624,6 @@ const handleSubmit = () => {
   background-color: #f1f5f9;
   cursor: not-allowed;
   opacity: 0.7;
-}
-
-.searchable-lookup {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-search-sub {
-  background-color: #f8fafc;
-  font-size: 0.825rem;
-  padding: 0.5rem 0.75rem;
-}
-
-.lookup-hint {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #64748b);
-  margin-top: 0.125rem;
 }
 
 .form-textarea {

@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MedicineFormModal from '../components/MedicineFormModal.vue';
 import lookupService from '@/services/lookup.service';
+import genericMedicinesService from '@/services/master-data/genericMedicines.service';
 
 vi.mock('@/services/lookup.service', () => ({
   default: {
@@ -13,6 +14,13 @@ vi.mock('@/services/lookup.service', () => ({
   }
 }));
 
+vi.mock('@/services/master-data/genericMedicines.service', () => ({
+  default: {
+    getGenericMedicines: vi.fn(),
+    createGenericMedicine: vi.fn()
+  }
+}));
+
 describe('MedicineFormModal.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -21,6 +29,7 @@ describe('MedicineFormModal.vue', () => {
     lookupService.getMedicineClassifications.mockResolvedValue([{ id: 1, name: 'Obat Bebas' }]);
     lookupService.getMedicineRoutes.mockResolvedValue([{ id: 1, name: 'Oral' }]);
     lookupService.getGenericMedicines.mockResolvedValue([{ id: 1, name: 'Paracetamol' }]);
+    genericMedicinesService.createGenericMedicine.mockReset();
   });
 
   const mountModal = (props = {}) =>
@@ -201,5 +210,166 @@ describe('MedicineFormModal.vue', () => {
     await cancelBtn.trigger('click');
 
     expect(wrapper.emitted('close')).toBeTruthy();
+  });
+
+  it('renders Generik searchable select with correct placeholder and search placeholder', async () => {
+    const wrapper = mountModal();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Generik');
+    const searchableBox = wrapper.find('.selected-box');
+    expect(searchableBox.exists()).toBe(true);
+    expect(searchableBox.text()).toContain('Cari atau tambahkan generik');
+
+    // Open dropdown
+    await searchableBox.trigger('click');
+    await flushPromises();
+
+    const searchInput = wrapper.find('.search-box input');
+    expect(searchInput.exists()).toBe(true);
+    expect(searchInput.attributes('placeholder')).toBe('Cari generik...');
+  });
+
+  it('shows creatable option when typed query does not match existing generic, and handles creation flow', async () => {
+    lookupService.getGenericMedicines.mockResolvedValue([]);
+    genericMedicinesService.createGenericMedicine.mockResolvedValue({
+      id: 999,
+      name: 'Cefixime Trihydrate'
+    });
+
+    const wrapper = mountModal();
+    await flushPromises();
+
+    // Open dropdown
+    await wrapper.find('.selected-box').trigger('click');
+    await flushPromises();
+
+    // Type query
+    const searchInput = wrapper.find('.search-box input');
+    await searchInput.setValue('Cefixime Trihydrate');
+    await searchInput.trigger('input');
+    await flushPromises();
+
+    // Check creatable option appears
+    const createOption = wrapper.find('.create-option-item');
+    expect(createOption.exists()).toBe(true);
+    expect(createOption.text()).toContain('Tambahkan “Cefixime Trihydrate” sebagai generik baru');
+
+    // Click create option
+    await createOption.trigger('click');
+    await flushPromises();
+
+    // AddGenericDialog should be open
+    const dialog = wrapper.findComponent({ name: 'AddGenericDialog' });
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.props('isOpen')).toBe(true);
+    expect(dialog.props('initialName')).toBe('Cefixime Trihydrate');
+
+    // Submit dialog
+    await dialog.vm.$emit('submit', 'Cefixime Trihydrate');
+    await flushPromises();
+
+    expect(genericMedicinesService.createGenericMedicine).toHaveBeenCalledWith({
+      name: 'Cefixime Trihydrate'
+    });
+    expect(wrapper.emitted('toast')).toBeTruthy();
+    expect(wrapper.emitted('toast')[0][0]).toEqual({
+      type: 'success',
+      title: 'Berhasil',
+      message: 'Data generik berhasil ditambahkan.'
+    });
+    expect(wrapper.find('select#generic_medicine_id').element.value).toBe('999');
+    expect(dialog.props('isOpen')).toBe(false);
+  });
+
+  it('does not show creatable option if query matches an existing option exactly', async () => {
+    lookupService.getGenericMedicines.mockResolvedValue([
+      { id: 1, name: 'Paracetamol' }
+    ]);
+
+    const wrapper = mountModal();
+    await flushPromises();
+
+    await wrapper.find('.selected-box').trigger('click');
+    await flushPromises();
+
+    const searchInput = wrapper.find('.search-box input');
+    await searchInput.setValue('Paracetamol');
+    await searchInput.trigger('input');
+    await flushPromises();
+
+    expect(wrapper.find('.create-option-item').exists()).toBe(false);
+  });
+
+  it('keeps confirmation dialog open and displays error when generic creation fails', async () => {
+    lookupService.getGenericMedicines.mockResolvedValue([]);
+    genericMedicinesService.createGenericMedicine.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          errors: {
+            name: ['Nama generik sudah terdaftar.']
+          }
+        }
+      }
+    });
+
+    const wrapper = mountModal();
+    await flushPromises();
+
+    await wrapper.find('.selected-box').trigger('click');
+    await flushPromises();
+
+    const searchInput = wrapper.find('.search-box input');
+    await searchInput.setValue('Paracetamol');
+    await searchInput.trigger('input');
+    await flushPromises();
+
+    // Trigger create
+    const createOption = wrapper.find('.create-option-item');
+    if (createOption.exists()) {
+      await createOption.trigger('click');
+      await flushPromises();
+    }
+
+    const dialog = wrapper.findComponent({ name: 'AddGenericDialog' });
+    await dialog.vm.$emit('submit', 'Paracetamol');
+    await flushPromises();
+
+    expect(dialog.props('isOpen')).toBe(true);
+    expect(dialog.props('errorMessage')).toBe('Nama generik sudah terdaftar.');
+  });
+
+  it('preserves existing generic on edit even if not in default lookup list', async () => {
+    lookupService.getGenericMedicines.mockResolvedValue([
+      { id: 1, name: 'Paracetamol' }
+    ]);
+
+    const wrapper = mountModal({
+      medicine: {
+        id: 5,
+        name: 'Ranitidine 150mg',
+        generic_medicine_id: 16,
+        generic: { id: 16, name: 'RANITIDINE TABLET 150 MG' }
+      }
+    });
+    await flushPromises();
+
+    const selectedBox = wrapper.find('.selected-box');
+    expect(selectedBox.text()).toContain('RANITIDINE TABLET 150 MG');
+    expect(wrapper.find('select#generic_medicine_id').element.value).toBe('16');
+  });
+
+  it('handles empty generic search results showing "Data generik tidak ditemukan"', async () => {
+    lookupService.getGenericMedicines.mockResolvedValue([]);
+
+    const wrapper = mountModal();
+    await flushPromises();
+
+    // Open dropdown
+    await wrapper.find('.selected-box').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.no-options').text()).toContain('Data generik tidak ditemukan');
   });
 });
