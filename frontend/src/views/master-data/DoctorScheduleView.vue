@@ -4,6 +4,7 @@ import { useDoctorSchedules } from '@/composables/useDoctorSchedules';
 import DoctorScheduleTable from '@/components/master-data/doctor-schedules/DoctorScheduleTable.vue';
 import DoctorScheduleFilters from '@/components/master-data/doctor-schedules/DoctorScheduleFilters.vue';
 import DoctorScheduleFormModal from '@/components/master-data/doctor-schedules/DoctorScheduleFormModal.vue';
+import DoctorScheduleRecapTable from '@/components/master-data/doctor-schedules/DoctorScheduleRecapTable.vue';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
 import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
@@ -19,7 +20,11 @@ const {
   loading,
   submitting,
   error,
+  recapItems,
+  recapLoading,
+  recapError,
   fetchSchedules,
+  fetchRecap,
   createSchedule,
   updateSchedule,
   deleteSchedule
@@ -78,6 +83,13 @@ const handleFilter = ({ key, value }) => {
   fetchSchedules();
 };
 
+const handleRefresh = async () => {
+  await Promise.all([
+    fetchSchedules(),
+    fetchRecap()
+  ]);
+};
+
 const handleFormSubmit = async (payload) => {
   formErrors.value = {};
   
@@ -92,14 +104,27 @@ const handleFormSubmit = async (payload) => {
   
   if (result.success) {
     formModalOpen.value = false;
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing 
-        ? 'Jadwal dokter berhasil diperbarui.' 
-        : 'Jadwal dokter berhasil ditambahkan.'
-    });
+    
     fetchSchedules();
+    const recapResult = await fetchRecap();
+    
+    if (recapResult && !recapResult.success) {
+      showToast({
+        type: 'warning',
+        title: 'Data Tersimpan',
+        message: isEditing 
+          ? 'Jadwal dokter berhasil diperbarui, tetapi data rekap gagal dimuat ulang. Silakan segarkan halaman.' 
+          : 'Jadwal dokter berhasil ditambahkan, tetapi data rekap gagal dimuat ulang. Silakan segarkan halaman.'
+      });
+    } else {
+      showToast({
+        type: 'success',
+        title: 'Berhasil',
+        message: isEditing 
+          ? 'Jadwal dokter berhasil diperbarui.' 
+          : 'Jadwal dokter berhasil ditambahkan.'
+      });
+    }
   } else {
     if (result.error?.response?.status === 422) {
       formErrors.value = result.error.response.data.errors || {};
@@ -131,17 +156,27 @@ const handleDeleteConfirm = async () => {
   
   if (result.success) {
     deleteDialogOpen.value = false;
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Jadwal dokter berhasil dihapus.'
-    });
     
     if (items.value.length === 1 && pagination.current_page > 1) {
       pagination.current_page--;
     }
     
     fetchSchedules();
+    const recapResult = await fetchRecap();
+    
+    if (recapResult && !recapResult.success) {
+      showToast({
+        type: 'warning',
+        title: 'Data Terhapus',
+        message: 'Jadwal dokter berhasil dihapus, tetapi data rekap gagal dimuat ulang. Silakan segarkan halaman.'
+      });
+    } else {
+      showToast({
+        type: 'success',
+        title: 'Berhasil',
+        message: 'Jadwal dokter berhasil dihapus.'
+      });
+    }
   } else {
     let errorMessage = 'Jadwal dokter gagal dihapus. Silakan coba lagi.';
     
@@ -160,6 +195,7 @@ const handleDeleteConfirm = async () => {
 
 onMounted(() => {
   fetchSchedules();
+  fetchRecap();
 });
 </script>
 
@@ -199,9 +235,9 @@ onMounted(() => {
     <div class="page-content">
       <DoctorScheduleFilters 
         :filters="filters"
-        :loading="loading"
+        :loading="loading || recapLoading"
         @filter="handleFilter"
-        @refresh="fetchSchedules"
+        @refresh="handleRefresh"
       />
       
       <MasterDataErrorState 
@@ -239,6 +275,14 @@ onMounted(() => {
           />
         </template>
       </template>
+
+      <!-- Data Jadwal Dokter (Recap Table) -->
+      <DoctorScheduleRecapTable 
+        :schedules="recapItems"
+        :loading="recapLoading"
+        :error="recapError"
+        @retry="fetchRecap"
+      />
     </div>
 
     <!-- Modals -->
