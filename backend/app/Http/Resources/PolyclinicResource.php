@@ -26,6 +26,7 @@ class PolyclinicResource extends JsonResource
             'is_online_visible' => $this->is_online_visible,
             'quota' => $this->quota,
             'jkn_quota' => $this->jkn_quota,
+            'bpjs_code' => $this->bpjs_code,
             'is_active' => $this->is_active,
             // satusehat_code intentionally excluded from user-facing form
             // but still exists in DB for integration modules

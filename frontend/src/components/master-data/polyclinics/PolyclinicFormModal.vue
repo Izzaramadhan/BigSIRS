@@ -24,6 +24,7 @@ const form = reactive({
   quota: 0,
   jkn_quota: 0,
   warehouse_id: '',
+  bpjs_code: '',
 });
 
 const warehouses = ref([]);
@@ -39,6 +40,7 @@ const populateForm = (data) => {
   form.quota = data.quota ?? 0;
   form.jkn_quota = data.jkn_quota ?? 0;
   form.warehouse_id = data.warehouse_id || '';
+  form.bpjs_code = data.bpjs_code ?? '';
 };
 
 const resetForm = () => {
@@ -51,6 +53,7 @@ const resetForm = () => {
   form.quota = 0;
   form.jkn_quota = 0;
   form.warehouse_id = '';
+  form.bpjs_code = '';
 };
 
 watch(() => props.isOpen, async (isOpen) => {
@@ -60,7 +63,7 @@ watch(() => props.isOpen, async (isOpen) => {
     // Load fresh from API on edit
     try {
       const response = await polyclinicService.getPolyclinic(props.polyclinic.id);
-      populateForm(response.data.data);
+      populateForm(response?.data?.data || response?.data || props.polyclinic);
     } catch (err) {
       console.error(err);
       populateForm(props.polyclinic);
@@ -91,6 +94,7 @@ const handleSubmit = () => {
     quota: parseInt(form.quota) || 0,
     jkn_quota: parseInt(form.jkn_quota) || 0,
     warehouse_id: form.warehouse_id || null,
+    bpjs_code: form.bpjs_code.trim() || null,
   };
   emit('submit', payload);
 };
@@ -216,6 +220,26 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
               <div v-else-if="fieldError('warehouse_id')" class="invalid-feedback">{{ fieldError('warehouse_id') }}</div>
             </div>
 
+            <!-- Kode BPJS -->
+            <div class="form-group form-group--full">
+              <label for="bpjs_code" class="form-label">Kode BPJS</label>
+              <input
+                id="bpjs_code"
+                v-model="form.bpjs_code"
+                type="text"
+                class="form-control"
+                :class="{ 'is-invalid': fieldError('bpjs_code') }"
+                placeholder="Masukkan kode BPJS"
+                maxlength="50"
+              >
+              <div
+                v-if="fieldError('bpjs_code')"
+                class="invalid-feedback"
+              >
+                {{ fieldError('bpjs_code') }}
+              </div>
+            </div>
+
             <!-- 7. Kuota -->
             <div class="form-group">
               <label for="quota" class="form-label">Kuota</label>
@@ -267,6 +291,10 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
+}
+
+.form-group--full {
+  grid-column: 1 / -1;
 }
 
 
