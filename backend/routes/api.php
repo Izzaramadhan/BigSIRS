@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\MasterData\LaboratoryGroupController;
 use App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController;
 use App\Http\Controllers\Api\V1\MasterData\LetterTypeController;
 use App\Http\Controllers\Api\V1\MasterData\MedicalProcedureController;
+use App\Http\Controllers\Api\V1\MasterData\GenericMedicineController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineController;
 use App\Http\Controllers\Api\V1\MasterData\MedicationSignaController;
@@ -150,6 +151,9 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('suppliers', SupplierController::class);
             Route::apiResource('warehouses', WarehouseController::class);
 
+            Route::patch('generic-medicines/{generic_medicine}/status', [GenericMedicineController::class, 'updateStatus']);
+            Route::apiResource('generic-medicines', GenericMedicineController::class);
+
             Route::patch('medicines/{medicine}/status', [MedicineController::class, 'updateStatus']);
             Route::apiResource('medicines', MedicineController::class);
             Route::apiResource('medicine-packages', MedicinePackageController::class);
@@ -184,6 +188,7 @@ Route::prefix('v1')->group(function () {
             Route::get('medication-signas', [LookupController::class, 'medicationSignas']);
             Route::get('medicine-classifications', [LookupController::class, 'medicineClassifications']);
             Route::get('generic-medicines', [LookupController::class, 'genericMedicines']);
+            Route::post('generic-medicines', [GenericMedicineController::class, 'store']);
         });
     });
 });

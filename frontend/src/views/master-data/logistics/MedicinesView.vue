@@ -249,6 +249,7 @@ onMounted(() => {
       :errors="formErrors"
       @close="formModalOpen = false"
       @submit="handleFormSubmit"
+      @toast="showToast"
     />
 
     <MasterDataDeleteDialog

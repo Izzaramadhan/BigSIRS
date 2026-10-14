@@ -19,4 +19,9 @@ class GenericMedicine extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function medicines()
+    {
+        return $this->hasMany(Medicine::class, 'generic_medicine_id');
+    }
 }
