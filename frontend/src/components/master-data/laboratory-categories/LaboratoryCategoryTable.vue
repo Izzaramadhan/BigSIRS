@@ -126,7 +126,10 @@ const isValidUrl = (url) => {
             <!-- 8. SNOMED Code -->
             <th class="col-snomed">SNOMED Code</th>
 
-            <!-- 9. Aksi -->
+            <!-- 9. SNOMED URL -->
+            <th class="col-snomed-url">SNOMED URL</th>
+
+            <!-- 10. Aksi -->
             <th class="col-actions text-center">Aksi</th>
           </tr>
         </thead>
@@ -134,13 +137,13 @@ const isValidUrl = (url) => {
         <tbody>
           <!-- Loading skeleton -->
           <template v-if="loading">
-            <MasterDataSkeletonRow :columns="9" :rows="5" />
+            <MasterDataSkeletonRow :columns="10" :rows="5" />
           </template>
 
           <!-- Empty fallback -->
           <template v-else-if="items.length === 0">
             <tr>
-              <td colspan="9" class="text-center py-8 text-muted">
+              <td colspan="10" class="text-center py-8 text-muted">
                 Tidak ada data kategori lab.
               </td>
             </tr>
@@ -219,7 +222,38 @@ const isValidUrl = (url) => {
                 <span v-else class="text-muted">-</span>
               </td>
 
-              <!-- 9. Aksi -->
+              <!-- 9. SNOMED URL -->
+              <td class="col-snomed-url">
+                <a 
+                  v-if="isValidUrl(item.snomed_url)" 
+                  :href="item.snomed_url" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  class="table-link"
+                  title="Buka SNOMED URL"
+                >
+                  <span class="url-text">Buka tautan</span>
+                  <svg 
+                    class="external-icon" 
+                    width="12" 
+                    height="12" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    stroke-width="2" 
+                    stroke-linecap="round" 
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                </a>
+                <span v-else class="text-muted">-</span>
+              </td>
+
+              <!-- 10. Aksi -->
               <td class="col-actions text-center actions-cell">
                 <MasterDataActionButtons 
                   @edit="emit('edit', item)"
@@ -252,7 +286,7 @@ const isValidUrl = (url) => {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
-  min-width: 980px;
+  min-width: 1100px;
 }
 
 .data-table th {
@@ -312,6 +346,11 @@ const isValidUrl = (url) => {
 
 .col-snomed {
   width: 130px;
+}
+
+.col-snomed-url {
+  width: 130px;
+  min-width: 110px;
 }
 
 .col-actions {

@@ -26,6 +26,8 @@ describe('LaboratoryCategoryFormModal.vue', () => {
     expect(wrapper.text()).toContain('Tambah Kategori Lab');
     expect(wrapper.find('input#name').element.value).toBe('');
     expect(wrapper.find('select#type').element.value).toBe('');
+    expect(wrapper.find('input#snomed_url').element.value).toBe('');
+    expect(wrapper.find('input#snomed_url').attributes('placeholder')).toBe('https://...');
   });
 
   it('populates fields when category prop is provided', () => {
@@ -52,6 +54,7 @@ describe('LaboratoryCategoryFormModal.vue', () => {
     expect(wrapper.find('input#loinc_code').element.value).toBe('58410-2');
     expect(wrapper.find('input#loinc_url').element.value).toBe('https://loinc.org/58410-2/');
     expect(wrapper.find('input#snomed_code').element.value).toBe('252275004');
+    expect(wrapper.find('input#snomed_url').element.value).toBe('https://snomed.info/id/252275004');
   });
 
   it('emits submit event with trimmed payload when form is submitted', async () => {
@@ -61,6 +64,8 @@ describe('LaboratoryCategoryFormModal.vue', () => {
     await wrapper.find('select#type').setValue('lab klinik');
     await wrapper.find('textarea#description').setValue('  Pemeriksaan biokimia  ');
     await wrapper.find('input#loinc_code').setValue('  12345-6  ');
+    await wrapper.find('input#snomed_code').setValue('  252275004  ');
+    await wrapper.find('input#snomed_url').setValue('  https://snomed.info/id/252275004  ');
 
     await wrapper.find('form').trigger('submit.prevent');
 
@@ -70,21 +75,39 @@ describe('LaboratoryCategoryFormModal.vue', () => {
     expect(payload.type).toBe('lab klinik');
     expect(payload.description).toBe('Pemeriksaan biokimia');
     expect(payload.loinc_code).toBe('12345-6');
+    expect(payload.snomed_code).toBe('252275004');
+    expect(payload.snomed_url).toBe('https://snomed.info/id/252275004');
     expect(payload.is_active).toBe(true);
+  });
+
+  it('validates invalid SNOMED URL and prevents submission', async () => {
+    const wrapper = mountModal();
+
+    await wrapper.find('input#name').setValue('Kimia Klinik');
+    await wrapper.find('input#snomed_url').setValue('invalid-url-string');
+
+    await wrapper.find('form').trigger('submit.prevent');
+
+    expect(wrapper.emitted('submit')).toBeFalsy();
+    expect(wrapper.find('input#snomed_url').classes()).toContain('is-invalid');
+    expect(wrapper.text()).toContain('Format SNOMED URL tidak valid.');
   });
 
   it('renders field validation errors when passed in props', () => {
     const wrapper = mountModal({
       errors: {
         name: ['Nama kategori wajib diisi.'],
-        loinc_url: ['URL LOINC harus berupa tautan yang valid.']
+        loinc_url: ['URL LOINC harus berupa tautan yang valid.'],
+        snomed_url: ['Format SNOMED URL tidak valid.']
       }
     });
 
     expect(wrapper.text()).toContain('Nama kategori wajib diisi.');
     expect(wrapper.text()).toContain('URL LOINC harus berupa tautan yang valid.');
+    expect(wrapper.text()).toContain('Format SNOMED URL tidak valid.');
     expect(wrapper.find('input#name').classes()).toContain('is-invalid');
     expect(wrapper.find('input#loinc_url').classes()).toContain('is-invalid');
+    expect(wrapper.find('input#snomed_url').classes()).toContain('is-invalid');
   });
 
   it('emits close event when Batal button is clicked', async () => {
