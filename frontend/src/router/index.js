@@ -286,6 +286,13 @@ const router = createRouter({
       component: () => import('../views/logistics/MutationView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/logistics/stock-opnames',
+      alias: ['/stok', '/logistik/stok-opname'],
+      name: 'logistics.stock-opnames',
+      component: () => import('../views/logistics/StockOpnameView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
