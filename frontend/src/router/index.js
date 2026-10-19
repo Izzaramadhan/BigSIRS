@@ -272,6 +272,13 @@ const router = createRouter({
       component: () => import('../views/master-data/Icd9CmView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/faktur',
+      alias: '/logistik/faktur',
+      name: 'logistics.invoices',
+      component: () => import('../views/logistics/InvoiceView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
