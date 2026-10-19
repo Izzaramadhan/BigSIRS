@@ -300,6 +300,13 @@ const router = createRouter({
       component: () => import('../views/logistics/GoodsIssueView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/logistics/pos',
+      alias: ['/penjualan', '/logistik/penjualan-bebas', '/pos'],
+      name: 'logistics.pos',
+      component: () => import('../views/logistics/PosSaleView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
