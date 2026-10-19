@@ -18,10 +18,10 @@ const navigation = [
     label: 'PELAYANAN KLINIS',
     items: [
       { name: 'Dashboard', path: '/dashboard', icon: 'M4 6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zM14 6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V6zM4 16a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2zM14 16a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2z' },
-      { name: 'Pendaftaran', path: '/pendaftaran', icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', disabled: true },
-      { name: 'Admisi', path: '/admisi', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8', disabled: true },
-      { name: 'Pemeriksaan', path: '/pemeriksaan', icon: 'M22 12h-4l-3 9L9 3l-3 9H2', disabled: true },
-      { name: 'Billing Rawat Jalan', path: '/billing', icon: 'M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6', disabled: true }
+      { name: 'Pendaftaran', path: '/pendaftaran', icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+      { name: 'Admisi', path: '/admisi', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
+      { name: 'Pemeriksaan', path: '/pemeriksaan', icon: 'M22 12h-4l-3 9L9 3l-3 9H2' },
+      { name: 'Billing Rawat Jalan', path: '/billing', icon: 'M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' }
     ]
   },
   {
