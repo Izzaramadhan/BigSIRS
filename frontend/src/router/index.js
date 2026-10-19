@@ -293,6 +293,13 @@ const router = createRouter({
       component: () => import('../views/logistics/StockOpnameView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/logistics/goods-issues',
+      alias: ['/pengeluaran', '/logistik/pengeluaran'],
+      name: 'logistics.goods-issues',
+      component: () => import('../views/logistics/GoodsIssueView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
