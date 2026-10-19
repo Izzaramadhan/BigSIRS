@@ -279,6 +279,13 @@ const router = createRouter({
       component: () => import('../views/logistics/InvoiceView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/logistics/mutations',
+      alias: ['/mutasi', '/logistik/mutasi'],
+      name: 'logistics.mutations',
+      component: () => import('../views/logistics/MutationView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 
