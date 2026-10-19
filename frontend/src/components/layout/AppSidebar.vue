@@ -28,7 +28,7 @@ const navigation = [
     label: 'LOGISTIK FARMASI',
     items: [
       { name: 'Faktur', path: '/faktur', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6' },
-      { name: 'Mutasi', path: '/mutasi', icon: 'M8 3v3a2 2 0 0 1-2 2H3 M21 8h-3a2 2 0 0 1-2-2V3 M3 16h3a2 2 0 0 1 2 2v3 M16 21v-3a2 2 0 0 1 2-2h3 M2 12h20 M12 2v20', disabled: true },
+      { name: 'Mutasi', path: '/logistics/mutations', icon: 'M8 3v3a2 2 0 0 1-2 2H3 M21 8h-3a2 2 0 0 1-2-2V3 M3 16h3a2 2 0 0 1 2 2v3 M16 21v-3a2 2 0 0 1 2-2h3 M2 12h20 M12 2v20' },
       { name: 'Stok Opname', path: '/stok', icon: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.27 6.96L12 12.01l8.73-5.05 M12 22.08V12', disabled: true },
       { name: 'Pengeluaran Barang', path: '/pengeluaran', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12', disabled: true },
       { name: 'Penjualan Bebas', path: '/penjualan', icon: 'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', disabled: true }
