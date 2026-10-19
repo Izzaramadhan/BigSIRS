@@ -27,6 +27,34 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/pendaftaran',
+      alias: ['/pendaftaran/pasien', '/pendaftaran/pencarian-pasien'],
+      name: 'registration.patient-search',
+      component: () => import('../views/registration/PatientSearchView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/admisi',
+      alias: ['/pendaftaran/admisi', '/admisi-rawat-jalan'],
+      name: 'registration.admission',
+      component: () => import('../views/admission/AdmissionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/pemeriksaan',
+      alias: ['/rawat-jalan/pemeriksaan', '/pelayanan-klinis/pemeriksaan', '/pemeriksaan-poliklinik'],
+      name: 'clinical.examination',
+      component: () => import('../views/examination/ExaminationView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/billing',
+      alias: ['/rawat-jalan/billing', '/billing-rawat-jalan'],
+      name: 'clinical.billing',
+      component: () => import('../views/billing/BillingView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/polyclinics',
       name: 'master-data.polyclinics',
       component: () => import('../views/master-data/PolyclinicView.vue'),

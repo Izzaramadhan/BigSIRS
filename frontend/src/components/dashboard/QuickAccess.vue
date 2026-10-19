@@ -13,8 +13,14 @@ defineProps({
   }
 });
 
-const handleClick = () => {
-  // Navigation or alert logic
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+
+const handleClick = (item) => {
+  if (item.id === 1) {
+    router.push('/pendaftaran');
+  }
 };
 </script>
 
