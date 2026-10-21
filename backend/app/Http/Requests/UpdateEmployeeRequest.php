@@ -29,6 +29,7 @@ class UpdateEmployeeRequest extends FormRequest
             'gender' => ['nullable', 'in:L,P'],
             'nationality' => ['nullable', 'string', 'max:255'],
             'blood_type' => ['nullable', 'in:A,B,AB,O,Unknown'],
+            'allergies' => ['nullable', 'string'],
             'religion' => ['nullable', 'string', 'max:255'],
             'marital_status' => ['nullable', 'string', 'max:255'],
             'address' => ['nullable', 'string'],
@@ -43,6 +44,24 @@ class UpdateEmployeeRequest extends FormRequest
             'position_id' => ['nullable', 'exists:positions,id'],
             'profession' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
+            'signature' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
+            'remove_signature' => ['nullable', 'boolean'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'signature.image' => 'File tanda tangan harus berupa gambar.',
+            'signature.mimes' => 'Format tanda tangan harus berupa jpeg, png, atau jpg.',
+            'signature.max' => 'Ukuran tanda tangan maksimal 2MB.',
+        ];
+    }
+
+    public function attributes(): array
+    {
+        return [
+            'signature' => 'tanda tangan',
         ];
     }
 }

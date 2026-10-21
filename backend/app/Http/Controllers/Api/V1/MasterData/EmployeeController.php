@@ -9,6 +9,7 @@ use App\Models\Employee;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class EmployeeController extends Controller
 {
@@ -42,7 +43,14 @@ class EmployeeController extends Controller
     {
         $this->authorize('create', Employee::class);
         $employee = DB::transaction(function () use ($request) {
-            return Employee::create($request->validated());
+            $data = $request->validated();
+
+            if ($request->hasFile('signature')) {
+                $path = $request->file('signature')->store('signatures', 'public');
+                $data['signature_path'] = $path;
+            }
+
+            return Employee::create($data);
         });
 
         return response()->json([
@@ -62,7 +70,23 @@ class EmployeeController extends Controller
     {
         $this->authorize('update', $employee);
         $employee = DB::transaction(function () use ($request, $employee) {
-            $employee->update($request->validated());
+            $data = $request->validated();
+
+            if ($request->hasFile('signature')) {
+                // Delete old signature if exists
+                if ($employee->signature_path && Storage::disk('public')->exists($employee->signature_path)) {
+                    Storage::disk('public')->delete($employee->signature_path);
+                }
+                $path = $request->file('signature')->store('signatures', 'public');
+                $data['signature_path'] = $path;
+            } elseif ($request->boolean('remove_signature')) {
+                if ($employee->signature_path && Storage::disk('public')->exists($employee->signature_path)) {
+                    Storage::disk('public')->delete($employee->signature_path);
+                }
+                $data['signature_path'] = null;
+            }
+
+            $employee->update($data);
 
             return $employee;
         });

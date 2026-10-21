@@ -78,10 +78,16 @@ const defaultForm = {
   district_id: '',
   village_id: '',
   postal_code: '',
-  phone: ''
+  phone: '',
+  signature: null,
+  remove_signature: false
 };
 
 const form = reactive({ ...defaultForm });
+
+const fileInput = ref(null);
+const previewImage = ref(null);
+const existingSignatureUrl = ref(null);
 
 const loadInitialLookups = async () => {
   isPositionsLoading.value = true;
@@ -182,78 +188,160 @@ const onDistrictChange = async () => {
   }
 };
 
-watch(() => props.isOpen, async (newVal) => {
-  if (!newVal) return;
-  
-  errors.value = {};
-  submitError.value = null;
-  isLoadingData.value = true;
-  isHydrating.value = true;
-  
-  try {
-    if (lookupPositions.value.length === 0 || lookups.provinces.length === 0) {
-      await loadInitialLookups();
-    }
+watch(
+  () => [props.isOpen, props.employee],
+  async ([isOpen, employee]) => {
+    if (!isOpen) return;
     
-    if (props.employee) {
-      isEditing.value = true;
-      const detail = await employeeService.getEmployee(props.employee.id);
-      const data = detail.data || detail;
+    errors.value = {};
+    submitError.value = null;
+    isLoadingData.value = true;
+    isHydrating.value = true;
+    
+    try {
+      if (lookupPositions.value.length === 0 || lookups.provinces.length === 0) {
+        await loadInitialLookups();
+      }
       
-      Object.assign(form, {
-        national_id: data.national_id || '',
-        code: data.code || '',
-        name: data.name || '',
-        birth_place: data.birth_place || '',
-        birth_date: data.birth_date ? String(data.birth_date).substring(0, 10) : '',
-        blood_type: data.blood_type || '',
-        religion: data.religion || '',
-        marital_status: data.marital_status || '',
-        nationality: data.nationality || 'WNI',
-        address: data.address || '',
-        allergies: data.allergies || '',
-        position_id: data.position_id ? Number(data.position_id) : '',
-        occupation_id: data.occupation_id ? Number(data.occupation_id) : '',
-        education_id: data.education_id ? Number(data.education_id) : '',
-        postal_code: data.postal_code || '',
-        phone: data.phone || ''
-      });
+      if (employee) {
+        isEditing.value = true;
+        const detail = await employeeService.getEmployee(employee.id);
+        const data = detail.data || detail;
+        
+        Object.assign(form, {
+          national_id: data.national_id || '',
+          code: data.code || '',
+          name: data.name || '',
+          birth_place: data.birth_place || '',
+          birth_date: data.birth_date ? String(data.birth_date).substring(0, 10) : '',
+          blood_type: data.blood_type || '',
+          religion: data.religion || '',
+          marital_status: data.marital_status || '',
+          nationality: data.nationality || 'WNI',
+          address: data.address || '',
+          allergies: data.allergies || '',
+          position_id: data.position_id ? Number(data.position_id) : '',
+          occupation_id: data.occupation_id ? Number(data.occupation_id) : '',
+          education_id: data.education_id ? Number(data.education_id) : '',
+          postal_code: data.postal_code || '',
+          phone: data.phone || ''
+        });
 
-      form.province_id = data.province_id ? String(data.province_id) : '';
-      if (form.province_id) {
-        const res = await lookupService.getRegencies({ province_id: form.province_id });
-        lookups.regencies = res.data || res;
-      }
-      
-      form.regency_id = data.regency_id ? String(data.regency_id) : '';
-      if (form.regency_id) {
-        const res = await lookupService.getDistricts({ regency_id: form.regency_id });
-        lookups.districts = res.data || res;
-      }
-      
-      form.district_id = data.district_id ? String(data.district_id) : '';
-      if (form.district_id) {
-        const res = await lookupService.getVillages({ district_id: form.district_id });
-        lookups.villages = res.data || res;
-      }
-      
-      form.village_id = data.village_id ? String(data.village_id) : '';
+        form.province_id = data.province_id ? String(data.province_id) : '';
+        if (form.province_id) {
+          const res = await lookupService.getRegencies({ province_id: form.province_id });
+          lookups.regencies = res.data || res;
+        }
+        
+        form.regency_id = data.regency_id ? String(data.regency_id) : '';
+        if (form.regency_id) {
+          const res = await lookupService.getDistricts({ regency_id: form.regency_id });
+          lookups.districts = res.data || res;
+        }
+        
+        form.district_id = data.district_id ? String(data.district_id) : '';
+        if (form.district_id) {
+          const res = await lookupService.getVillages({ district_id: form.district_id });
+          lookups.villages = res.data || res;
+        }
+        
+        form.village_id = data.village_id ? String(data.village_id) : '';
 
-    } else {
-      isEditing.value = false;
-      Object.assign(form, { ...defaultForm });
-      lookups.regencies = [];
-      lookups.districts = [];
-      lookups.villages = [];
+        existingSignatureUrl.value = data.signature_url || null;
+        previewImage.value = data.signature_url || null;
+        form.signature = null;
+        form.remove_signature = false;
+        if (fileInput.value) {
+          fileInput.value.value = '';
+        }
+
+      } else {
+        isEditing.value = false;
+        Object.assign(form, { ...defaultForm });
+        existingSignatureUrl.value = null;
+        previewImage.value = null;
+        form.signature = null;
+        form.remove_signature = false;
+        if (fileInput.value) {
+          fileInput.value.value = '';
+        }
+        lookups.regencies = [];
+        lookups.districts = [];
+        lookups.villages = [];
+      }
+    } catch (err) {
+      console.error('Failed to load employee details', err);
+      submitError.value = 'Gagal memuat detail pegawai.';
+    } finally {
+      isLoadingData.value = false;
+      isHydrating.value = false;
     }
-  } catch (err) {
-    console.error('Failed to load employee details', err);
-    submitError.value = 'Gagal memuat detail pegawai.';
-  } finally {
-    isLoadingData.value = false;
-    isHydrating.value = false;
+  },
+  { immediate: true }
+);
+
+const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+const maxSize = 2 * 1024 * 1024; // 2MB
+
+const handleFileChange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  if (errors.value) {
+    delete errors.value.signature;
   }
-});
+
+  if (!allowedTypes.includes(file.type)) {
+    errors.value = {
+      ...errors.value,
+      signature: ['Format tanda tangan harus berupa jpeg, png, atau jpg.']
+    };
+    if (fileInput.value) fileInput.value.value = '';
+    return;
+  }
+
+  if (file.size > maxSize) {
+    errors.value = {
+      ...errors.value,
+      signature: ['Ukuran tanda tangan maksimal 2MB.']
+    };
+    if (fileInput.value) fileInput.value.value = '';
+    return;
+  }
+
+  form.signature = file;
+  form.remove_signature = false;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    previewImage.value = event.target.result;
+  };
+  reader.readAsDataURL(file);
+};
+
+const cancelNewFile = () => {
+  form.signature = null;
+  form.remove_signature = false;
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
+  previewImage.value = existingSignatureUrl.value || null;
+  if (errors.value) {
+    delete errors.value.signature;
+  }
+};
+
+const removeSignature = () => {
+  form.signature = null;
+  form.remove_signature = true;
+  previewImage.value = null;
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
+  if (errors.value) {
+    delete errors.value.signature;
+  }
+};
 
 const focusFirstInvalidField = () => {
   nextTick(() => {
@@ -583,6 +671,44 @@ const handleSubmit = async () => {
             <div v-if="fieldError('position_id')" class="error-message">{{ fieldError('position_id') }}</div>
           </div>
         </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="signature">Tanda Tangan</label>
+            <input 
+              type="file" 
+              ref="fileInput"
+              id="signature"
+              @change="handleFileChange" 
+              class="form-input"
+              accept="image/png, image/jpeg, image/jpg"
+              :class="{ 'has-error': fieldError('signature') }"
+            >
+            <div class="file-hint">Format yang diperbolehkan: PNG, JPG, JPEG (Maksimal 2MB)</div>
+            <div v-if="fieldError('signature')" class="error-message">{{ fieldError('signature') }}</div>
+            
+            <div v-if="previewImage" class="signature-preview">
+              <img :src="previewImage" alt="Preview Tanda Tangan" />
+              <div class="signature-actions">
+                <button 
+                  v-if="form.signature && existingSignatureUrl" 
+                  type="button" 
+                  class="btn-cancel-sig" 
+                  @click="cancelNewFile"
+                >
+                  Batalkan Pilihan
+                </button>
+                <button 
+                  type="button" 
+                  class="btn-remove-sig" 
+                  @click="removeSignature"
+                >
+                  {{ form.signature && !existingSignatureUrl ? 'Batalkan Pilihan' : 'Hapus Tanda Tangan' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -685,6 +811,64 @@ const handleSubmit = async () => {
   font-size: 0.75rem;
   color: #ef4444;
   margin-top: 0.25rem;
+}
+.file-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #64748b);
+  margin-top: 0.375rem;
+}
+.signature-preview {
+  margin-top: 12px;
+  border: 2px dashed #cbd5e1;
+  padding: 12px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.signature-preview img {
+  max-width: 200px;
+  max-height: 100px;
+  display: block;
+  border-radius: 4px;
+}
+.signature-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 8px;
+}
+.btn-remove-sig {
+  margin-top: 8px;
+  background: #fee2e2;
+  color: #ef4444;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+}
+.btn-remove-sig:hover {
+  background: #fca5a5;
+  color: #991b1b;
+}
+.btn-cancel-sig {
+  margin-top: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+}
+.btn-cancel-sig:hover {
+  background: #e2e8f0;
+  color: #1e293b;
 }
 .loading-state {
   display: flex;

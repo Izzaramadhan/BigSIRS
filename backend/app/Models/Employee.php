@@ -8,6 +8,7 @@ use App\Models\MasterData\Position;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class Employee extends Model
 {
@@ -34,6 +35,7 @@ class Employee extends Model
         'district_id',
         'village_id',
         'phone',
+        'signature_path',
         'education_id',
         'occupation_id',
         'position_id',
@@ -45,6 +47,21 @@ class Employee extends Model
         'is_active' => 'boolean',
         'birth_date' => 'date',
     ];
+
+    protected $appends = [
+        'has_signature',
+        'signature_url',
+    ];
+
+    public function getHasSignatureAttribute(): bool
+    {
+        return ! empty($this->signature_path);
+    }
+
+    public function getSignatureUrlAttribute(): ?string
+    {
+        return $this->signature_path ? Storage::disk('public')->url($this->signature_path) : null;
+    }
 
     public function procedures()
     {
