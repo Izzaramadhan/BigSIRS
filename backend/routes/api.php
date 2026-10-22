@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\MasterData\BuildingController;
 use App\Http\Controllers\Api\V1\MasterData\DietTypeController;
 use App\Http\Controllers\Api\V1\MasterData\DistrictController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorController;
+use App\Http\Controllers\Api\V1\MasterData\FloorController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorScheduleController;
 use App\Http\Controllers\Api\V1\MasterData\EducationController;
 use App\Http\Controllers\Api\V1\MasterData\EmployeeController;
@@ -162,6 +163,7 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('medicine-packages', MedicinePackageController::class);
             Route::apiResource('follow-up-handlings', FollowUpHandlingController::class);
             Route::apiResource('buildings', BuildingController::class);
+            Route::apiResource('floors', FloorController::class);
         });
 
         Route::prefix('lookups')->group(function () {

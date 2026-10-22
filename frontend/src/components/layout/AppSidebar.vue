@@ -118,7 +118,8 @@ const navigation = [
           {
             name: 'Data Bed',
             submenu: [
-              { name: 'Gedung', path: '/master-data/bed/buildings' }
+              { name: 'Gedung', path: '/master-data/bed/buildings' },
+              { name: 'Lantai', path: '/master-data/bed/floors' }
             ]
           },
           {

@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/master-data/basic-data/regencies', name: 'regencies', component: { template: '<div>Regencies</div>' } },
     { path: '/master-data/basic-data/districts', name: 'districts', component: { template: '<div>Districts</div>' } },
     { path: '/master-data/bed/buildings', name: 'buildings', component: { template: '<div>Buildings</div>' } },
+    { path: '/master-data/bed/floors', name: 'floors', component: { template: '<div>Floors</div>' } },
   ],
 });
 
@@ -334,6 +335,10 @@ describe('AppSidebar.vue', () => {
     const gedungLink = dataBedSubmenu.findAll('.nested-submenu-link').find(l => l.text().includes('Gedung'));
     expect(gedungLink).toBeDefined();
     expect(gedungLink.attributes('href')).toBe('/master-data/bed/buildings');
+
+    const lantaiLink = dataBedSubmenu.findAll('.nested-submenu-link').find(l => l.text().includes('Lantai'));
+    expect(lantaiLink).toBeDefined();
+    expect(lantaiLink.attributes('href')).toBe('/master-data/bed/floors');
   });
 
   it('automatically expands parents and sets active state for Gedung route', async () => {
@@ -352,6 +357,24 @@ describe('AppSidebar.vue', () => {
 
     const gedungLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Gedung'));
     expect(gedungLink.classes()).toContain('nested-submenu-link--active');
+  });
+
+  it('automatically expands parents and sets active state for Lantai route', async () => {
+    await router.push('/master-data/bed/floors');
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataBedBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Bed'));
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataBedBtn.attributes('aria-expanded')).toBe('true');
+
+    const lantaiLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Lantai'));
+    expect(lantaiLink.classes()).toContain('nested-submenu-link--active');
   });
 });
 

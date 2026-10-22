@@ -85,6 +85,12 @@ class BuildingController extends Controller
      */
     public function destroy(Building $building)
     {
+        if ($building->floors()->exists()) {
+            return response()->json([
+                'message' => 'Gedung tidak dapat dihapus karena masih digunakan oleh data lantai.',
+            ], 422);
+        }
+
         DB::transaction(function () use ($building) {
             $building->delete();
         });

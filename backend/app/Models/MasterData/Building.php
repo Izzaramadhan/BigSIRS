@@ -6,6 +6,7 @@ use Database\Factories\MasterData\BuildingFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Building extends Model
@@ -33,6 +34,11 @@ class Building extends Model
             $q->where('name', 'like', $term)
                 ->orWhere('description', 'like', $term);
         });
+    }
+
+    public function floors(): HasMany
+    {
+        return $this->hasMany(Floor::class, 'building_id');
     }
 
     protected static function newFactory()
