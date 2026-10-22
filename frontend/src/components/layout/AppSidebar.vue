@@ -123,7 +123,8 @@ const navigation = [
               { name: 'Bangsal', path: '/master-data/bed/wards' },
               { name: 'Kamar', path: '/master-data/bed/rooms' },
               { name: 'Bed', path: '/master-data/bed/beds' },
-              { name: 'Kelas', path: '/master-data/bed/room-classes' }
+              { name: 'Kelas', path: '/master-data/bed/room-classes' },
+              { name: 'Ketersediaan Bed SIRS', path: '/master-data/bed/sirs-availability' }
             ]
           },
           {

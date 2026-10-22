@@ -20,6 +20,7 @@ const router = createRouter({
     { path: '/master-data/bed/rooms', name: 'rooms', component: { template: '<div>Rooms</div>' } },
     { path: '/master-data/bed/beds', name: 'beds', component: { template: '<div>Beds</div>' } },
     { path: '/master-data/bed/room-classes', name: 'room-classes', component: { template: '<div>Room Classes</div>' } },
+    { path: '/master-data/bed/sirs-availability', name: 'sirs-bed-availability', component: { template: '<div>SIRS Bed Availability</div>' } },
   ],
 });
 
@@ -455,6 +456,25 @@ describe('AppSidebar.vue', () => {
 
     const kelasLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().trim() === 'Kelas');
     expect(kelasLink.classes()).toContain('nested-submenu-link--active');
+  });
+
+  it('automatically expands parents and sets active state for Ketersediaan Bed SIRS route', async () => {
+    await router.push('/master-data/bed/sirs-availability');
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataBedBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Bed'));
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataBedBtn.attributes('aria-expanded')).toBe('true');
+
+    const sirsLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().trim() === 'Ketersediaan Bed SIRS');
+    expect(sirsLink).toBeDefined();
+    expect(sirsLink.classes()).toContain('nested-submenu-link--active');
   });
 });
 

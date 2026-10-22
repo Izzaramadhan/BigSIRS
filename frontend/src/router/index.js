@@ -331,6 +331,13 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/bed/sirs-availability',
+      alias: ['/master-data/bed-availability-sirs', '/master-data/sirs-bed-availability'],
+      name: 'master-data.sirs-bed-availability',
+      component: () => import('../views/master-data/bed/SirsBedAvailabilityView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/diagnoses/icd10',
       name: 'master-data.icd10',
       component: () => import('../views/master-data/Icd10CodeView.vue'),
