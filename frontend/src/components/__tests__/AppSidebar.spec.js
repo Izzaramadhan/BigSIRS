@@ -339,6 +339,10 @@ describe('AppSidebar.vue', () => {
     const lantaiLink = dataBedSubmenu.findAll('.nested-submenu-link').find(l => l.text().includes('Lantai'));
     expect(lantaiLink).toBeDefined();
     expect(lantaiLink.attributes('href')).toBe('/master-data/bed/floors');
+
+    const bangsalLink = dataBedSubmenu.findAll('.nested-submenu-link').find(l => l.text().includes('Bangsal'));
+    expect(bangsalLink).toBeDefined();
+    expect(bangsalLink.attributes('href')).toBe('/master-data/bed/wards');
   });
 
   it('automatically expands parents and sets active state for Gedung route', async () => {
@@ -376,5 +380,24 @@ describe('AppSidebar.vue', () => {
     const lantaiLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Lantai'));
     expect(lantaiLink.classes()).toContain('nested-submenu-link--active');
   });
+
+  it('automatically expands parents and sets active state for Bangsal route', async () => {
+    await router.push('/master-data/bed/wards');
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataBedBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Bed'));
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataBedBtn.attributes('aria-expanded')).toBe('true');
+
+    const bangsalLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Bangsal'));
+    expect(bangsalLink.classes()).toContain('nested-submenu-link--active');
+  });
 });
+
 

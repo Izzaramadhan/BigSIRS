@@ -93,6 +93,12 @@ class FloorController extends Controller
      */
     public function destroy(Floor $floor)
     {
+        if ($floor->wards()->exists()) {
+            return response()->json([
+                'message' => 'Lantai tidak dapat dihapus karena masih digunakan oleh data bangsal.',
+            ], 422);
+        }
+
         DB::transaction(function () use ($floor) {
             $floor->delete();
         });

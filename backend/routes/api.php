@@ -46,6 +46,7 @@ use App\Http\Controllers\Api\V1\MasterData\SupplierController;
 use App\Http\Controllers\Api\V1\MasterData\TariffComponentController;
 use App\Http\Controllers\Api\V1\MasterData\TariffTypeController;
 use App\Http\Controllers\Api\V1\MasterData\VillageController;
+use App\Http\Controllers\Api\V1\MasterData\WardController;
 use App\Http\Controllers\Api\V1\MasterData\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
@@ -164,6 +165,7 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('follow-up-handlings', FollowUpHandlingController::class);
             Route::apiResource('buildings', BuildingController::class);
             Route::apiResource('floors', FloorController::class);
+            Route::apiResource('wards', WardController::class);
         });
 
         Route::prefix('lookups')->group(function () {
