@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/master-data/laboratory-groups', name: 'laboratory-groups', component: { template: '<div>Laboratory Groups</div>' } },
     { path: '/master-data/basic-data/regencies', name: 'regencies', component: { template: '<div>Regencies</div>' } },
     { path: '/master-data/basic-data/districts', name: 'districts', component: { template: '<div>Districts</div>' } },
+    { path: '/master-data/bed/buildings', name: 'buildings', component: { template: '<div>Buildings</div>' } },
   ],
 });
 
@@ -316,6 +317,41 @@ describe('AppSidebar.vue', () => {
 
     expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
     expect(dataDasarBtn.attributes('aria-expanded')).toBe('true');
+  });
+
+  it('renders Data Bed as nested group with Gedung submenu', () => {
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+
+    const mdSubmenu = wrapper.find('#submenu-master-data');
+    const dataBedBtn = mdSubmenu.findAll('button.submenu-link--group').find(b => b.text().includes('Data Bed'));
+    expect(dataBedBtn).toBeDefined();
+
+    const dataBedSubmenu = mdSubmenu.find('#submenu-data-bed');
+    expect(dataBedSubmenu.exists()).toBe(true);
+
+    const gedungLink = dataBedSubmenu.findAll('.nested-submenu-link').find(l => l.text().includes('Gedung'));
+    expect(gedungLink).toBeDefined();
+    expect(gedungLink.attributes('href')).toBe('/master-data/bed/buildings');
+  });
+
+  it('automatically expands parents and sets active state for Gedung route', async () => {
+    await router.push('/master-data/bed/buildings');
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataBedBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Bed'));
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataBedBtn.attributes('aria-expanded')).toBe('true');
+
+    const gedungLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Gedung'));
+    expect(gedungLink.classes()).toContain('nested-submenu-link--active');
   });
 });
 

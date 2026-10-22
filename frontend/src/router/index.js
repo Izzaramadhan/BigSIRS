@@ -289,6 +289,13 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/bed/buildings',
+      alias: ['/master-data/buildings'],
+      name: 'master-data.buildings',
+      component: () => import('../views/master-data/bed/BuildingView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/diagnoses/icd10',
       name: 'master-data.icd10',
       component: () => import('../views/master-data/Icd10CodeView.vue'),
