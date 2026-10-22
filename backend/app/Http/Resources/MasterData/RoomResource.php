@@ -62,6 +62,7 @@ class RoomResource extends JsonResource
                 'code' => $roomClass->code,
                 'name' => $roomClass->name,
             ] : null,
+            'display_name' => "{$this->name} - " . ($ward ? $ward->name : 'Tanpa Bangsal') . ' - ' . ($roomClass ? $roomClass->name : 'Tanpa Kelas'),
             'description' => $this->description,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

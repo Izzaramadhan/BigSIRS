@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CaptchaController;
 use App\Http\Controllers\Api\V1\LookupController;
 use App\Http\Controllers\Api\V1\MasterData\ActivityTypeController;
+use App\Http\Controllers\Api\V1\MasterData\BedController;
 use App\Http\Controllers\Api\V1\MasterData\BuildingController;
 use App\Http\Controllers\Api\V1\MasterData\DietTypeController;
 use App\Http\Controllers\Api\V1\MasterData\DistrictController;
@@ -171,6 +172,7 @@ Route::prefix('v1')->group(function () {
             Route::get('room-classes/options', [RoomClassController::class, 'options']);
             Route::apiResource('room-classes', RoomClassController::class);
             Route::apiResource('rooms', RoomController::class);
+            Route::apiResource('beds', BedController::class);
         });
 
         Route::prefix('lookups')->group(function () {
