@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\MasterData;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\MasterData\StoreRoomClassRequest;
+use App\Http\Requests\MasterData\UpdateRoomClassRequest;
 use App\Http\Resources\MasterData\RoomClassResource;
 use App\Models\MasterData\RoomClass;
 use Illuminate\Http\Request;
@@ -25,11 +26,17 @@ class RoomClassController extends Controller
         $classes = $query->orderBy('name', 'asc')->get();
 
         $data = $classes->map(function ($c) {
+            $price = (float) ($c->price ?? 0);
+
             return [
                 'id' => $c->id,
                 'code' => $c->code,
                 'name' => $c->name,
+                'price' => $price,
+                'formatted_price' => 'Rp' . number_format($price, 0, ',', '.'),
                 'description' => $c->description,
+                'aplicare_code' => $c->aplicare_code,
+                'sirs_code' => $c->sirs_code,
             ];
         });
 
@@ -52,7 +59,7 @@ class RoomClassController extends Controller
             $direction = filter_var($request->query('sortDesc', false), FILTER_VALIDATE_BOOLEAN) ? 'desc' : 'asc';
         }
 
-        $allowedSorts = ['id', 'code', 'name', 'created_at', 'updated_at'];
+        $allowedSorts = ['id', 'code', 'name', 'price', 'created_at', 'updated_at'];
         if (! in_array($sort, $allowedSorts)) {
             $sort = 'name';
             $direction = 'asc';
@@ -80,21 +87,7 @@ class RoomClassController extends Controller
     public function store(StoreRoomClassRequest $request)
     {
         return DB::transaction(function () use ($request) {
-            $data = $request->validated();
-
-            if (empty($data['code'])) {
-                // Auto generate code e.g. KLS-xx
-                $maxId = RoomClass::withTrashed()->max('id') ?? 0;
-                $generatedCode = 'KLS-' . str_pad((string) ($maxId + 1), 2, '0', STR_PAD_LEFT);
-                // Ensure unique code
-                while (RoomClass::withTrashed()->where('code', $generatedCode)->exists()) {
-                    $maxId++;
-                    $generatedCode = 'KLS-' . str_pad((string) ($maxId + 1), 2, '0', STR_PAD_LEFT);
-                }
-                $data['code'] = $generatedCode;
-            }
-
-            $roomClass = RoomClass::create($data);
+            $roomClass = RoomClass::create($request->validated());
 
             return (new RoomClassResource($roomClass))->response()->setStatusCode(201);
         });
@@ -109,13 +102,25 @@ class RoomClassController extends Controller
     }
 
     /**
+     * Update the specified room class in storage.
+     */
+    public function update(UpdateRoomClassRequest $request, RoomClass $roomClass)
+    {
+        return DB::transaction(function () use ($request, $roomClass) {
+            $roomClass->update($request->validated());
+
+            return new RoomClassResource($roomClass);
+        });
+    }
+
+    /**
      * Remove the specified room class from storage.
      */
     public function destroy(RoomClass $roomClass)
     {
         if ($roomClass->rooms()->exists()) {
             return response()->json([
-                'message' => 'Kelas tidak dapat dihapus karena masih digunakan oleh data kamar.',
+                'message' => 'Data kelas tidak dapat dihapus karena masih digunakan oleh data kamar.',
             ], 422);
         }
 

@@ -20,11 +20,15 @@ class RoomClass extends Model
         'legacy_id',
         'code',
         'name',
+        'price',
         'description',
+        'aplicare_code',
+        'sirs_code',
     ];
 
     protected $casts = [
         'legacy_id' => 'integer',
+        'price' => 'decimal:2',
     ];
 
     public function rooms(): HasMany
@@ -39,6 +43,8 @@ class RoomClass extends Model
         return $query->where(function (Builder $q) use ($term) {
             $q->where('name', 'like', $term)
                 ->orWhere('code', 'like', $term)
+                ->orWhere('aplicare_code', 'like', $term)
+                ->orWhere('sirs_code', 'like', $term)
                 ->orWhere('description', 'like', $term);
         });
     }

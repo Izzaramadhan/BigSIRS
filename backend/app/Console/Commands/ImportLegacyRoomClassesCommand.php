@@ -81,12 +81,18 @@ class ImportLegacyRoomClassesCommand extends Command
             }
 
             $code = $codeMap[$legacyId] ?? trim((string) ($item->kode_aplicares ?: ($item->kode ?: 'KLS-' . str_pad((string) $legacyId, 2, '0', STR_PAD_LEFT))));
+            $price = ! empty($item->harga) ? (float) $item->harga : 0.00;
+            $aplicareCode = ! empty($item->kode_aplicares) ? trim((string) $item->kode_aplicares) : null;
+            $sirsCode = ! empty($item->kode_sirs) ? trim((string) $item->kode_sirs) : null;
 
             $validRecords[] = [
                 'legacy_id' => $legacyId,
                 'code' => $code,
                 'name' => $name,
+                'price' => $price,
                 'description' => $description,
+                'aplicare_code' => $aplicareCode,
+                'sirs_code' => $sirsCode,
                 'is_soft_deleted' => $isSoftDeleted,
             ];
             $this->stats['valid']++;
@@ -127,7 +133,10 @@ class ImportLegacyRoomClassesCommand extends Command
                         'legacy_id' => $record['legacy_id'],
                         'code' => $record['code'],
                         'name' => $record['name'],
+                        'price' => $record['price'],
                         'description' => $record['description'],
+                        'aplicare_code' => $record['aplicare_code'],
+                        'sirs_code' => $record['sirs_code'],
                     ]);
 
                     if ($existing->trashed()) {
@@ -140,7 +149,10 @@ class ImportLegacyRoomClassesCommand extends Command
                         'legacy_id' => $record['legacy_id'],
                         'code' => $record['code'],
                         'name' => $record['name'],
+                        'price' => $record['price'],
                         'description' => $record['description'],
+                        'aplicare_code' => $record['aplicare_code'],
+                        'sirs_code' => $record['sirs_code'],
                     ]);
 
                     $this->stats['created']++;
