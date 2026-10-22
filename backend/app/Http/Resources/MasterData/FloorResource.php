@@ -29,6 +29,7 @@ class FloorResource extends JsonResource
                 ] : null;
             }),
             'name' => $this->name,
+            'display_name' => $this->building ? "{$this->name} - {$this->building->name}" : $this->name,
             'description' => $this->description,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Floor extends Model
@@ -31,6 +32,11 @@ class Floor extends Model
     public function building(): BelongsTo
     {
         return $this->belongsTo(Building::class, 'building_id');
+    }
+
+    public function wards(): HasMany
+    {
+        return $this->hasMany(Ward::class, 'floor_id');
     }
 
     public function scopeSearch(Builder $query, string $term): Builder
