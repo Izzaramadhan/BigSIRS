@@ -26,13 +26,13 @@ class RoomController extends Controller
             $direction = filter_var($request->query('sortDesc', false), FILTER_VALIDATE_BOOLEAN) ? 'desc' : 'asc';
         }
 
-        $allowedSorts = ['id', 'code', 'name', 'ward_id', 'created_at', 'updated_at'];
+        $allowedSorts = ['id', 'code', 'name', 'ward_id', 'room_class_id', 'class_id', 'created_at', 'updated_at'];
         if (! in_array($sort, $allowedSorts)) {
             $sort = 'created_at';
             $direction = 'desc';
         }
 
-        $query = Room::with(['ward.floor.building']);
+        $query = Room::with(['ward.floor.building', 'roomClass']);
 
         if ($request->filled('ward_id')) {
             $query->where('ward_id', $request->ward_id);
@@ -59,7 +59,7 @@ class RoomController extends Controller
     {
         return DB::transaction(function () use ($request) {
             $room = Room::create($request->validated());
-            $room->load(['ward.floor.building']);
+            $room->load(['ward.floor.building', 'roomClass']);
 
             return (new RoomResource($room))->response()->setStatusCode(201);
         });
@@ -70,7 +70,7 @@ class RoomController extends Controller
      */
     public function show(Room $room)
     {
-        $room->load(['ward.floor.building']);
+        $room->load(['ward.floor.building', 'roomClass']);
 
         return new RoomResource($room);
     }
@@ -82,7 +82,7 @@ class RoomController extends Controller
     {
         return DB::transaction(function () use ($request, $room) {
             $room->update($request->validated());
-            $room->load(['ward.floor.building']);
+            $room->load(['ward.floor.building', 'roomClass']);
 
             return new RoomResource($room);
         });

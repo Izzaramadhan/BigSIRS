@@ -18,6 +18,7 @@ class Room extends Model
 
     protected $fillable = [
         'ward_id',
+        'room_class_id',
         'class_id',
         'legacy_id',
         'code',
@@ -27,6 +28,7 @@ class Room extends Model
 
     protected $casts = [
         'ward_id' => 'integer',
+        'room_class_id' => 'integer',
         'class_id' => 'integer',
         'legacy_id' => 'integer',
     ];
@@ -34,6 +36,16 @@ class Room extends Model
     public function ward(): BelongsTo
     {
         return $this->belongsTo(Ward::class, 'ward_id');
+    }
+
+    public function roomClass(): BelongsTo
+    {
+        return $this->belongsTo(RoomClass::class, 'room_class_id');
+    }
+
+    public function class(): BelongsTo
+    {
+        return $this->belongsTo(RoomClass::class, 'room_class_id');
     }
 
     public function scopeSearch(Builder $query, string $term): Builder
@@ -44,6 +56,10 @@ class Room extends Model
             $q->where('code', 'like', $term)
                 ->orWhere('name', 'like', $term)
                 ->orWhere('description', 'like', $term)
+                ->orWhereHas('roomClass', function (Builder $rc) use ($term) {
+                    $rc->where('name', 'like', $term)
+                        ->orWhere('code', 'like', $term);
+                })
                 ->orWhereHas('ward', function (Builder $w) use ($term) {
                     $w->where('name', 'like', $term)
                         ->orWhereHas('floor', function (Builder $f) use ($term) {

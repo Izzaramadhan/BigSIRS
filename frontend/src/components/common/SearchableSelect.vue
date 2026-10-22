@@ -53,6 +53,10 @@ const props = defineProps({
   creatable: {
     type: Boolean,
     default: false
+  },
+  createPrompt: {
+    type: [String, Function],
+    default: ''
   }
 });
 
@@ -155,6 +159,17 @@ const handleCreateClick = () => {
   emit('create', text);
   isOpen.value = false;
 };
+
+const createPromptText = computed(() => {
+  const q = searchQuery.value.trim();
+  if (typeof props.createPrompt === 'function') {
+    return props.createPrompt(q);
+  }
+  if (props.createPrompt) {
+    return props.createPrompt.replace('{name}', q).replace('[name]', q).replace('[nama]', q);
+  }
+  return `Tambahkan “${q}” sebagai generik baru`;
+});
 
 const handleClickOutside = (e) => {
   if (dropdownRef.value && !dropdownRef.value.contains(e.target)) {
@@ -275,7 +290,7 @@ onUnmounted(() => {
           @click.stop="handleCreateClick"
         >
           <span class="create-plus">+</span>
-          Tambahkan &ldquo;{{ searchQuery.trim() }}&rdquo; sebagai generik baru
+          {{ createPromptText }}
         </div>
       </div>
     </div>
