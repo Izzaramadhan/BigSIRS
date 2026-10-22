@@ -86,4 +86,18 @@ class MedicineUnitController extends Controller
 
         return response()->noContent();
     }
+
+    /**
+     * Update the active status of the specified resource.
+     */
+    public function updateStatus(Request $request, MedicineUnit $medicineUnit)
+    {
+        $validated = $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $medicineUnit->update($validated);
+
+        return new MedicineUnitResource($medicineUnit);
+    }
 }

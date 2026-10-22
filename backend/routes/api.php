@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\V1\MasterData\RadiologyItemGroupController;
 use App\Http\Controllers\Api\V1\MasterData\RadiologyTypeController;
 use App\Http\Controllers\Api\V1\MasterData\RegencyController;
 use App\Http\Controllers\Api\V1\MasterData\ReportGroupController;
+use App\Http\Controllers\Api\V1\MasterData\RoomController;
 use App\Http\Controllers\Api\V1\MasterData\ServiceTypeController;
 use App\Http\Controllers\Api\V1\MasterData\SupplierController;
 use App\Http\Controllers\Api\V1\MasterData\TariffComponentController;
@@ -166,6 +167,7 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('buildings', BuildingController::class);
             Route::apiResource('floors', FloorController::class);
             Route::apiResource('wards', WardController::class);
+            Route::apiResource('rooms', RoomController::class);
         });
 
         Route::prefix('lookups')->group(function () {

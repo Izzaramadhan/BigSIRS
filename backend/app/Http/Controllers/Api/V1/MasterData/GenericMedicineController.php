@@ -102,4 +102,29 @@ class GenericMedicineController extends Controller
 
         return new GenericMedicineResource($genericMedicine);
     }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, GenericMedicine $genericMedicine)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        $genericMedicine->update($validated);
+
+        return new GenericMedicineResource($genericMedicine);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(GenericMedicine $genericMedicine)
+    {
+        $genericMedicine->delete();
+
+        return response()->noContent();
+    }
 }

@@ -86,4 +86,18 @@ class MedicineCategoryController extends Controller
 
         return response()->noContent();
     }
+
+    /**
+     * Update the active status of the specified resource.
+     */
+    public function updateStatus(Request $request, MedicineCategory $medicineCategory)
+    {
+        $validated = $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $medicineCategory->update($validated);
+
+        return new MedicineCategoryResource($medicineCategory);
+    }
 }

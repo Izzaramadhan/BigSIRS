@@ -22,8 +22,8 @@ class ImportLegacyDistrictsCommand extends Command
             ? 'simrs_legacy_test'
             : 'simrs_legacy_restored';
 
-        if (config('database.default') === 'sqlite' && config('database.connections.legacy.database') !== 'simrs_legacy_test') {
-            $this->error('Safety guard: Test environment must use simrs_legacy_test');
+        if (config('database.default') === 'sqlite' && !in_array(config('database.connections.legacy.database'), ['simrs_legacy_test', ':memory:'])) {
+            $this->error('Safety guard: Test environment must use simrs_legacy_test or :memory:');
 
             return 1;
         }

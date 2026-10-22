@@ -16,6 +16,8 @@ const router = createRouter({
     { path: '/master-data/basic-data/districts', name: 'districts', component: { template: '<div>Districts</div>' } },
     { path: '/master-data/bed/buildings', name: 'buildings', component: { template: '<div>Buildings</div>' } },
     { path: '/master-data/bed/floors', name: 'floors', component: { template: '<div>Floors</div>' } },
+    { path: '/master-data/bed/wards', name: 'wards', component: { template: '<div>Wards</div>' } },
+    { path: '/master-data/bed/rooms', name: 'rooms', component: { template: '<div>Rooms</div>' } },
   ],
 });
 
@@ -397,6 +399,24 @@ describe('AppSidebar.vue', () => {
 
     const bangsalLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Bangsal'));
     expect(bangsalLink.classes()).toContain('nested-submenu-link--active');
+  });
+
+  it('automatically expands parents and sets active state for Kamar route', async () => {
+    await router.push('/master-data/bed/rooms');
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router, createPinia()] },
+    });
+    await flushPromises();
+
+    const masterDataBtn = wrapper.findAll('button.nav-link--submenu').find(b => b.text().includes('Master Data'));
+    const dataBedBtn = wrapper.findAll('button.submenu-link--group').find(b => b.text().includes('Data Bed'));
+
+    expect(masterDataBtn.attributes('aria-expanded')).toBe('true');
+    expect(dataBedBtn.attributes('aria-expanded')).toBe('true');
+
+    const kamarLink = wrapper.findAll('.nested-submenu-link').find(l => l.text().includes('Kamar'));
+    expect(kamarLink.classes()).toContain('nested-submenu-link--active');
   });
 });
 
