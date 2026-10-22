@@ -18,7 +18,10 @@ class RoomClassFactory extends Factory
             'legacy_id' => null,
             'code' => 'KLS-' . fake()->unique()->numerify('##'),
             'name' => 'Kelas ' . fake()->unique()->word(),
+            'price' => fake()->numberBetween(50000, 1500000),
             'description' => fake()->optional()->sentence(),
+            'aplicare_code' => fake()->optional()->numerify('KL#'),
+            'sirs_code' => fake()->optional()->numerify('##'),
         ];
     }
 }

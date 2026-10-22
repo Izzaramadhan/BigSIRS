@@ -21,6 +21,11 @@ class RoomClassesService {
     return response.data
   }
 
+  async updateRoomClass(id, data) {
+    const response = await axios.put(`/master-data/room-classes/${id}`, data)
+    return response.data
+  }
+
   async deleteRoomClass(id) {
     const response = await axios.delete(`/master-data/room-classes/${id}`)
     return response.data
