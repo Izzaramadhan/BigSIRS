@@ -29,6 +29,7 @@ class UpdateVillageRequest extends FormRequest
                 Rule::unique('villages', 'code')->ignore($this->village),
             ],
             'name' => ['required', 'string', 'max:255'],
+            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 

@@ -95,7 +95,7 @@ class WardController extends Controller
     {
         if (method_exists($ward, 'rooms') && $ward->rooms()->exists()) {
             return response()->json([
-                'message' => 'Bangsal tidak dapat dihapus karena masih digunakan oleh data ruangan.',
+                'message' => 'Bangsal tidak dapat dihapus karena masih digunakan oleh data kamar.',
             ], 422);
         }
 

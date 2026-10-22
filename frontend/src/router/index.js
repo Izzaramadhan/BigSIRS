@@ -310,6 +310,13 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/master-data/bed/rooms',
+      alias: ['/master-data/rooms'],
+      name: 'master-data.rooms',
+      component: () => import('../views/master-data/bed/RoomView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/master-data/diagnoses/icd10',
       name: 'master-data.icd10',
       component: () => import('../views/master-data/Icd10CodeView.vue'),

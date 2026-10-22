@@ -29,6 +29,7 @@ class VillageResource extends JsonResource
 
                 return null;
             }),
+            'is_active' => (bool) $this->is_active,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

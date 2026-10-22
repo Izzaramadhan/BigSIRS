@@ -39,8 +39,8 @@ class ImportLegacyRegenciesCommand extends Command
         $provinceMap = Province::pluck('id', 'legacy_id')->toArray();
 
         // Check test DB override logic
-        if (config('database.default') === 'sqlite' && config('database.connections.legacy.database') !== 'simrs_legacy_test') {
-            $this->error('Legacy connection must be simrs_legacy_test during testing.');
+        if (config('database.default') === 'sqlite' && !in_array(config('database.connections.legacy.database'), ['simrs_legacy_test', ':memory:'])) {
+            $this->error('Legacy connection must be simrs_legacy_test or :memory: during testing.');
 
             return 1;
         }

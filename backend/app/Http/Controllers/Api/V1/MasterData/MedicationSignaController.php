@@ -101,4 +101,20 @@ class MedicationSignaController extends Controller
 
         return response()->json(['message' => 'Signa obat berhasil dihapus.']);
     }
+
+    /**
+     * Update the active status of the specified resource.
+     */
+    public function updateStatus(Request $request, MedicationSigna $medicationSigna): MedicationSignaResource
+    {
+        Gate::authorize('update', $medicationSigna);
+
+        $validated = $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $medicationSigna->update($validated);
+
+        return new MedicationSignaResource($medicationSigna);
+    }
 }

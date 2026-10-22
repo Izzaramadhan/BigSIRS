@@ -120,7 +120,8 @@ const navigation = [
             submenu: [
               { name: 'Gedung', path: '/master-data/bed/buildings' },
               { name: 'Lantai', path: '/master-data/bed/floors' },
-              { name: 'Bangsal', path: '/master-data/bed/wards' }
+              { name: 'Bangsal', path: '/master-data/bed/wards' },
+              { name: 'Kamar', path: '/master-data/bed/rooms' }
             ]
           },
           {
