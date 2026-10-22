@@ -19,6 +19,14 @@ defineProps({
   warningMessage: {
     type: String,
     default: 'Tindakan ini tidak dapat dibatalkan.'
+  },
+  confirmText: {
+    type: String,
+    default: 'Ya, Hapus'
+  },
+  confirmMessage: {
+    type: String,
+    default: ''
   }
 });
 
@@ -39,13 +47,14 @@ defineEmits(['close', 'confirm']);
           </button>
         </div>
         <div class="modal-body">
-          <p>Apakah Anda yakin ingin menghapus <strong>{{ itemName }}</strong>?</p>
+          <p v-if="confirmMessage">{{ confirmMessage }}</p>
+          <p v-else>Apakah Anda yakin ingin menghapus <strong>{{ itemName }}</strong>?</p>
           <p class="text-secondary" style="font-size: 0.85rem; margin-top: 0.5rem;">{{ warningMessage }}</p>
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" @click="$emit('close')" :disabled="isSubmitting">Batal</button>
           <button class="btn-danger" @click="$emit('confirm')" :disabled="isSubmitting">
-            {{ isSubmitting ? 'Menghapus...' : 'Ya, Hapus' }}
+            {{ isSubmitting ? 'Menghapus...' : confirmText }}
           </button>
         </div>
       </div>

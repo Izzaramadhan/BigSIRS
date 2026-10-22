@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CaptchaController;
 use App\Http\Controllers\Api\V1\LookupController;
 use App\Http\Controllers\Api\V1\MasterData\ActivityTypeController;
+use App\Http\Controllers\Api\V1\MasterData\BuildingController;
 use App\Http\Controllers\Api\V1\MasterData\DietTypeController;
 use App\Http\Controllers\Api\V1\MasterData\DistrictController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorController;
@@ -160,6 +161,7 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('medicines', MedicineController::class);
             Route::apiResource('medicine-packages', MedicinePackageController::class);
             Route::apiResource('follow-up-handlings', FollowUpHandlingController::class);
+            Route::apiResource('buildings', BuildingController::class);
         });
 
         Route::prefix('lookups')->group(function () {

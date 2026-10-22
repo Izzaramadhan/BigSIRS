@@ -116,6 +116,12 @@ const navigation = [
             ]
           },
           {
+            name: 'Data Bed',
+            submenu: [
+              { name: 'Gedung', path: '/master-data/bed/buildings' }
+            ]
+          },
+          {
             name: 'Data Diagnosa',
             submenu: [
               { name: 'ICD-10', path: '/master-data/diagnoses/icd10' },
