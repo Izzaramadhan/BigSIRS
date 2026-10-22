@@ -2,7 +2,9 @@
 import { ref, reactive, watch, computed } from 'vue'
 import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import AddRoomClassDialog from './AddRoomClassDialog.vue'
 import { wardsService } from '@/services/master-data/wards.service'
+import { roomClassesService } from '@/services/master-data/roomClasses.service'
 
 const props = defineProps({
   isOpen: {
@@ -23,18 +25,32 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['close', 'submit'])
+const emit = defineEmits(['close', 'submit', 'toast'])
 
 const form = reactive({
   ward_id: '',
   code: '',
   name: '',
+  room_class_id: '',
   description: '',
 })
+
+const clientErrors = reactive({})
 
 const wardOptions = ref([])
 const loadingWards = ref(false)
 const wardLoadError = ref(null)
+
+const roomClassOptions = ref([])
+const loadingRoomClasses = ref(false)
+const roomClassLoadError = ref(null)
+
+const addRoomClassDialog = reactive({
+  isOpen: false,
+  initialName: '',
+  isSubmitting: false,
+  errorMessage: '',
+})
 
 const isSubmitDisabled = computed(() => {
   return loadingWards.value || wardOptions.value.length === 0
@@ -80,18 +96,130 @@ const loadWards = async () => {
   }
 }
 
+const loadRoomClasses = async (searchQuery = '') => {
+  loadingRoomClasses.value = true
+  roomClassLoadError.value = null
+  try {
+    const response = await roomClassesService.getRoomClassOptions({ search: searchQuery })
+    const items = response.data || []
+    roomClassOptions.value = items.map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code,
+      label: c.name,
+      value: c.id,
+    }))
+
+    // Preserve selected class if not present in options list
+    const currentClassId = form.room_class_id
+    if (currentClassId && !roomClassOptions.value.some((c) => String(c.id) === String(currentClassId))) {
+      const currentClassObj = props.room?.room_class || props.room?.class
+      if (currentClassObj && String(currentClassObj.id) === String(currentClassId)) {
+        roomClassOptions.value.unshift({
+          id: currentClassObj.id,
+          name: currentClassObj.name,
+          code: currentClassObj.code,
+          label: currentClassObj.name,
+          value: currentClassObj.id,
+        })
+      }
+    }
+  } catch (err) {
+    roomClassLoadError.value = 'Gagal memuat data kelas. Silakan coba kembali.'
+    roomClassOptions.value = []
+  } finally {
+    loadingRoomClasses.value = false
+  }
+}
+
+const handleSearchRoomClass = async (query) => {
+  await loadRoomClasses(query)
+}
+
+const handleCreateRoomClass = (name) => {
+  addRoomClassDialog.initialName = name
+  addRoomClassDialog.errorMessage = ''
+  addRoomClassDialog.isOpen = true
+}
+
+const handleCloseAddRoomClass = () => {
+  if (addRoomClassDialog.isSubmitting) return
+  addRoomClassDialog.isOpen = false
+  addRoomClassDialog.errorMessage = ''
+}
+
+const handleSubmitAddRoomClass = async (name) => {
+  addRoomClassDialog.isSubmitting = true
+  addRoomClassDialog.errorMessage = ''
+  try {
+    const res = await roomClassesService.createRoomClass({ name })
+    const newClass = res?.data ?? res
+
+    if (newClass?.id) {
+      const exists = roomClassOptions.value.some((c) => String(c.id) === String(newClass.id))
+      if (!exists) {
+        roomClassOptions.value.unshift({
+          id: newClass.id,
+          name: newClass.name,
+          code: newClass.code,
+          label: newClass.name,
+          value: newClass.id,
+        })
+      }
+      form.room_class_id = newClass.id
+      clearFieldError('room_class_id')
+      addRoomClassDialog.isOpen = false
+
+      emit('toast', {
+        type: 'success',
+        title: 'Berhasil',
+        message: 'Data kelas berhasil ditambahkan.',
+      })
+    }
+  } catch (err) {
+    const msg =
+      err.response?.data?.errors?.name?.[0] ||
+      err.response?.data?.message ||
+      'Gagal menambahkan data kelas.'
+    addRoomClassDialog.errorMessage = msg
+  } finally {
+    addRoomClassDialog.isSubmitting = false
+  }
+}
+
 const populateForm = (data) => {
   form.ward_id = data.ward_id || data.ward?.id || ''
   form.code = data.code || ''
   form.name = data.name || ''
+  const classVal = data.room_class_id || data.class_id || data.room_class?.id || data.class?.id || ''
+  form.room_class_id = classVal ? Number(classVal) : ''
   form.description = data.description || ''
+
+  // Ensure room class is in options
+  const classObj = data.room_class || data.class
+  if (classObj && form.room_class_id) {
+    const exists = roomClassOptions.value.some((c) => String(c.id) === String(form.room_class_id))
+    if (!exists) {
+      roomClassOptions.value.unshift({
+        id: classObj.id,
+        name: classObj.name,
+        code: classObj.code,
+        label: classObj.name,
+        value: classObj.id,
+      })
+    }
+  }
 }
 
 const resetForm = () => {
   form.ward_id = ''
   form.code = ''
   form.name = ''
+  form.room_class_id = ''
   form.description = ''
+  Object.keys(clientErrors).forEach((k) => delete clientErrors[k])
+  addRoomClassDialog.isOpen = false
+  addRoomClassDialog.errorMessage = ''
 }
 
 watch(
@@ -102,7 +230,7 @@ watch(
       return
     }
 
-    await loadWards()
+    await Promise.all([loadWards(), loadRoomClasses()])
 
     if (props.room) {
       populateForm(props.room)
@@ -113,20 +241,60 @@ watch(
   { immediate: true },
 )
 
+const clearFieldError = (field) => {
+  if (clientErrors[field]) {
+    delete clientErrors[field]
+  }
+}
+
+const fieldError = (field) => {
+  if (clientErrors[field]) {
+    return clientErrors[field]
+  }
+  return props.errors?.[field]?.[0] || null
+}
+
+const validateClient = () => {
+  Object.keys(clientErrors).forEach((k) => delete clientErrors[k])
+  let isValid = true
+
+  if (!form.ward_id) {
+    clientErrors.ward_id = 'Bangsal wajib dipilih.'
+    isValid = false
+  }
+
+  if (!form.code || !form.code.trim()) {
+    clientErrors.code = 'Kode kamar wajib diisi.'
+    isValid = false
+  }
+
+  if (!form.name || !form.name.trim()) {
+    clientErrors.name = 'Nama kamar wajib diisi.'
+    isValid = false
+  }
+
+  if (!form.room_class_id) {
+    clientErrors.room_class_id = 'Kelas wajib dipilih.'
+    isValid = false
+  }
+
+  return isValid
+}
+
 const handleSubmit = () => {
   if (isSubmitDisabled.value) return
+  if (!validateClient()) return
 
   const payload = {
     ward_id: form.ward_id ? Number(form.ward_id) : '',
     code: form.code.trim(),
     name: form.name.trim(),
-    class_id: null,
+    room_class_id: form.room_class_id ? Number(form.room_class_id) : '',
+    class_id: form.room_class_id ? Number(form.room_class_id) : '',
     description: form.description ? form.description.trim() : null,
   }
   emit('submit', payload)
 }
-
-const fieldError = (field) => props.errors?.[field]?.[0] || null
 </script>
 
 <template>
@@ -174,6 +342,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
           search-placeholder="Cari bangsal, lantai, atau gedung..."
           empty-text="Tidak ada data bangsal ditemukan."
           :is-invalid="!!fieldError('ward_id')"
+          @update:model-value="clearFieldError('ward_id')"
         />
         <div v-if="fieldError('ward_id')" class="invalid-feedback">
           {{ fieldError('ward_id') }}
@@ -191,6 +360,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
           :class="{ 'is-invalid': fieldError('code') }"
           placeholder="Masukkan kode kamar"
           required
+          @input="clearFieldError('code')"
         />
         <div v-if="fieldError('code')" class="invalid-feedback">
           {{ fieldError('code') }}
@@ -208,25 +378,38 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
           :class="{ 'is-invalid': fieldError('name') }"
           placeholder="Masukkan nama kamar"
           required
+          @input="clearFieldError('name')"
         />
         <div v-if="fieldError('name')" class="invalid-feedback">
           {{ fieldError('name') }}
         </div>
       </div>
 
-      <!-- Field 4: Kelas (Disabled with helper text as per specification) -->
+      <!-- Field 4: Kelas -->
       <div class="form-group">
-        <label for="room-class" class="form-label">Kelas</label>
-        <input
-          id="room-class"
-          type="text"
-          class="form-control"
-          disabled
-          placeholder="Master data Kelas belum tersedia dan akan diintegrasikan pada pengembangan berikutnya."
+        <label for="room-class-id" class="form-label required">Kelas</label>
+        <SearchableSelect
+          id="room-class-id"
+          v-model="form.room_class_id"
+          :options="roomClassOptions"
+          placeholder="Pilih atau cari kelas"
+          search-placeholder="Cari kelas..."
+          empty-text="Data kelas tidak ditemukan"
+          :loading="loadingRoomClasses"
+          :error="roomClassLoadError"
+          :is-invalid="!!fieldError('room_class_id')"
+          :disabled="isSubmitting"
+          server-search
+          clearable
+          creatable
+          create-prompt='Tambah kelas “[name]”'
+          @search="handleSearchRoomClass"
+          @create="handleCreateRoomClass"
+          @update:model-value="clearFieldError('room_class_id')"
         />
-        <span class="field-hint">
-          Master data Kelas belum tersedia dan akan diintegrasikan pada pengembangan berikutnya.
-        </span>
+        <div v-if="fieldError('room_class_id')" class="invalid-feedback">
+          {{ fieldError('room_class_id') }}
+        </div>
       </div>
 
       <!-- Field 5: Deskripsi -->
@@ -239,6 +422,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
           :class="{ 'is-invalid': fieldError('description') }"
           placeholder="Masukkan deskripsi kamar"
           rows="3"
+          @input="clearFieldError('description')"
         ></textarea>
         <div v-if="fieldError('description')" class="invalid-feedback">
           {{ fieldError('description') }}
@@ -246,6 +430,16 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
       </div>
     </div>
   </MasterDataFormModal>
+
+  <!-- Add Room Class Inline Modal Dialog -->
+  <AddRoomClassDialog
+    :is-open="addRoomClassDialog.isOpen"
+    :initial-name="addRoomClassDialog.initialName"
+    :is-submitting="addRoomClassDialog.isSubmitting"
+    :error-message="addRoomClassDialog.errorMessage"
+    @close="handleCloseAddRoomClass"
+    @submit="handleSubmitAddRoomClass"
+  />
 </template>
 
 <style scoped>
@@ -328,11 +522,6 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.field-hint {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
 }
 
 .form-textarea {

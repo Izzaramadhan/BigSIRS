@@ -17,6 +17,7 @@ class RoomResource extends JsonResource
         $ward = $this->ward;
         $floor = $ward?->floor;
         $building = $floor?->building;
+        $roomClass = $this->roomClass;
 
         $wardDisplayName = null;
         if ($ward) {
@@ -49,8 +50,18 @@ class RoomResource extends JsonResource
             'ward_display_name' => $wardDisplayName,
             'code' => $this->code,
             'name' => $this->name,
-            'class_id' => $this->class_id,
-            'class' => null,
+            'room_class_id' => $this->room_class_id ?? $this->class_id,
+            'room_class' => $roomClass ? [
+                'id' => $roomClass->id,
+                'code' => $roomClass->code,
+                'name' => $roomClass->name,
+            ] : null,
+            'class_id' => $this->room_class_id ?? $this->class_id,
+            'class' => $roomClass ? [
+                'id' => $roomClass->id,
+                'code' => $roomClass->code,
+                'name' => $roomClass->name,
+            ] : null,
             'description' => $this->description,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

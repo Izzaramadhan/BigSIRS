@@ -16,11 +16,13 @@ class StoreRoomRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $roomClassId = $this->room_class_id ?? $this->class_id;
         $this->merge([
             'code' => $this->code !== null ? preg_replace('/\s+/', ' ', trim((string) $this->code)) : null,
             'name' => $this->name !== null ? preg_replace('/\s+/', ' ', trim((string) $this->name)) : null,
             'description' => $this->description !== null ? trim((string) $this->description) : null,
-            'class_id' => $this->class_id !== null && $this->class_id !== '' ? (int) $this->class_id : null,
+            'room_class_id' => ($roomClassId !== null && $roomClassId !== '') ? (int) $roomClassId : null,
+            'class_id' => ($roomClassId !== null && $roomClassId !== '') ? (int) $roomClassId : null,
         ]);
     }
 
@@ -43,6 +45,16 @@ class StoreRoomRequest extends FormRequest
                     }
                 },
             ],
+            'room_class_id' => [
+                'required',
+                'integer',
+                Rule::exists('room_classes', 'id')->whereNull('deleted_at'),
+            ],
+            'class_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('room_classes', 'id')->whereNull('deleted_at'),
+            ],
             'code' => [
                 'required',
                 'string',
@@ -57,7 +69,6 @@ class StoreRoomRequest extends FormRequest
                     ->where('ward_id', $this->ward_id)
                     ->whereNull('deleted_at'),
             ],
-            'class_id' => ['nullable', 'integer'],
             'description' => ['nullable', 'string'],
         ];
     }
@@ -71,6 +82,12 @@ class StoreRoomRequest extends FormRequest
             'ward_id.required' => 'Bangsal wajib dipilih.',
             'ward_id.integer' => 'Pilihan bangsal tidak valid.',
             'ward_id.exists' => 'Bangsal yang dipilih tidak valid atau sudah dihapus.',
+            'room_class_id.required' => 'Kelas wajib dipilih.',
+            'room_class_id.integer' => 'Kelas yang dipilih tidak valid.',
+            'room_class_id.exists' => 'Kelas yang dipilih tidak valid.',
+            'class_id.required' => 'Kelas wajib dipilih.',
+            'class_id.integer' => 'Kelas yang dipilih tidak valid.',
+            'class_id.exists' => 'Kelas yang dipilih tidak valid.',
             'code.required' => 'Kode kamar wajib diisi.',
             'code.string' => 'Kode kamar harus berupa teks.',
             'code.max' => 'Kode kamar maksimal 50 karakter.',

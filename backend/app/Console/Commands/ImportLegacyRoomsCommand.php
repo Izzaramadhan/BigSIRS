@@ -54,6 +54,10 @@ class ImportLegacyRoomsCommand extends Command
         $wardsByLegacyId = Ward::whereNotNull('legacy_id')->pluck('id', 'legacy_id')->toArray();
         $wardsById = Ward::pluck('id', 'id')->toArray();
 
+        // Cache room classes mapped by legacy_id and id
+        $classesByLegacyId = \App\Models\MasterData\RoomClass::whereNotNull('legacy_id')->pluck('id', 'legacy_id')->toArray();
+        $classesById = \App\Models\MasterData\RoomClass::pluck('id', 'id')->toArray();
+
         $validRecords = [];
         $usedCodes = [];
 
@@ -99,10 +103,14 @@ class ImportLegacyRoomsCommand extends Command
             }
             $usedCodes[] = $code;
 
+            $legacyClassId = $item->id_kelas ? (int) $item->id_kelas : null;
+            $targetRoomClassId = $legacyClassId ? ($classesByLegacyId[$legacyClassId] ?? $classesById[$legacyClassId] ?? null) : null;
+
             $validRecords[] = [
                 'legacy_id' => $legacyId,
                 'ward_id' => $targetWardId,
-                'class_id' => $item->id_kelas ? (int) $item->id_kelas : null,
+                'room_class_id' => $targetRoomClassId,
+                'class_id' => $legacyClassId,
                 'code' => $code,
                 'name' => $name,
                 'description' => $description,
@@ -142,6 +150,7 @@ class ImportLegacyRoomsCommand extends Command
                 if ($existing) {
                     $existing->update([
                         'ward_id' => $record['ward_id'],
+                        'room_class_id' => $record['room_class_id'],
                         'class_id' => $record['class_id'],
                         'legacy_id' => $record['legacy_id'],
                         'code' => $record['code'],
@@ -157,6 +166,7 @@ class ImportLegacyRoomsCommand extends Command
                 } else {
                     Room::create([
                         'ward_id' => $record['ward_id'],
+                        'room_class_id' => $record['room_class_id'],
                         'class_id' => $record['class_id'],
                         'legacy_id' => $record['legacy_id'],
                         'code' => $record['code'],

@@ -41,6 +41,9 @@ const getWardDisplayName = (item) => {
 }
 
 const getClassName = (item) => {
+  if (item.room_class && item.room_class.name) {
+    return item.room_class.name
+  }
   if (item.class && item.class.name) {
     return item.class.name
   }
