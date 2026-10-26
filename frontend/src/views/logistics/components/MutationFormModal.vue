@@ -167,12 +167,12 @@ const handleSubmit = () => {
 
         <!-- Body -->
         <div class="modal-body">
-          <form id="mutation-form" @submit.prevent="handleSubmit">
+          <form autocomplete="off" id="mutation-form" @submit.prevent="handleSubmit">
             <!-- Row 1: Nomor Mutasi & Tanggal -->
             <div class="form-row">
               <div class="form-group flex-1">
                 <label class="form-label" for="form-mutation-num">Nomor Mutasi</label>
-                <input
+                <input autocomplete="off"
                   id="form-mutation-num"
                   v-model="formData.mutationNumber"
                   type="text"
@@ -185,7 +185,7 @@ const handleSubmit = () => {
                 <label class="form-label" for="form-mutation-date">
                   Tanggal & Waktu Mutasi <span class="required-mark">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-mutation-date"
                   v-model="formData.date"
                   type="datetime-local"
@@ -306,7 +306,7 @@ const handleSubmit = () => {
 
                       <!-- Kuantitas Mutasi -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model.number="it.quantity"
                           type="number"
                           min="1"

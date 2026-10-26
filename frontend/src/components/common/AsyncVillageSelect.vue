@@ -141,7 +141,7 @@ onUnmounted(() => {
     
     <div v-if="isOpen" class="dropdown-menu">
       <div class="search-box">
-        <input 
+        <input autocomplete="off" 
           ref="searchInputRef"
           type="text" 
           v-model="searchQuery" 

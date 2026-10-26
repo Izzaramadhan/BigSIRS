@@ -95,7 +95,7 @@ const clearSearch = () => {
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
         
-        <input
+        <input autocomplete="off"
           v-model="internalQuery"
           type="text"
           class="form-input search-input"
@@ -180,7 +180,7 @@ const clearSearch = () => {
           <!-- Filter 3: Tanggal Lahir -->
           <div class="filter-group">
             <label class="filter-label" for="filter-birthdate">Tanggal Lahir</label>
-            <input 
+            <input autocomplete="off" 
               id="filter-birthdate" 
               v-model="filters.birthDate" 
               type="date" 
@@ -191,7 +191,7 @@ const clearSearch = () => {
           <!-- Filter 4: Nomor Rekam Medis -->
           <div class="filter-group">
             <label class="filter-label" for="filter-rm">Nomor Rekam Medis</label>
-            <input 
+            <input autocomplete="off" 
               id="filter-rm" 
               v-model="filters.medicalRecordNumber" 
               type="text" 

@@ -118,7 +118,7 @@ const handleSubmit = async () => {
           </button>
         </div>
 
-        <form @submit.prevent="handleSubmit" class="modal-form">
+        <form autocomplete="off" @submit.prevent="handleSubmit" class="modal-form">
           <div class="modal-body">
             <div v-if="submitError" class="alert-error">
               {{ submitError }}
@@ -145,7 +145,7 @@ const handleSubmit = async () => {
 
             <div class="form-group">
               <label for="district-code">Kode Kecamatan</label>
-              <input
+              <input autocomplete="off"
                 id="district-code"
                 v-model="form.code"
                 type="text"
@@ -160,7 +160,7 @@ const handleSubmit = async () => {
 
             <div class="form-group">
               <label for="district-name">Nama Kecamatan <span class="text-danger">*</span></label>
-              <input
+              <input autocomplete="off"
                 id="district-name"
                 v-model="form.name"
                 type="text"

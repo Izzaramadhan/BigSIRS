@@ -203,7 +203,7 @@ const getErrorMessage = (field) => {
         <label for="bed-name-input" class="form-label">
           Nama Bed <span class="required-mark">*</span>
         </label>
-        <input
+        <input autocomplete="off"
           id="bed-name-input"
           v-model="form.name"
           type="text"

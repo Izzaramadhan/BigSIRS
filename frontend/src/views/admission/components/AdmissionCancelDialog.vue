@@ -78,7 +78,7 @@ const handleConfirm = () => {
         </div>
 
         <div v-if="cancelReason === 'Lainnya'" class="form-group">
-          <input 
+          <input autocomplete="off" 
             v-model="customReason" 
             type="text" 
             class="form-input" 

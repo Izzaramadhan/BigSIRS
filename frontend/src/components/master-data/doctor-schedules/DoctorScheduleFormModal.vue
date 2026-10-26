@@ -162,7 +162,7 @@ const save = () => {
         <div class="form-row" style="display: flex; gap: 1rem;">
           <div class="form-group" style="flex: 1;">
             <label class="form-label required">Jam Mulai</label>
-            <input 
+            <input autocomplete="off" 
               type="time" 
               v-model="formData.start_time" 
               class="form-input" 
@@ -173,7 +173,7 @@ const save = () => {
           
           <div class="form-group" style="flex: 1;">
             <label class="form-label required">Jam Selesai</label>
-            <input 
+            <input autocomplete="off" 
               type="time" 
               v-model="formData.end_time" 
               class="form-input"
@@ -198,7 +198,7 @@ const save = () => {
 
         <div class="form-group">
           <label class="form-label">Kuota Online</label>
-          <input 
+          <input autocomplete="off" 
             type="number" 
             v-model="formData.online_quota" 
             class="form-input" 

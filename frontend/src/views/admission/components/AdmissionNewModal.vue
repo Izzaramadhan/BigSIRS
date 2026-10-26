@@ -93,13 +93,13 @@ const handleSubmit = () => {
 
       <!-- Modal Body -->
       <div class="modal-body">
-        <form @submit.prevent="handleSubmit" class="add-admission-form">
+        <form autocomplete="off" @submit.prevent="handleSubmit" class="add-admission-form">
           <div class="form-row-2">
             <div class="form-group">
               <label class="form-label" for="add-patient-name">
                 Nama Lengkap Pasien <span class="required-mark">*</span>
               </label>
-              <input 
+              <input autocomplete="off" 
                 id="add-patient-name" 
                 v-model="form.patient_name" 
                 type="text" 
@@ -113,7 +113,7 @@ const handleSubmit = () => {
               <label class="form-label" for="add-patient-rm">
                 Nomor Rekam Medis (RM)
               </label>
-              <input 
+              <input autocomplete="off" 
                 id="add-patient-rm" 
                 v-model="form.medical_record_number" 
                 type="text" 
@@ -126,7 +126,7 @@ const handleSubmit = () => {
           <div class="form-row-3">
             <div class="form-group">
               <label class="form-label" for="add-patient-nik">NIK Pasien</label>
-              <input 
+              <input autocomplete="off" 
                 id="add-patient-nik" 
                 v-model="form.nik" 
                 type="text" 
@@ -145,7 +145,7 @@ const handleSubmit = () => {
 
             <div class="form-group">
               <label class="form-label" for="add-patient-age">Usia (Th)</label>
-              <input 
+              <input autocomplete="off" 
                 id="add-patient-age" 
                 v-model.number="form.age" 
                 type="number" 
@@ -188,7 +188,7 @@ const handleSubmit = () => {
 
             <div class="form-group">
               <label class="form-label" for="add-guarantor-detail">Detail Penjamin</label>
-              <input 
+              <input autocomplete="off" 
                 id="add-guarantor-detail" 
                 v-model="form.guarantor_detail" 
                 type="text" 

@@ -82,14 +82,14 @@ const handleReset = () => {
       <span class="sop-badge">SOP LOG-FAR/VII/2026</span>
     </div>
 
-    <form class="filter-form" @submit.prevent="handleApply">
+    <form autocomplete="off" class="filter-form" @submit.prevent="handleApply">
       <div class="filter-grid">
         <!-- Field 1: Nomor Pengeluaran -->
         <div class="form-group">
           <label class="form-label" for="filter-issue-no">Nomor Pengeluaran</label>
           <div class="input-with-icon">
             <span class="input-prefix">#</span>
-            <input
+            <input autocomplete="off"
               id="filter-issue-no"
               v-model="localFilters.issueNumber"
               type="text"
@@ -103,7 +103,7 @@ const handleReset = () => {
         <div class="form-group">
           <label class="form-label">Rentang Tanggal</label>
           <div class="date-range-inputs">
-            <input
+            <input autocomplete="off"
               v-model="localFilters.startDate"
               type="date"
               class="form-input date-input"
@@ -111,7 +111,7 @@ const handleReset = () => {
               title="Tanggal Mulai"
             />
             <span class="date-sep">-</span>
-            <input
+            <input autocomplete="off"
               v-model="localFilters.endDate"
               type="date"
               class="form-input date-input"
@@ -180,7 +180,7 @@ const handleReset = () => {
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input
+            <input autocomplete="off"
               id="filter-notes"
               v-model="localFilters.notes"
               type="text"

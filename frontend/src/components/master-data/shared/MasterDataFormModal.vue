@@ -43,7 +43,7 @@ defineEmits(['close', 'submit']);
           </button>
         </div>
         
-        <form @submit.prevent="$emit('submit')" class="modal-form-wrapper">
+        <form @submit.prevent="$emit('submit')" class="modal-form-wrapper" autocomplete="off">
           <div class="modal-body">
             <slot></slot>
           </div>

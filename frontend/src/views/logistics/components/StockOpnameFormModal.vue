@@ -116,7 +116,7 @@ const handleStartOpname = () => {
 
         <!-- Body -->
         <div class="modal-body">
-          <form id="stock-opname-form" @submit.prevent="handleStartOpname">
+          <form autocomplete="off" id="stock-opname-form" @submit.prevent="handleStartOpname">
             <!-- Row 1: Nomor Stok Opname & Tanggal Waktu Mulai -->
             <div class="form-row">
               <div class="form-group flex-1">
@@ -126,7 +126,7 @@ const handleStartOpname = () => {
                 </label>
                 <div class="input-readonly-wrap">
                   <span class="input-icon">#</span>
-                  <input
+                  <input autocomplete="off"
                     id="form-so-number"
                     v-model="formData.opnameNumber"
                     type="text"
@@ -140,7 +140,7 @@ const handleStartOpname = () => {
                 <label class="form-label" for="form-so-datetime">
                   Tanggal & Waktu Mulai <span class="required">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-so-datetime"
                   v-model="formData.startDateTime"
                   type="datetime-local"
@@ -175,7 +175,7 @@ const handleStartOpname = () => {
                 <label class="form-label" for="form-so-location-detail">
                   Detail Rak / Zona
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-so-location-detail"
                   v-model="formData.locationDetail"
                   type="text"
@@ -214,7 +214,7 @@ const handleStartOpname = () => {
               <label class="form-label" for="form-so-officer">
                 Petugas / Penanggung Jawab <span class="required">*</span>
               </label>
-              <input
+              <input autocomplete="off"
                 id="form-so-officer"
                 v-model="formData.officerName"
                 type="text"

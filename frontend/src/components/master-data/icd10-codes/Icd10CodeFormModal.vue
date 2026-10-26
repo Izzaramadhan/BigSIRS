@@ -137,7 +137,7 @@ const fieldError = (field) => {
         <!-- 1. Kode Diagnosa -->
         <div class="form-group">
           <label for="code" class="form-label required">Kode Diagnosa</label>
-          <input
+          <input autocomplete="off"
             id="code"
             v-model="form.code"
             type="text"
@@ -154,7 +154,7 @@ const fieldError = (field) => {
         <!-- 2. Nama Diagnosa -->
         <div class="form-group">
           <label for="name" class="form-label required">Nama Diagnosa</label>
-          <input
+          <input autocomplete="off"
             id="name"
             v-model="form.name"
             type="text"
@@ -170,7 +170,7 @@ const fieldError = (field) => {
         <!-- 3. Nama Diagnosa (EN) -->
         <div class="form-group form-group--full">
           <label for="english_name" class="form-label">Nama Diagnosa (EN)</label>
-          <input
+          <input autocomplete="off"
             id="english_name"
             v-model="form.english_name"
             type="text"
@@ -199,7 +199,7 @@ const fieldError = (field) => {
         <!-- Section: Mapping INACBG -->
         <div class="form-group">
           <label for="inacbg_code" class="form-label">Kode INACBG</label>
-          <input
+          <input autocomplete="off"
             id="inacbg_code"
             v-model="form.inacbg_code"
             type="text"
@@ -214,7 +214,7 @@ const fieldError = (field) => {
         <!-- 6. Nama INACBG -->
         <div class="form-group">
           <label for="inacbg_name" class="form-label">Nama INACBG</label>
-          <input
+          <input autocomplete="off"
             id="inacbg_name"
             v-model="form.inacbg_name"
             type="text"
@@ -237,7 +237,7 @@ const fieldError = (field) => {
               <label for="class_1_tariff" class="form-label">Tarif Kelas 1</label>
               <div class="input-currency-wrapper">
                 <span class="currency-prefix">Rp</span>
-                <input
+                <input autocomplete="off"
                   id="class_1_tariff"
                   v-model="form.class_1_tariff"
                   type="number"
@@ -256,7 +256,7 @@ const fieldError = (field) => {
               <label for="class_2_tariff" class="form-label">Tarif Kelas 2</label>
               <div class="input-currency-wrapper">
                 <span class="currency-prefix">Rp</span>
-                <input
+                <input autocomplete="off"
                   id="class_2_tariff"
                   v-model="form.class_2_tariff"
                   type="number"
@@ -275,7 +275,7 @@ const fieldError = (field) => {
               <label for="class_3_tariff" class="form-label">Tarif Kelas 3</label>
               <div class="input-currency-wrapper">
                 <span class="currency-prefix">Rp</span>
-                <input
+                <input autocomplete="off"
                   id="class_3_tariff"
                   v-model="form.class_3_tariff"
                   type="number"

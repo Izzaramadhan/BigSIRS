@@ -61,7 +61,7 @@ const historyTransactions = computed(() => {
 
       <!-- Search Input -->
       <div class="search-bar-wrap">
-        <input
+        <input autocomplete="off"
           type="text"
           v-model="searchHistory"
           class="history-search-input"

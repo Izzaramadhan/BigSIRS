@@ -61,7 +61,7 @@ const clearSearch = () => {
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
 
-        <input
+        <input autocomplete="off"
           v-model="internalQuery"
           type="text"
           class="form-input search-input"
@@ -106,7 +106,7 @@ const clearSearch = () => {
     <div v-if="filters.period === 'custom'" class="custom-date-row">
       <div class="filter-item-wrapper">
         <label class="filter-label" for="filter-start-date">Dari Tanggal</label>
-        <input 
+        <input autocomplete="off" 
           id="filter-start-date" 
           v-model="filters.customStartDate" 
           type="date" 
@@ -115,7 +115,7 @@ const clearSearch = () => {
       </div>
       <div class="filter-item-wrapper">
         <label class="filter-label" for="filter-end-date">Sampai Tanggal</label>
-        <input 
+        <input autocomplete="off" 
           id="filter-end-date" 
           v-model="filters.customEndDate" 
           type="date" 

@@ -461,12 +461,12 @@ const handleSubmit = async () => {
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label required">Nomor KTP (NIK)</label>
-              <input type="text" v-model="form.person.national_id" class="form-input" :class="{ 'has-error': fieldError('person.national_id', 'national_id') }" required maxlength="20">
+              <input autocomplete="off" type="text" v-model="form.person.national_id" class="form-input" :class="{ 'has-error': fieldError('person.national_id', 'national_id') }" required maxlength="20">
               <div v-if="fieldError('person.national_id', 'national_id')" class="error-message">{{ fieldError('person.national_id', 'national_id') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label required">Nama Lengkap (beserta gelar)</label>
-              <input type="text" v-model="form.person.name" class="form-input" :class="{ 'has-error': fieldError('person.name', 'name') }" required>
+              <input autocomplete="off" type="text" v-model="form.person.name" class="form-input" :class="{ 'has-error': fieldError('person.name', 'name') }" required>
               <div v-if="fieldError('person.name', 'name')" class="error-message">{{ fieldError('person.name', 'name') }}</div>
             </div>
           </div>
@@ -474,12 +474,12 @@ const handleSubmit = async () => {
           <div class="form-grid" >
             <div class="form-group">
               <label class="form-label">Tempat Lahir</label>
-              <input type="text" v-model="form.person.birth_place" class="form-input" :class="{ 'has-error': fieldError('person.birth_place', 'birth_place') }">
+              <input autocomplete="off" type="text" v-model="form.person.birth_place" class="form-input" :class="{ 'has-error': fieldError('person.birth_place', 'birth_place') }">
               <div v-if="fieldError('person.birth_place', 'birth_place')" class="error-message">{{ fieldError('person.birth_place', 'birth_place') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Tanggal Lahir</label>
-              <input type="date" v-model="form.person.birth_date" class="form-input" :class="{ 'has-error': fieldError('person.birth_date', 'birth_date') }">
+              <input autocomplete="off" type="date" v-model="form.person.birth_date" class="form-input" :class="{ 'has-error': fieldError('person.birth_date', 'birth_date') }">
               <div v-if="fieldError('person.birth_date', 'birth_date')" class="error-message">{{ fieldError('person.birth_date', 'birth_date') }}</div>
             </div>
             <div class="form-group">
@@ -650,12 +650,12 @@ const handleSubmit = async () => {
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Kode Pos</label>
-              <input type="text" v-model="form.person.postal_code" class="form-input" :class="{ 'has-error': fieldError('person.postal_code', 'postal_code') }" maxlength="10">
+              <input autocomplete="off" type="text" v-model="form.person.postal_code" class="form-input" :class="{ 'has-error': fieldError('person.postal_code', 'postal_code') }" maxlength="10">
               <div v-if="fieldError('person.postal_code', 'postal_code')" class="error-message">{{ fieldError('person.postal_code', 'postal_code') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Nomor HP</label>
-              <input type="tel" v-model="form.person.phone" class="form-input" :class="{ 'has-error': fieldError('person.phone', 'phone') }" maxlength="20" placeholder="Contoh: 081234567890">
+              <input autocomplete="off" type="tel" v-model="form.person.phone" class="form-input" :class="{ 'has-error': fieldError('person.phone', 'phone') }" maxlength="20" placeholder="Contoh: 081234567890">
               <div v-if="fieldError('person.phone', 'phone')" class="error-message">{{ fieldError('person.phone', 'phone') }}</div>
             </div>
           </div>
@@ -682,12 +682,12 @@ const handleSubmit = async () => {
             </div>
             <div class="form-group">
               <label class="form-label">No. STR</label>
-              <input type="text" v-model="form.professional.str_number" class="form-input" :class="{ 'has-error': fieldError('professional.str_number', 'str_number') }">
+              <input autocomplete="off" type="text" v-model="form.professional.str_number" class="form-input" :class="{ 'has-error': fieldError('professional.str_number', 'str_number') }">
               <div v-if="fieldError('professional.str_number', 'str_number')" class="error-message">{{ fieldError('professional.str_number', 'str_number') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">No. SIP</label>
-              <input type="text" v-model="form.professional.sip_number" class="form-input" :class="{ 'has-error': fieldError('professional.sip_number', 'sip_number') }">
+              <input autocomplete="off" type="text" v-model="form.professional.sip_number" class="form-input" :class="{ 'has-error': fieldError('professional.sip_number', 'sip_number') }">
               <div v-if="fieldError('professional.sip_number', 'sip_number')" class="error-message">{{ fieldError('professional.sip_number', 'sip_number') }}</div>
             </div>
           </div>
@@ -695,17 +695,17 @@ const handleSubmit = async () => {
           <div class="form-grid" >
             <div class="form-group">
               <label class="form-label">Berlaku SIP (Sampai)</label>
-              <input type="date" v-model="form.professional.sip_valid_until" class="form-input" :class="{ 'has-error': fieldError('professional.sip_valid_until', 'sip_valid_until') }">
+              <input autocomplete="off" type="date" v-model="form.professional.sip_valid_until" class="form-input" :class="{ 'has-error': fieldError('professional.sip_valid_until', 'sip_valid_until') }">
               <div v-if="fieldError('professional.sip_valid_until', 'sip_valid_until')" class="error-message">{{ fieldError('professional.sip_valid_until', 'sip_valid_until') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">Kode BPJS DPJP</label>
-              <input type="text" v-model="form.professional.bpjs_dpjp_code" class="form-input" :class="{ 'has-error': fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code') }">
+              <input autocomplete="off" type="text" v-model="form.professional.bpjs_dpjp_code" class="form-input" :class="{ 'has-error': fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code') }">
               <div v-if="fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code')" class="error-message">{{ fieldError('professional.bpjs_dpjp_code', 'bpjs_dpjp_code') }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">IHS Number (SatuSehat)</label>
-              <input type="text" v-model="form.person.ihs_number" class="form-input" :class="{ 'has-error': fieldError('person.ihs_number', 'ihs_number') }">
+              <input autocomplete="off" type="text" v-model="form.person.ihs_number" class="form-input" :class="{ 'has-error': fieldError('person.ihs_number', 'ihs_number') }">
               <div v-if="fieldError('person.ihs_number', 'ihs_number')" class="error-message">{{ fieldError('person.ihs_number', 'ihs_number') }}</div>
             </div>
           </div>

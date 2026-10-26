@@ -21,7 +21,7 @@
         <!-- Header -->
         <div class="form-group">
           <label for="name" class="form-label required">Nama Paket</label>
-          <input 
+          <input autocomplete="off" 
             id="name" 
             class="form-input" 
             :class="{ 'has-error': errors.name }"
@@ -76,7 +76,7 @@
                 <!-- Harga -->
                 <div class="form-group mb-0">
                   <label class="form-label required">Harga Tindakan</label>
-                  <input type="number" class="form-input custom-input-height" v-model="item.unit_amount" min="0" required @input="calculateSubtotal(item)" />
+                  <input autocomplete="off" type="number" class="form-input custom-input-height" v-model="item.unit_amount" min="0" required @input="calculateSubtotal(item)" />
                 </div>
 
                 <!-- Aksi -->

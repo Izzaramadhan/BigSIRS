@@ -77,14 +77,14 @@ const handleLogin = async () => {
           {{ errorMessage }}
         </div>
 
-        <form @submit.prevent="handleLogin" class="login-form">
+        <form autocomplete="off" @submit.prevent="handleLogin" class="login-form">
           <!-- Username -->
           <div class="form-group">
             <div class="input-wrapper">
               <span class="input-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
               </span>
-              <input 
+              <input autocomplete="off" 
                 type="text" 
                 id="username" 
                 v-model="username" 
@@ -101,7 +101,7 @@ const handleLogin = async () => {
               <span class="input-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
               </span>
-              <input 
+              <input autocomplete="off" 
                 :type="showPassword ? 'text' : 'password'" 
                 id="password" 
                 v-model="password" 

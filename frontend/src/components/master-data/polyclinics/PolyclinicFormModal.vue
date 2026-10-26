@@ -121,7 +121,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
             <!-- 1. Kode -->
             <div class="form-group">
               <label for="code" class="form-label required">Kode</label>
-              <input
+              <input autocomplete="off"
                 id="code"
                 v-model="form.code"
                 type="text"
@@ -138,7 +138,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
             <!-- 2. Nama -->
             <div class="form-group">
               <label for="name" class="form-label required">Nama Poliklinik</label>
-              <input
+              <input autocomplete="off"
                 id="name"
                 v-model="form.name"
                 type="text"
@@ -223,7 +223,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
             <!-- Kode BPJS -->
             <div class="form-group form-group--full">
               <label for="bpjs_code" class="form-label">Kode BPJS</label>
-              <input
+              <input autocomplete="off"
                 id="bpjs_code"
                 v-model="form.bpjs_code"
                 type="text"
@@ -243,7 +243,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
             <!-- 7. Kuota -->
             <div class="form-group">
               <label for="quota" class="form-label">Kuota</label>
-              <input
+              <input autocomplete="off"
                 id="quota"
                 v-model.number="form.quota"
                 type="number"
@@ -258,7 +258,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
             <!-- 8. Kuota JKN -->
             <div class="form-group">
               <label for="jkn_quota" class="form-label">Kuota JKN</label>
-              <input
+              <input autocomplete="off"
                 id="jkn_quota"
                 v-model.number="form.jkn_quota"
                 type="number"

@@ -249,7 +249,7 @@ const formatRupiah = (val) => {
               <label class="form-label" for="pos-cust-name">
                 Nama Pembeli <span class="required">*</span>
               </label>
-              <input
+              <input autocomplete="off"
                 id="pos-cust-name"
                 v-model="formData.customerName"
                 type="text"
@@ -308,7 +308,7 @@ const formatRupiah = (val) => {
 
             <div class="picker-qty-input">
               <label class="form-label" for="pos-med-qty">Jumlah</label>
-              <input
+              <input autocomplete="off"
                 id="pos-med-qty"
                 v-model.number="inputQty"
                 type="number"
@@ -401,7 +401,7 @@ const formatRupiah = (val) => {
 
             <div v-if="formData.paymentMethod === 'Tunai'" class="calc-row-input">
               <label class="calc-label" for="pos-paid-amount">Uang Diterima (Rp):</label>
-              <input
+              <input autocomplete="off"
                 id="pos-paid-amount"
                 v-model.number="formData.paidAmount"
                 type="number"

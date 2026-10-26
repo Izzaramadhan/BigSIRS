@@ -455,12 +455,12 @@ const handleSubmit = async () => {
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label required">Nomor KTP (NIK)</label>
-            <input type="text" v-model="form.national_id" class="form-input" :class="{ 'has-error': fieldError('national_id') }" required maxlength="20">
+            <input autocomplete="off" type="text" v-model="form.national_id" class="form-input" :class="{ 'has-error': fieldError('national_id') }" required maxlength="20">
             <div v-if="fieldError('national_id')" class="error-message">{{ fieldError('national_id') }}</div>
           </div>
           <div class="form-group">
             <label class="form-label required">Nama Lengkap</label>
-            <input type="text" v-model="form.name" class="form-input" :class="{ 'has-error': fieldError('name') }" required>
+            <input autocomplete="off" type="text" v-model="form.name" class="form-input" :class="{ 'has-error': fieldError('name') }" required>
             <div v-if="fieldError('name')" class="error-message">{{ fieldError('name') }}</div>
           </div>
         </div>
@@ -468,12 +468,12 @@ const handleSubmit = async () => {
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Tempat Lahir</label>
-            <input type="text" v-model="form.birth_place" class="form-input" :class="{ 'has-error': fieldError('birth_place') }">
+            <input autocomplete="off" type="text" v-model="form.birth_place" class="form-input" :class="{ 'has-error': fieldError('birth_place') }">
             <div v-if="fieldError('birth_place')" class="error-message">{{ fieldError('birth_place') }}</div>
           </div>
           <div class="form-group">
             <label class="form-label">Tanggal Lahir</label>
-            <input type="date" v-model="form.birth_date" class="form-input" :class="{ 'has-error': fieldError('birth_date') }">
+            <input autocomplete="off" type="date" v-model="form.birth_date" class="form-input" :class="{ 'has-error': fieldError('birth_date') }">
             <div v-if="fieldError('birth_date')" class="error-message">{{ fieldError('birth_date') }}</div>
           </div>
           <div class="form-group">
@@ -635,12 +635,12 @@ const handleSubmit = async () => {
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Kode Pos</label>
-            <input type="text" v-model="form.postal_code" class="form-input" :class="{ 'has-error': fieldError('postal_code') }" maxlength="10">
+            <input autocomplete="off" type="text" v-model="form.postal_code" class="form-input" :class="{ 'has-error': fieldError('postal_code') }" maxlength="10">
             <div v-if="fieldError('postal_code')" class="error-message">{{ fieldError('postal_code') }}</div>
           </div>
           <div class="form-group">
             <label class="form-label">Nomor HP</label>
-            <input type="tel" v-model="form.phone" class="form-input" :class="{ 'has-error': fieldError('phone') }" maxlength="20" placeholder="Contoh: 081234567890">
+            <input autocomplete="off" type="tel" v-model="form.phone" class="form-input" :class="{ 'has-error': fieldError('phone') }" maxlength="20" placeholder="Contoh: 081234567890">
             <div v-if="fieldError('phone')" class="error-message">{{ fieldError('phone') }}</div>
           </div>
         </div>
@@ -653,7 +653,7 @@ const handleSubmit = async () => {
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label required">NIP</label>
-            <input type="text" v-model="form.code" class="form-input" :class="{ 'has-error': fieldError('code') }" placeholder="Masukkan NIP" required>
+            <input autocomplete="off" type="text" v-model="form.code" class="form-input" :class="{ 'has-error': fieldError('code') }" placeholder="Masukkan NIP" required>
             <div v-if="fieldError('code')" class="error-message">{{ fieldError('code') }}</div>
           </div>
           <div class="form-group">

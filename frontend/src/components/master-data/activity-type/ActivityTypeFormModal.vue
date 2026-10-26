@@ -80,7 +80,7 @@ const handleSubmit = () => {
           </button>
         </div>
 
-        <form @submit.prevent="handleSubmit" class="modal-form">
+        <form autocomplete="off" @submit.prevent="handleSubmit" class="modal-form">
           <div class="modal-body">
             <div v-if="errors.general" class="alert-error">
               {{ errors.general }}
@@ -88,7 +88,7 @@ const handleSubmit = () => {
 
             <div class="form-group">
               <label for="name">Nama Jenis Kegiatan <span class="text-danger">*</span></label>
-              <input
+              <input autocomplete="off"
                 id="name"
                 v-model="form.name"
                 type="text"

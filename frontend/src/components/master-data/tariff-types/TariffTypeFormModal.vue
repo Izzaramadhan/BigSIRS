@@ -160,7 +160,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
       <div class="form-row">
         <div class="form-group flex-1">
           <label for="name" class="form-label required">Nama Jenis Tarif</label>
-          <input
+          <input autocomplete="off"
             id="name"
             v-model="form.name"
             type="text"
@@ -174,7 +174,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
         
         <div class="form-group flex-1">
           <label for="code" class="form-label required">Kode</label>
-          <input
+          <input autocomplete="off"
             id="code"
             v-model="form.code"
             type="text"
@@ -208,7 +208,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
         <div class="form-group">
           <label class="form-label required">Cari & Tambah Komponen</label>
           <div class="combobox-wrapper">
-            <input 
+            <input autocomplete="off" 
               type="text" 
               v-model="searchQuery"
               @input="handleSearch"
@@ -252,7 +252,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
                 <td class="font-medium text-navy">{{ comp.name }}</td>
                 <td>
                   <div class="percentage-input">
-                    <input 
+                    <input autocomplete="off" 
                       type="number" 
                       v-model="comp.percentage" 
                       class="form-control text-right" 

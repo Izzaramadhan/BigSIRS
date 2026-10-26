@@ -76,7 +76,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
 
       <div class="form-group">
         <label for="name" class="form-label required">Komponen Tindakan</label>
-        <input
+        <input autocomplete="off"
           id="name"
           v-model="form.name"
           type="text"

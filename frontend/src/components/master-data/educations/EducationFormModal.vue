@@ -91,14 +91,14 @@ const handleSubmit = async () => {
           </button>
         </div>
         
-        <form @submit.prevent="handleSubmit" class="modal-form">
+        <form autocomplete="off" @submit.prevent="handleSubmit" class="modal-form">
           <div v-if="errors.general" class="alert-error">
             {{ errors.general }}
           </div>
 
           <div class="form-group" style="margin-bottom: 1rem;">
             <label for="name" class="form-label required">Nama Pendidikan</label>
-            <input
+            <input autocomplete="off"
               id="name"
               v-model="form.name"
               type="text"

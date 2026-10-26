@@ -352,7 +352,7 @@ const handleSubmit = () => {
       <!-- Field 2: Kode -->
       <div class="form-group">
         <label for="room-code" class="form-label required">Kode</label>
-        <input
+        <input autocomplete="off"
           id="room-code"
           v-model="form.code"
           type="text"
@@ -370,7 +370,7 @@ const handleSubmit = () => {
       <!-- Field 3: Nama Kamar -->
       <div class="form-group">
         <label for="room-name" class="form-label required">Nama Kamar</label>
-        <input
+        <input autocomplete="off"
           id="room-name"
           v-model="form.name"
           type="text"

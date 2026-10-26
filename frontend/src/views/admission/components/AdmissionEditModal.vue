@@ -81,7 +81,7 @@ const handleSave = () => {
 
       <!-- Modal Body -->
       <div class="modal-body">
-        <form @submit.prevent="handleSave" class="edit-form">
+        <form autocomplete="off" @submit.prevent="handleSave" class="edit-form">
           <div class="form-group">
             <label class="form-label" for="edit-poly">Poliklinik Tujuan</label>
             <select id="edit-poly" v-model="formData.polyclinic" class="form-select" required>
@@ -108,7 +108,7 @@ const handleSave = () => {
 
             <div class="form-group">
               <label class="form-label" for="edit-detail">Detail Penjamin</label>
-              <input 
+              <input autocomplete="off" 
                 id="edit-detail" 
                 v-model="formData.guarantor_detail" 
                 type="text" 

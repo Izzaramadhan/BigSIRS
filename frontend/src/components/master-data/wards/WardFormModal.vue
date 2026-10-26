@@ -175,7 +175,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null
       <!-- Field 2: Nama Bangsal -->
       <div class="form-group">
         <label for="ward-name" class="form-label required">Nama Bangsal</label>
-        <input
+        <input autocomplete="off"
           id="ward-name"
           v-model="form.name"
           type="text"

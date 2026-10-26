@@ -147,7 +147,7 @@ const handleConfirm = () => {
             <label for="pay-amount" class="calc-label">Nominal Pembayaran:</label>
             <div class="input-currency-wrapper">
               <span class="curr-prefix">Rp</span>
-              <input
+              <input autocomplete="off"
                 id="pay-amount"
                 type="number"
                 v-model.number="paymentAmount"
@@ -162,7 +162,7 @@ const handleConfirm = () => {
             <label for="cash-received" class="calc-label">Uang Diterima (Tunai):</label>
             <div class="input-currency-wrapper">
               <span class="curr-prefix">Rp</span>
-              <input
+              <input autocomplete="off"
                 id="cash-received"
                 type="number"
                 v-model.number="cashReceived"
@@ -179,7 +179,7 @@ const handleConfirm = () => {
 
           <div v-else class="calc-row">
             <label for="ref-number" class="calc-label">No. Referensi / Batch EDC:</label>
-            <input
+            <input autocomplete="off"
               id="ref-number"
               type="text"
               v-model="referenceNumber"

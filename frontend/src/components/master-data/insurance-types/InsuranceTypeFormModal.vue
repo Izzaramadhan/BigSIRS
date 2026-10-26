@@ -95,7 +95,7 @@ const handleSubmit = () => {
 
       <div class="form-group">
         <label for="name" class="form-label required">Jenis Asuransi</label>
-        <input
+        <input autocomplete="off"
           id="name"
           v-model="form.name"
           type="text"
@@ -122,7 +122,7 @@ const handleSubmit = () => {
 
       <div class="form-group">
         <label for="inacbg_id" class="form-label">ID INACBG</label>
-        <input
+        <input autocomplete="off"
           id="inacbg_id"
           v-model="form.inacbg_id"
           type="text"

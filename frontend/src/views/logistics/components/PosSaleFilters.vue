@@ -114,14 +114,14 @@ const handleReset = () => {
     <!-- Collapsible Filter Body -->
     <transition name="collapse-anim">
       <div v-show="!isFilterCollapsed" class="filter-collapsible-wrapper">
-        <form class="filter-form" @submit.prevent="handleApply">
+        <form autocomplete="off" class="filter-form" @submit.prevent="handleApply">
           <div class="filter-grid">
             <!-- Field 1: Nomor Transaksi -->
             <div class="form-group">
               <label class="form-label" for="filter-trans-no">Nomor Transaksi</label>
               <div class="input-with-icon">
                 <span class="input-prefix">#</span>
-                <input
+                <input autocomplete="off"
                   id="filter-trans-no"
                   v-model="localFilters.transactionNumber"
                   type="text"
@@ -139,7 +139,7 @@ const handleReset = () => {
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>
                 </svg>
-                <input
+                <input autocomplete="off"
                   id="filter-cust-name"
                   v-model="localFilters.customerName"
                   type="text"
@@ -153,14 +153,14 @@ const handleReset = () => {
             <div class="form-group">
               <label class="form-label">Rentang Tanggal</label>
               <div class="date-range-inputs">
-                <input
+                <input autocomplete="off"
                   v-model="localFilters.startDate"
                   type="date"
                   class="form-input date-input"
                   aria-label="Tanggal Mulai"
                 />
                 <span class="date-separator">–</span>
-                <input
+                <input autocomplete="off"
                   v-model="localFilters.endDate"
                   type="date"
                   class="form-input date-input"

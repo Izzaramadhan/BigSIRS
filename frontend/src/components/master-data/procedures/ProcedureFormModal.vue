@@ -232,7 +232,7 @@ const fieldError = (field) => props.errors?.[field] || null;
         <div class="grid grid-cols-2 gap-4">
           <div class="form-group">
             <label class="form-label">Kode Tindakan</label>
-            <input 
+            <input autocomplete="off" 
               type="text" 
               v-model="formData.code" 
               class="form-control" 
@@ -255,7 +255,7 @@ const fieldError = (field) => props.errors?.[field] || null;
 
           <div class="form-group">
             <label class="form-label required">Nama Tindakan</label>
-            <input 
+            <input autocomplete="off" 
               type="text" 
               v-model="formData.name" 
               class="form-control" 
@@ -334,7 +334,7 @@ const fieldError = (field) => props.errors?.[field] || null;
                 <td>{{ comp._name }}</td>
                 <td>{{ comp._percentage }}%</td>
                 <td>
-                  <input 
+                  <input autocomplete="off" 
                     type="number" 
                     v-model.number="comp.amount" 
                     class="form-control text-right"

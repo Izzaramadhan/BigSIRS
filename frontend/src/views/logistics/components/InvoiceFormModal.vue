@@ -212,14 +212,14 @@ const handleSubmit = () => {
 
         <!-- Body -->
         <div class="modal-body">
-          <form id="invoice-form" @submit.prevent="handleSubmit">
+          <form autocomplete="off" id="invoice-form" @submit.prevent="handleSubmit">
             <!-- Row 1: Invoice Number & Reference/PO -->
             <div class="form-row">
               <div class="form-group flex-1">
                 <label class="form-label" for="form-invoice-number">
                   Nomor Faktur <span class="required-mark">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-invoice-number"
                   v-model="formData.invoiceNumber"
                   type="text"
@@ -232,7 +232,7 @@ const handleSubmit = () => {
 
               <div class="form-group flex-1">
                 <label class="form-label" for="form-reference-number">Nomor Referensi / PO</label>
-                <input
+                <input autocomplete="off"
                   id="form-reference-number"
                   v-model="formData.referenceNumber"
                   type="text"
@@ -248,7 +248,7 @@ const handleSubmit = () => {
                 <label class="form-label" for="form-invoice-date">
                   Tanggal Faktur <span class="required-mark">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-invoice-date"
                   v-model="formData.invoiceDate"
                   type="date"
@@ -283,7 +283,7 @@ const handleSubmit = () => {
                 <label class="form-label" for="form-due-date">
                   Tanggal Jatuh Tempo <span class="required-mark">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-due-date"
                   v-model="formData.dueDate"
                   type="date"
@@ -369,7 +369,7 @@ const handleSubmit = () => {
 
                       <!-- Kuantitas -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model.number="item.quantity"
                           type="number"
                           min="1"
@@ -382,7 +382,7 @@ const handleSubmit = () => {
 
                       <!-- Satuan -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model="item.unit"
                           type="text"
                           class="form-input item-input"
@@ -393,7 +393,7 @@ const handleSubmit = () => {
 
                       <!-- Harga Satuan -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model.number="item.price"
                           type="number"
                           min="0"
@@ -406,7 +406,7 @@ const handleSubmit = () => {
 
                       <!-- Diskon % -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model.number="item.discount"
                           type="number"
                           min="0"

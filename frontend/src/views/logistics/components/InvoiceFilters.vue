@@ -73,14 +73,14 @@ const handleReset = () => {
       </div>
     </div>
 
-    <form class="filter-form" @submit.prevent="handleApply">
+    <form autocomplete="off" class="filter-form" @submit.prevent="handleApply">
       <div class="filter-grid">
         <!-- Field 1: Nomor Faktur -->
         <div class="form-group">
           <label class="form-label" for="filter-invoice-number">Nomor Faktur</label>
           <div class="input-with-icon">
             <span class="input-prefix">#</span>
-            <input
+            <input autocomplete="off"
               id="filter-invoice-number"
               v-model="localFilters.invoiceNumber"
               type="text"
@@ -127,7 +127,7 @@ const handleReset = () => {
         <div class="form-group">
           <label class="form-label">Tanggal Faktur</label>
           <div class="date-range-inputs">
-            <input
+            <input autocomplete="off"
               v-model="localFilters.invoiceDateStart"
               type="date"
               class="form-input date-input"
@@ -135,7 +135,7 @@ const handleReset = () => {
               title="Tanggal Faktur Mulai"
             />
             <span class="date-sep">-</span>
-            <input
+            <input autocomplete="off"
               v-model="localFilters.invoiceDateEnd"
               type="date"
               class="form-input date-input"
@@ -149,7 +149,7 @@ const handleReset = () => {
         <div class="form-group">
           <label class="form-label">Tanggal Jatuh Tempo</label>
           <div class="date-range-inputs">
-            <input
+            <input autocomplete="off"
               v-model="localFilters.dueDateStart"
               type="date"
               class="form-input date-input"
@@ -157,7 +157,7 @@ const handleReset = () => {
               title="Tanggal Jatuh Tempo Mulai"
             />
             <span class="date-sep">-</span>
-            <input
+            <input autocomplete="off"
               v-model="localFilters.dueDateEnd"
               type="date"
               class="form-input date-input"

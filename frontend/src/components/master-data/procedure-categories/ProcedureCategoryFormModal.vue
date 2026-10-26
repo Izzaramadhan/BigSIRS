@@ -85,6 +85,7 @@ const fieldError = (field) => props.errors?.[field]?.[0] || null;
           placeholder="Misal: Tindakan Bedah"
           required
           maxlength="255"
+          autocomplete="off"
         >
         <div v-if="fieldError('name')" class="invalid-feedback">{{ fieldError('name') }}</div>
       </div>

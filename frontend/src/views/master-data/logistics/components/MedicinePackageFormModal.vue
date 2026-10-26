@@ -451,7 +451,7 @@ const handleSubmit = () => {
 
                   <!-- 2. Jumlah -->
                   <td class="col-item-qty text-center">
-                    <input
+                    <input autocomplete="off"
                       v-model.number="item.quantity"
                       type="number"
                       min="1"
@@ -469,7 +469,7 @@ const handleSubmit = () => {
                   <!-- 3. Harga Satuan -->
                   <td class="col-item-price text-right">
                     <div class="price-cell-wrapper">
-                      <input
+                      <input autocomplete="off"
                         v-model.number="item.unit_price"
                         type="number"
                         min="0"
@@ -549,7 +549,7 @@ const handleSubmit = () => {
           <div class="form-group flex-1 summary-card">
             <div class="summary-field">
               <label for="price" class="form-label required">Harga Paket</label>
-              <input
+              <input autocomplete="off"
                 id="price"
                 v-model.number="form.price"
                 type="number"
@@ -571,7 +571,7 @@ const handleSubmit = () => {
 
             <div class="summary-field mt-3">
               <label for="quantity" class="form-label">Jumlah</label>
-              <input
+              <input autocomplete="off"
                 id="quantity"
                 v-model.number="form.quantity"
                 type="number"

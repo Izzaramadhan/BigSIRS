@@ -166,7 +166,7 @@ const getErrorMessage = (field) => {
         <label for="room-class-name-input" class="form-label">
           Nama Kelas <span class="required-mark">*</span>
         </label>
-        <input
+        <input autocomplete="off"
           id="room-class-name-input"
           v-model="form.name"
           type="text"
@@ -186,7 +186,7 @@ const getErrorMessage = (field) => {
         <label for="room-class-code-input" class="form-label">
           Kode Kelas <span class="required-mark">*</span>
         </label>
-        <input
+        <input autocomplete="off"
           id="room-class-code-input"
           v-model="form.code"
           type="text"
@@ -208,7 +208,7 @@ const getErrorMessage = (field) => {
         </label>
         <div class="input-currency-wrapper" :class="{ 'has-error': Boolean(getErrorMessage('price')) }">
           <span class="currency-prefix">Rp</span>
-          <input
+          <input autocomplete="off"
             id="room-class-price-input"
             v-model="form.price"
             type="text"
@@ -243,7 +243,7 @@ const getErrorMessage = (field) => {
       <!-- 5. Kode Aplicare -->
       <div class="form-group">
         <label for="room-class-aplicare-input" class="form-label">Kode Aplicare</label>
-        <input
+        <input autocomplete="off"
           id="room-class-aplicare-input"
           v-model="form.aplicare_code"
           type="text"
@@ -264,7 +264,7 @@ const getErrorMessage = (field) => {
       <!-- 6. Kode SIRS -->
       <div class="form-group">
         <label for="room-class-sirs-input" class="form-label">Kode SIRS</label>
-        <input
+        <input autocomplete="off"
           id="room-class-sirs-input"
           v-model="form.sirs_code"
           type="text"

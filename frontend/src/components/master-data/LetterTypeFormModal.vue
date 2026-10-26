@@ -14,7 +14,7 @@
 
       <div class="form-group">
         <label for="name" class="form-label required">Nama Surat</label>
-        <input 
+        <input autocomplete="off" 
           type="text" 
           id="name" 
           v-model="form.name" 
@@ -41,7 +41,7 @@
       
       <div class="form-group">
         <label for="legacy_resource" class="form-label">Resource</label>
-        <input 
+        <input autocomplete="off" 
           type="text" 
           id="legacy_resource" 
           v-model="form.legacy_resource" 

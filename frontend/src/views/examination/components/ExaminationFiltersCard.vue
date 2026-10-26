@@ -62,7 +62,7 @@ const handleSearchKeydown = (e) => {
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
-        <input
+        <input autocomplete="off"
           id="examination-search-input"
           type="text"
           class="search-input"
@@ -186,11 +186,11 @@ const handleSearchKeydown = (e) => {
     <div v-if="filters.period === 'custom'" class="custom-date-row">
       <div class="date-input-group">
         <label for="start-date" class="filter-label">Tanggal Mulai</label>
-        <input id="start-date" type="date" v-model="filters.customStartDate" class="form-input" />
+        <input autocomplete="off" id="start-date" type="date" v-model="filters.customStartDate" class="form-input" />
       </div>
       <div class="date-input-group">
         <label for="end-date" class="filter-label">Tanggal Akhir</label>
-        <input id="end-date" type="date" v-model="filters.customEndDate" class="form-input" />
+        <input autocomplete="off" id="end-date" type="date" v-model="filters.customEndDate" class="form-input" />
       </div>
     </div>
 

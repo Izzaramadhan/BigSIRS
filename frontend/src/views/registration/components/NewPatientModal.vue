@@ -56,7 +56,7 @@ const emit = defineEmits(['close']);
         <div class="preview-fields-group">
           <div class="preview-field-item">
             <label class="form-label">Nomor Induk Kependudukan (NIK)</label>
-            <input 
+            <input autocomplete="off" 
               type="text" 
               class="form-input disabled-preview" 
               placeholder="Contoh: 347101xxxxxxxxxx" 
@@ -66,7 +66,7 @@ const emit = defineEmits(['close']);
 
           <div class="preview-field-item">
             <label class="form-label">Nama Lengkap Pasien Sesuai KTP</label>
-            <input 
+            <input autocomplete="off" 
               type="text" 
               class="form-input disabled-preview" 
               placeholder="Nama lengkap pasien..." 
@@ -84,7 +84,7 @@ const emit = defineEmits(['close']);
 
             <div class="preview-field-item">
               <label class="form-label">Tanggal Lahir</label>
-              <input type="date" class="form-input disabled-preview" disabled />
+              <input autocomplete="off" type="date" class="form-input disabled-preview" disabled />
             </div>
           </div>
 

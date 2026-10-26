@@ -1,4 +1,4 @@
-FROM php:8.4-cli
+FROM php:8.5.12-cli
 
 RUN apt-get update \
     && apt-get install -y \
@@ -6,20 +6,12 @@ RUN apt-get update \
         unzip \
         libzip-dev \
         libicu-dev \
-        libonig-dev \
-        libxml2-dev \
-        libcurl4-openssl-dev \
     && docker-php-ext-install \
         pdo_mysql \
-        mbstring \
         intl \
         zip \
         bcmath \
         pcntl \
-        dom \
-        xml \
-        xmlwriter \
-        curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

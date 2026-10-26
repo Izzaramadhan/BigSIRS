@@ -150,7 +150,7 @@ const handleSubmit = () => {
         <!-- 1. Kategori (name) -->
         <div class="form-group">
           <label for="name" class="form-label required">Kategori</label>
-          <input
+          <input autocomplete="off"
             id="name"
             v-model="form.name"
             type="text"
@@ -189,7 +189,7 @@ const handleSubmit = () => {
         <!-- 3. LOINC Code -->
         <div class="form-group">
           <label for="loinc_code" class="form-label">LOINC Code</label>
-          <input
+          <input autocomplete="off"
             id="loinc_code"
             v-model="form.loinc_code"
             type="text"
@@ -207,7 +207,7 @@ const handleSubmit = () => {
         <!-- 4. LOINC URL -->
         <div class="form-group">
           <label for="loinc_url" class="form-label">LOINC URL</label>
-          <input
+          <input autocomplete="off"
             id="loinc_url"
             v-model="form.loinc_url"
             type="url"
@@ -225,7 +225,7 @@ const handleSubmit = () => {
         <!-- 5. SNOMED Code -->
         <div class="form-group">
           <label for="snomed_code" class="form-label">SNOMED Code</label>
-          <input
+          <input autocomplete="off"
             id="snomed_code"
             v-model="form.snomed_code"
             type="text"
@@ -243,7 +243,7 @@ const handleSubmit = () => {
         <!-- 6. SNOMED URL -->
         <div class="form-group">
           <label for="snomed_url" class="form-label">SNOMED URL</label>
-          <input
+          <input autocomplete="off"
             id="snomed_url"
             v-model="form.snomed_url"
             type="url"

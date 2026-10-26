@@ -194,7 +194,7 @@ defineExpose({ setInitialOptions })
     <!-- Dropdown Menu -->
     <div v-show="isOpen" class="dropdown-menu">
       <div class="search-container">
-        <input 
+        <input autocomplete="off" 
           type="text" 
           class="search-input" 
           v-model="searchQuery"

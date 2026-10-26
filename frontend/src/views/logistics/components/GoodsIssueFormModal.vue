@@ -224,7 +224,7 @@ const handleSaveIssue = () => {
 
         <!-- Body -->
         <div class="modal-body">
-          <form id="goods-issue-form" @submit.prevent="handleSaveIssue">
+          <form autocomplete="off" id="goods-issue-form" @submit.prevent="handleSaveIssue">
             <!-- Row 1: Nomor Pengeluaran & Tanggal/Waktu -->
             <div class="form-row">
               <div class="form-group flex-1">
@@ -234,7 +234,7 @@ const handleSaveIssue = () => {
                 </label>
                 <div class="input-readonly-wrap">
                   <span class="input-icon">#</span>
-                  <input
+                  <input autocomplete="off"
                     id="form-issue-no"
                     v-model="formData.issueNumber"
                     type="text"
@@ -248,7 +248,7 @@ const handleSaveIssue = () => {
                 <label class="form-label" for="form-issue-date">
                   Tanggal Pengeluaran <span class="required">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-issue-date"
                   v-model="formData.date"
                   type="date"
@@ -261,7 +261,7 @@ const handleSaveIssue = () => {
                 <label class="form-label" for="form-issue-time">
                   Waktu Pengeluaran <span class="required">*</span>
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-issue-time"
                   v-model="formData.time"
                   type="time"
@@ -293,7 +293,7 @@ const handleSaveIssue = () => {
 
               <div class="form-group flex-1">
                 <label class="form-label" for="form-issue-loc">Detail Area / Rak</label>
-                <input
+                <input autocomplete="off"
                   id="form-issue-loc"
                   v-model="formData.locationDetail"
                   type="text"
@@ -348,7 +348,7 @@ const handleSaveIssue = () => {
                 <label class="form-label" for="form-issue-ref">
                   Nomor Referensi / BAP / Disposisi
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-issue-ref"
                   v-model="formData.referenceNumber"
                   type="text"
@@ -361,7 +361,7 @@ const handleSaveIssue = () => {
                 <label class="form-label" for="form-issue-notes">
                   Catatan Pengeluaran
                 </label>
-                <input
+                <input autocomplete="off"
                   id="form-issue-notes"
                   v-model="formData.notes"
                   type="text"
@@ -422,7 +422,7 @@ const handleSaveIssue = () => {
 
                       <!-- Batch -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model="row.batchNumber"
                           type="text"
                           class="form-input input-sm"
@@ -432,7 +432,7 @@ const handleSaveIssue = () => {
 
                       <!-- Exp Date -->
                       <td>
-                        <input
+                        <input autocomplete="off"
                           v-model="row.expDate"
                           type="date"
                           class="form-input input-sm"
@@ -447,7 +447,7 @@ const handleSaveIssue = () => {
                       <!-- Qty -->
                       <td>
                         <div class="qty-input-group">
-                          <input
+                          <input autocomplete="off"
                             v-model.number="row.quantity"
                             type="number"
                             min="1"

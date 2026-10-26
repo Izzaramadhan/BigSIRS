@@ -333,7 +333,7 @@ const handleSubmit = () => {
           <label for="price" class="form-label">Harga</label>
           <div class="input-prefix-wrapper">
             <span class="prefix">Rp</span>
-            <input
+            <input autocomplete="off"
               id="price"
               v-model="form.price"
               type="number"
@@ -356,7 +356,7 @@ const handleSubmit = () => {
           <label for="harga_jaspel" class="form-label">Harga Jaspel</label>
           <div class="input-prefix-wrapper">
             <span class="prefix">Rp</span>
-            <input
+            <input autocomplete="off"
               id="harga_jaspel"
               v-model="form.harga_jaspel"
               type="number"
