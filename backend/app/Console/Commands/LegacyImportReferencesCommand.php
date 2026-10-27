@@ -14,7 +14,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-#[Signature('legacy:import-references {--dry-run : Only show what would be imported}')]
+#[Signature('legacy:import-references {--dry-run : Only show what would be imported} {--skip-villages : Skip 75k villages for fast sync}')]
 #[Description('Import references (education, occupation, regions) from legacy database')]
 class LegacyImportReferencesCommand extends Command
 {
@@ -32,7 +32,11 @@ class LegacyImportReferencesCommand extends Command
         $this->importProvinces($legacyDb, $dryRun);
         $this->importRegencies($legacyDb, $dryRun);
         $this->importDistricts($legacyDb, $dryRun);
-        $this->importVillages($legacyDb, $dryRun);
+        if (! $this->option('skip-villages')) {
+            $this->importVillages($legacyDb, $dryRun);
+        } else {
+            $this->info('Skipping Villages import (--skip-villages active).');
+        }
     }
 
     private function doImport($name, $data, $dryRun, $modelClass, $mapFn)
