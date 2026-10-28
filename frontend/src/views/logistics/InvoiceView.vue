@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useInvoices } from '@/composables/useInvoices';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
@@ -13,6 +13,7 @@ import InvoiceDeleteDialog from './components/InvoiceDeleteDialog.vue';
 const {
   suppliers,
   medicines,
+  warehouses,
   filters,
   sort,
   paginationInfo,
@@ -32,8 +33,13 @@ const {
   deleteInvoice,
   formatRupiah,
   formatDateIndo,
-  exportInvoicesCsv
+  exportInvoicesCsv,
+  loadInitialData
 } = useInvoices();
+
+onMounted(async () => {
+  await loadInitialData();
+});
 
 // Modals state
 const isFormModalOpen = ref(false);
@@ -80,7 +86,17 @@ const handleOpenDelete = (invoice) => {
   isDeleteDialogOpen.value = true;
 };
 
-const handleFormSubmit = async (payload) => {
+const handleFormSubmit = async (payloadOrEvent) => {
+  let payload = payloadOrEvent;
+  let onSuccess = null;
+  let onError = null;
+
+  if (payloadOrEvent && typeof payloadOrEvent === 'object' && payloadOrEvent.payload) {
+    payload = payloadOrEvent.payload;
+    onSuccess = payloadOrEvent.onSuccess;
+    onError = payloadOrEvent.onError;
+  }
+
   const isEditing = Boolean(selectedInvoice.value);
 
   if (isEditing) {
@@ -93,6 +109,14 @@ const handleFormSubmit = async (payload) => {
         title: 'Berhasil',
         message: 'Data Faktur berhasil diperbarui.'
       });
+      if (typeof onSuccess === 'function') onSuccess(res.data);
+    } else {
+      if (typeof onError === 'function') onError(res);
+      showToast({
+        type: 'error',
+        title: 'Gagal Memperbarui',
+        message: res.message || 'Silakan periksa kembali isian formulir faktur.'
+      });
     }
   } else {
     const res = await addInvoice(payload);
@@ -103,6 +127,14 @@ const handleFormSubmit = async (payload) => {
         type: 'success',
         title: 'Berhasil',
         message: 'Data Faktur berhasil ditambahkan.'
+      });
+      if (typeof onSuccess === 'function') onSuccess(res.data);
+    } else {
+      if (typeof onError === 'function') onError(res);
+      showToast({
+        type: 'error',
+        title: 'Gagal Menyimpan',
+        message: res.message || 'Silakan periksa kembali isian formulir faktur.'
       });
     }
   }

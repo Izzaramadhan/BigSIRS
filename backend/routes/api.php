@@ -49,6 +49,7 @@ use App\Http\Controllers\Api\V1\MasterData\SupplierController;
 use App\Http\Controllers\Api\V1\MasterData\TariffComponentController;
 use App\Http\Controllers\Api\V1\MasterData\TariffTypeController;
 use App\Http\Controllers\Api\V1\MasterData\VillageController;
+use App\Http\Controllers\Api\V1\Logistics\InvoiceController;
 use App\Http\Controllers\Api\V1\MasterData\WardController;
 use App\Http\Controllers\Api\V1\MasterData\WarehouseController;
 use Illuminate\Support\Facades\Route;
@@ -195,6 +196,7 @@ Route::prefix('v1')->group(function () {
             Route::get('radiology-item-groups', [LookupController::class, 'radiologyItemGroups']);
 
             // Logistics Lookups
+            Route::get('medicines', [LookupController::class, 'medicines']);
             Route::get('medicine-units', [LookupController::class, 'medicineUnits']);
             Route::get('suppliers', [LookupController::class, 'suppliers']);
             Route::get('warehouses', [LookupController::class, 'warehouses']);
@@ -205,6 +207,16 @@ Route::prefix('v1')->group(function () {
             Route::get('generic-medicines', [LookupController::class, 'genericMedicines']);
             Route::post('generic-medicines', [GenericMedicineController::class, 'store']);
         });
+
+        Route::prefix('logistics')->group(function () {
+            Route::get('invoices/summary', [InvoiceController::class, 'summary']);
+            Route::get('invoices/export', [InvoiceController::class, 'export']);
+            Route::apiResource('invoices', InvoiceController::class);
+        });
+
+        Route::get('invoices/summary', [InvoiceController::class, 'summary']);
+        Route::get('invoices/export', [InvoiceController::class, 'export']);
+        Route::apiResource('invoices', InvoiceController::class);
     });
 });
 

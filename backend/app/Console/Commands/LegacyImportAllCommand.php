@@ -49,6 +49,7 @@ class LegacyImportAllCommand extends Command
             'import:legacy-medicines',
             'legacy:import-medication-signas',
             'legacy:import-medicine-packages',
+            'import:legacy-invoices',
             'legacy:link-polyclinic-warehouses',
         ],
         'Diagnosis, Prosedur & Penunjang Medis' => [

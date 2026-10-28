@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\MasterData\GenericMedicine;
 use App\Models\MasterData\LaboratoryCategory;
 use App\Models\MasterData\MedicationSigna;
+use App\Models\MasterData\Medicine;
 use App\Models\MasterData\MedicineCategory;
 use App\Models\MasterData\MedicineClassification;
 use App\Models\MasterData\MedicineRoute;
@@ -296,7 +297,12 @@ class LookupController extends Controller
             $query->orWhereIn('id', $ids);
         }
 
-        return response()->json($query->orderBy('name')->limit(50)->get());
+        if (! $request->has('all')) {
+            $limit = (int) $request->get('limit', $request->get('per_page', 100));
+            $query->limit($limit);
+        }
+
+        return response()->json($query->orderBy('name')->get());
     }
 
     public function medicineCategories(Request $request)
@@ -380,5 +386,45 @@ class LookupController extends Controller
         }
 
         return response()->json($query->orderBy('name')->limit($limit)->get());
+    }
+
+    public function medicines(Request $request)
+    {
+        $query = Medicine::with(['unit', 'generic'])->where('is_active', true);
+
+        if ($search = $request->get('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('kfa_code', 'like', "%{$search}%")
+                    ->orWhereHas('generic', function ($gq) use ($search) {
+                        $gq->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($request->has('ids')) {
+            $ids = is_array($request->ids) ? $request->ids : explode(',', $request->ids);
+            $query->orWhereIn('id', $ids);
+        }
+
+        if (! $request->has('all')) {
+            $limit = (int) $request->get('limit', $request->get('per_page', 100));
+            $query->limit($limit);
+        }
+
+        $items = $query->orderBy('name')->get();
+
+        return response()->json($items->map(function ($med) {
+            return [
+                'id' => $med->id,
+                'name' => $med->name,
+                'code' => $med->code,
+                'kfa_code' => $med->kfa_code,
+                'generic_name' => $med->generic?->name,
+                'unit' => $med->unit?->name ?? 'Box',
+                'price' => (float) ($med->selling_price_per_unit ?? 0),
+            ];
+        }));
     }
 }

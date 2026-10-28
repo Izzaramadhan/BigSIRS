@@ -300,22 +300,30 @@ const getRowNumber = (index) => {
 
             <!-- 7. Jatuh Tempo -->
             <td class="col-due-date">
-              <div
-                class="due-date-main"
-                :class="{ 'text-danger-due': isOverdue(invoice.dueDate, invoice.status) }"
-              >
-                {{ formatDateIndo(invoice.dueDate) }}
-              </div>
-              <div
-                class="due-date-relative"
-                :class="{
-                  'due-overdue': isOverdue(invoice.dueDate, invoice.status),
-                  'due-paid': invoice.status === 'Lunas',
-                  'due-pending': invoice.status !== 'Lunas' && !isOverdue(invoice.dueDate, invoice.status)
-                }"
-              >
-                {{ getDueStatusText(invoice) }}
-              </div>
+              <template v-if="invoice.status === 'Lunas'">
+                <div class="due-date-main text-muted">-</div>
+              </template>
+              <template v-else-if="invoice.dueDate">
+                <div
+                  class="due-date-main"
+                  :class="{ 'text-danger-due': isOverdue(invoice.dueDate, invoice.status) }"
+                >
+                  {{ formatDateIndo(invoice.dueDate) }}
+                </div>
+                <div
+                  v-if="getDueStatusText(invoice)"
+                  class="due-date-relative"
+                  :class="{
+                    'due-overdue': isOverdue(invoice.dueDate, invoice.status),
+                    'due-pending': !isOverdue(invoice.dueDate, invoice.status)
+                  }"
+                >
+                  {{ getDueStatusText(invoice) }}
+                </div>
+              </template>
+              <template v-else>
+                <div class="due-date-main text-muted">-</div>
+              </template>
             </td>
 
             <!-- 8. Aksi -->

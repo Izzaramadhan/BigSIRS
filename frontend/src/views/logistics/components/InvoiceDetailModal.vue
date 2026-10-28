@@ -84,23 +84,40 @@ const printInvoice = () => {
             <div class="info-card">
               <span class="info-label">Tanggal Jatuh Tempo</span>
               <div class="due-container">
-                <strong
-                  class="info-value"
-                  :class="isOverdue(invoice.dueDate, invoice.status) ? 'text-danger' : 'text-navy'"
-                >
-                  {{ formatDateIndo(invoice.dueDate) }}
-                </strong>
-                <span
-                  class="due-pill"
-                  :class="{
-                    'pill-overdue': isOverdue(invoice.dueDate, invoice.status),
-                    'pill-paid': invoice.status === 'Lunas',
-                    'pill-pending': invoice.status !== 'Lunas' && !isOverdue(invoice.dueDate, invoice.status)
-                  }"
-                >
-                  {{ getDueStatusText(invoice) }}
-                </span>
+                <template v-if="invoice.status === 'Lunas'">
+                  <strong class="info-value text-muted">-</strong>
+                </template>
+                <template v-else-if="invoice.dueDate">
+                  <strong
+                    class="info-value"
+                    :class="isOverdue(invoice.dueDate, invoice.status) ? 'text-danger' : 'text-navy'"
+                  >
+                    {{ formatDateIndo(invoice.dueDate) }}
+                  </strong>
+                  <span
+                    v-if="getDueStatusText(invoice)"
+                    class="due-pill"
+                    :class="{
+                      'pill-overdue': isOverdue(invoice.dueDate, invoice.status),
+                      'pill-pending': !isOverdue(invoice.dueDate, invoice.status)
+                    }"
+                  >
+                    {{ getDueStatusText(invoice) }}
+                  </span>
+                </template>
+                <template v-else>
+                  <strong class="info-value text-muted">-</strong>
+                </template>
               </div>
+            </div>
+            <div class="info-card">
+              <span class="info-label">Gudang Tujuan</span>
+              <strong class="info-value text-navy">{{ invoice.warehouseName || 'Gudang Utama' }}</strong>
+            </div>
+
+            <div class="info-card">
+              <span class="info-label">Pajak (PPN)</span>
+              <strong class="info-value text-navy">{{ invoice.taxType === 'ppn_11' ? 'PPN (11%)' : 'Non PPN' }}</strong>
             </div>
           </div>
 
@@ -118,21 +135,32 @@ const printInvoice = () => {
                   <tr>
                     <th style="width: 40px; text-align: center;">No</th>
                     <th>Nama Obat / Sediaan</th>
-                    <th style="width: 90px; text-align: right;">Jumlah</th>
-                    <th style="width: 110px;">Satuan</th>
-                    <th style="width: 130px; text-align: right;">Harga Satuan</th>
+                    <th style="width: 140px;">No. Batch / Exp</th>
+                    <th style="width: 80px; text-align: right;">Jumlah</th>
+                    <th style="width: 90px;">Satuan</th>
+                    <th style="width: 120px; text-align: right;">Harga Satuan</th>
                     <th style="width: 80px; text-align: right;">Diskon</th>
-                    <th style="width: 140px; text-align: right;">Subtotal</th>
+                    <th style="width: 130px; text-align: right;">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="(it, idx) in invoice.items" :key="it.id || idx">
                     <td style="text-align: center;" class="text-muted">{{ idx + 1 }}</td>
-                    <td class="font-medium text-navy">{{ it.medicineName }}</td>
+                    <td class="font-medium text-navy">
+                      <div>{{ it.medicineName }}</div>
+                      <span v-if="it.isRepack" class="text-xs text-muted">(Repack: Ya)</span>
+                    </td>
+                    <td class="text-xs text-muted">
+                      <div v-if="it.batchNumber">Batch: {{ it.batchNumber }}</div>
+                      <div v-if="it.expiredDate">Exp: {{ formatDateIndo(it.expiredDate) }}</div>
+                      <div v-if="!it.batchNumber && !it.expiredDate">-</div>
+                    </td>
                     <td style="text-align: right;">{{ it.quantity }}</td>
                     <td class="text-muted">{{ it.unit }}</td>
                     <td style="text-align: right;">{{ formatRupiah(it.price) }}</td>
-                    <td style="text-align: right;" class="text-muted">{{ it.discount ? it.discount + '%' : '-' }}</td>
+                    <td style="text-align: right;" class="text-muted">
+                      {{ it.discount ? (it.discountType === 'nominal' ? formatRupiah(it.discount) : it.discount + '%') : '-' }}
+                    </td>
                     <td style="text-align: right;" class="font-semibold text-navy">{{ formatRupiah(it.subtotal) }}</td>
                   </tr>
                 </tbody>
@@ -364,6 +392,10 @@ const printInvoice = () => {
 
 .text-muted {
   color: var(--color-text-secondary, #64748b);
+}
+
+.text-xs {
+  font-size: 0.72rem;
 }
 
 @media (max-width: 640px) {
