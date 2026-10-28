@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 #[Signature('legacy:import-all {--dry-run : Only show what would be imported without modifying database} {--with-villages : Also import 75,000 villages (takes ~5-10 minutes)}')]
 #[Description('Jalankan seluruh proses sinkronisasi database legacy ke BigSIRS secara otomatis')]
@@ -86,6 +87,41 @@ class LegacyImportAllCommand extends Command
         $this->info('===============================================================');
         if ($dryRun) {
             $this->warn('Mode DRY-RUN aktif: Data tidak akan disimpan ke database.');
+        }
+
+        // Preflight Check: Memastikan koneksi database legacy tersedia
+        $legacyDbName = config('database.connections.legacy.database', 'simrs_legacy');
+        try {
+            DB::connection('legacy')->getPdo();
+        } catch (\Throwable $e) {
+            $this->newLine();
+            $this->error("KONEKSI GAGAL: Database legacy '{$legacyDbName}' tidak ditemukan atau tidak dapat diakses.");
+            $this->error("Pesan: {$e->getMessage()}");
+            $this->newLine();
+            $this->warn('Petunjuk Penyelesaian:');
+            $this->line('Kontainer MySQL Docker belum memiliki database legacy atau belum di-restore dari dump SQL.');
+            $this->line('Silakan jalankan perintah berikut dari root proyek:');
+            $this->comment('  1. docker exec -i bigsirs-mysql mysql -uroot -pchange_root_password -e "CREATE DATABASE IF NOT EXISTS ' . $legacyDbName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"');
+            $this->comment('  2. docker exec -i bigsirs-mysql sh -c \'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" ' . $legacyDbName . ' < /backups/backup_db_simrs_masking.sql\'');
+            $this->newLine();
+
+            return Command::FAILURE;
+        }
+
+        // Pastikan tabel dasar ref_pendidikan ada
+        try {
+            $hasTable = DB::connection('legacy')->getSchemaBuilder()->hasTable('ref_pendidikan');
+            if (! $hasTable) {
+                $this->newLine();
+                $this->error("DATABASE KOSONG: Database legacy '{$legacyDbName}' terhubung, namun tabel data master (seperti ref_pendidikan) belum ada.");
+                $this->warn('Silakan restore file dump SQL dengan perintah:');
+                $this->comment('  docker exec -i bigsirs-mysql sh -c \'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" ' . $legacyDbName . ' < /backups/backup_db_simrs_masking.sql\'');
+                $this->newLine();
+
+                return Command::FAILURE;
+            }
+        } catch (\Throwable $e) {
+            // Abaikan jika pengecekan schema gagal karena alasan non-fatal
         }
 
         $startTime = microtime(true);

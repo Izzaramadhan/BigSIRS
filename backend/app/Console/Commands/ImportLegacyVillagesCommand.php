@@ -119,7 +119,7 @@ class ImportLegacyVillagesCommand extends Command
         $this->table(
             ['Metric', 'Value'],
             [
-                ['Total Read', $legacyVillages->count()],
+                ['Total Read', $totalRead],
                 ['Would Create', $stats['would_create']],
                 ['Would Update', $stats['would_update']],
                 ['Created', $stats['created']],
