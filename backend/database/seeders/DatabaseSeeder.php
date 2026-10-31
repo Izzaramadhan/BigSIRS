@@ -15,11 +15,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        if (User::count() === 0) {
+            User::factory()->create([
+                'name' => 'Administrator',
+                'username' => 'admin',
+                'email' => 'admin@example.com',
+            ]);
+        }
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->call([
+            StockMutationSeeder::class,
+            StockOpnameSeeder::class,
         ]);
     }
 }

@@ -1,7 +1,8 @@
 <script setup>
+import { computed } from 'vue';
 import StockOpnameStatusBadge from './StockOpnameStatusBadge.vue';
 
-defineProps({
+const props = defineProps({
   isOpen: {
     type: Boolean,
     required: true
@@ -12,7 +13,31 @@ defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'approve', 'print']);
+const emit = defineEmits(['close', 'approve', 'print', 'submit-review', 'update-item']);
+
+const isCountingSession = computed(() => {
+  return props.opname?.status === 'Sedang Dihitung' || props.opname?.rawStatus === 'counting';
+});
+
+const canSubmitReview = computed(() => {
+  if (!props.opname?.items || props.opname.items.length === 0) return false;
+  return props.opname.items.every(
+    (it) => it.physicalStock !== null && it.physicalStock !== undefined
+  );
+});
+
+const handlePhysicalStockChange = (it, val) => {
+  const num = val === '' ? null : Math.max(0, Number(val));
+  it.physicalStock = num;
+  if (num !== null) {
+    it.difference = num - it.systemStock;
+    it.differenceValue = it.difference * (it.unitPrice || 0);
+  } else {
+    it.difference = null;
+    it.differenceValue = null;
+  }
+  emit('update-item', { opname: props.opname, item: it });
+};
 </script>
 
 <template>
@@ -73,7 +98,7 @@ const emit = defineEmits(['close', 'approve', 'print']);
 
             <div class="meta-item">
               <span class="meta-label">Gudang / Lokasi</span>
-              <span class="meta-value font-bold text-navy">{{ opname.warehouse }}</span>
+              <span class="meta-value font-bold text-navy">{{ typeof opname.warehouse === 'object' && opname.warehouse !== null ? opname.warehouse.name : opname.warehouse }}</span>
               <span class="meta-sub">{{ opname.locationDetail }}</span>
             </div>
 
@@ -129,12 +154,32 @@ const emit = defineEmits(['close', 'approve', 'print']);
                 <tbody>
                   <tr v-for="(it, idx) in opname.items" :key="it.id || idx">
                     <td class="text-center text-muted">{{ idx + 1 }}</td>
-                    <td class="font-bold text-navy">{{ it.name }}</td>
+                    <td class="font-bold text-navy">
+                      <div>{{ it.name || it.medicineName || it.medicine_name }}</div>
+                      <span v-if="it.batchNumber || it.expiredDate" class="item-batch-sub text-muted font-normal block">
+                        Batch: {{ it.batchNumber || '-' }} • Exp: {{ it.expiredDate || '-' }}
+                      </span>
+                    </td>
                     <td class="text-center">{{ it.unit }}</td>
                     <td class="text-center font-semibold">{{ it.systemStock }}</td>
-                    <td class="text-center font-bold text-primary">{{ it.physicalStock }}</td>
+                    <td class="text-center">
+                      <div v-if="isCountingSession" class="physical-input-wrap">
+                        <input
+                          type="number"
+                          min="0"
+                          :value="it.physicalStock"
+                          class="form-input physical-input font-bold text-primary text-center"
+                          placeholder="0"
+                          @change="(e) => handlePhysicalStockChange(it, e.target.value)"
+                        />
+                      </div>
+                      <span v-else class="font-bold text-primary">
+                        {{ it.physicalStock !== null && it.physicalStock !== undefined ? it.physicalStock : '-' }}
+                      </span>
+                    </td>
                     <td class="text-center">
                       <span
+                        v-if="it.difference !== null && it.difference !== undefined"
                         class="diff-val font-bold"
                         :class="{
                           'text-danger': it.difference < 0,
@@ -144,6 +189,7 @@ const emit = defineEmits(['close', 'approve', 'print']);
                       >
                         {{ it.difference > 0 ? `+${it.difference}` : it.difference }}
                       </span>
+                      <span v-else class="text-muted">-</span>
                     </td>
                     <td class="text-center">
                       <span
@@ -153,12 +199,13 @@ const emit = defineEmits(['close', 'approve', 'print']);
                         Match
                       </span>
                       <span
-                        v-else
+                        v-else-if="it.difference !== null && it.difference !== undefined"
                         class="badge-item-diff"
                         :class="it.difference < 0 ? 'badge-minus' : 'badge-plus'"
                       >
                         {{ it.difference < 0 ? 'Kurang' : 'Lebih' }}
                       </span>
+                      <span v-else class="text-muted text-xs">-</span>
                     </td>
                   </tr>
                 </tbody>
@@ -182,8 +229,25 @@ const emit = defineEmits(['close', 'approve', 'print']);
           </button>
 
           <div class="footer-actions">
+            <!-- Action: Ajukan Peninjauan when counting -->
             <button
-              v-if="opname.status === 'Menunggu Peninjauan'"
+              v-if="opname.status === 'Sedang Dihitung' || opname.rawStatus === 'counting'"
+              type="button"
+              class="btn-primary"
+              :disabled="!canSubmitReview"
+              :title="!canSubmitReview ? 'Seluruh item harus dihitung sebelum peninjauan' : 'Ajukan Peninjauan'"
+              @click="emit('submit-review', opname)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 11 12 14 22 4"></polyline>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+              <span>Ajukan Peninjauan</span>
+            </button>
+
+            <!-- Action: Setujui when in review -->
+            <button
+              v-if="opname.status === 'Menunggu Peninjauan' || opname.rawStatus === 'review'"
               type="button"
               class="btn-primary"
               @click="emit('approve', opname)"
@@ -552,6 +616,23 @@ const emit = defineEmits(['close', 'approve', 'print']);
 .btn-outline svg {
   width: 14px;
   height: 14px;
+}
+
+.physical-input {
+  width: 90px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: center;
+  border: 1.5px solid var(--color-primary, #087f78);
+  border-radius: 6px;
+  background: #f0fdf4;
+}
+
+.item-batch-sub {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 0.15rem;
 }
 
 @media (max-width: 768px) {

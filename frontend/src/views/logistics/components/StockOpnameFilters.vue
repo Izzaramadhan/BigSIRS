@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch } from 'vue';
+import { reactive, computed, watch } from 'vue';
 
 const props = defineProps({
   filters: {
@@ -7,10 +7,6 @@ const props = defineProps({
     required: true
   },
   warehouses: {
-    type: Array,
-    default: () => []
-  },
-  statuses: {
     type: Array,
     default: () => []
   },
@@ -22,23 +18,28 @@ const props = defineProps({
 
 const emit = defineEmits(['apply', 'reset']);
 
+const warehouseOptions = computed(() => {
+  return props.warehouses.map((w) => {
+    if (typeof w === 'object' && w !== null) {
+      return { id: w.id, name: w.name };
+    }
+    return { id: w, name: String(w) };
+  });
+});
+
 const localFilters = reactive({
-  opnameNumber: props.filters.opnameNumber || '',
-  startDate: props.filters.startDate || '',
-  endDate: props.filters.endDate || '',
-  warehouse: props.filters.warehouse || 'Semua Gudang',
-  status: props.filters.status || 'Semua Status'
+  warehouse_id: props.filters.warehouse_id ?? '',
+  hide_zero_stock: props.filters.hide_zero_stock ?? true,
+  search: props.filters.search || ''
 });
 
 watch(
   () => props.filters,
   (newVal) => {
     Object.assign(localFilters, {
-      opnameNumber: newVal.opnameNumber || '',
-      startDate: newVal.startDate || '',
-      endDate: newVal.endDate || '',
-      warehouse: newVal.warehouse || 'Semua Gudang',
-      status: newVal.status || 'Semua Status'
+      warehouse_id: newVal.warehouse_id ?? '',
+      hide_zero_stock: newVal.hide_zero_stock ?? true,
+      search: newVal.search || ''
     });
   },
   { deep: true }
@@ -49,11 +50,9 @@ const handleApply = () => {
 };
 
 const handleReset = () => {
-  localFilters.opnameNumber = '';
-  localFilters.startDate = '';
-  localFilters.endDate = '';
-  localFilters.warehouse = 'Semua Gudang';
-  localFilters.status = 'Semua Status';
+  localFilters.warehouse_id = '';
+  localFilters.hide_zero_stock = true;
+  localFilters.search = '';
   emit('reset');
 };
 </script>
@@ -67,110 +66,105 @@ const handleReset = () => {
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
           </svg>
         </div>
-        <h3 class="filter-card-title">Pencarian & Filter Data Stok Opname</h3>
+        <h3 class="filter-card-title">Filter Saldo Stok Logistik</h3>
       </div>
-      <span class="filter-context-note">Menampilkan data audit periode aktif RS</span>
+      <span class="filter-context-note">Sesuaikan tampilan gudang dan stok sediaan</span>
     </div>
 
     <form autocomplete="off" class="filter-form" @submit.prevent="handleApply">
       <div class="filter-grid">
-        <!-- Field 1: Nomor Stok Opname -->
+        <!-- 1. Filter Gudang -->
         <div class="form-group">
-          <label class="form-label" for="filter-opname-no">Nomor Stok Opname</label>
-          <div class="input-with-icon">
-            <span class="input-prefix">#</span>
-            <input autocomplete="off"
-              id="filter-opname-no"
-              v-model="localFilters.opnameNumber"
-              type="text"
-              class="form-input with-prefix"
-              placeholder="Cari nomor stok opname"
-            />
-          </div>
-        </div>
-
-        <!-- Field 2: Rentang Tanggal -->
-        <div class="form-group">
-          <label class="form-label">Rentang Tanggal</label>
-          <div class="date-range-inputs">
-            <input autocomplete="off"
-              v-model="localFilters.startDate"
-              type="date"
-              class="form-input date-input"
-              aria-label="Tanggal Mulai"
-              title="Tanggal Mulai"
-            />
-            <span class="date-sep">-</span>
-            <input autocomplete="off"
-              v-model="localFilters.endDate"
-              type="date"
-              class="form-input date-input"
-              aria-label="Tanggal Selesai"
-              title="Tanggal Selesai"
-            />
-          </div>
-        </div>
-
-        <!-- Field 3: Lokasi / Gudang -->
-        <div class="form-group">
-          <label class="form-label" for="filter-warehouse">Lokasi / Gudang</label>
+          <label class="form-label" for="filter-warehouse">Gudang</label>
           <div class="select-wrapper">
             <select
               id="filter-warehouse"
-              v-model="localFilters.warehouse"
+              v-model="localFilters.warehouse_id"
               class="form-select"
+              @change="handleApply"
             >
-              <option value="Semua Gudang">Semua Gudang</option>
-              <option v-for="wh in warehouses" :key="wh" :value="wh">
-                {{ wh }}
+              <option value="">Semua Gudang</option>
+              <option
+                v-for="wh in warehouseOptions"
+                :key="wh.id"
+                :value="wh.id"
+              >
+                {{ wh.name }}
               </option>
             </select>
           </div>
         </div>
 
-        <!-- Field 4: Status Sesi -->
+        <!-- 2. Filter Tampilan Stok Nol -->
         <div class="form-group">
-          <label class="form-label" for="filter-status">Status Sesi</label>
+          <label class="form-label" for="filter-hide-zero">Status Stok</label>
           <div class="select-wrapper">
             <select
-              id="filter-status"
-              v-model="localFilters.status"
+              id="filter-hide-zero"
+              v-model="localFilters.hide_zero_stock"
               class="form-select"
+              @change="handleApply"
             >
-              <option value="Semua Status">Semua Status</option>
-              <option v-for="st in statuses.filter(s => s !== 'Semua Status')" :key="st" :value="st">
-                {{ st }}
-              </option>
+              <option :value="true">Sembunyikan stok 0</option>
+              <option :value="false">Tampilkan stok 0</option>
             </select>
+          </div>
+        </div>
+
+        <!-- 3. Pencarian -->
+        <div class="form-group search-group">
+          <label class="form-label" for="filter-search">Pencarian Sediaan</label>
+          <div class="search-input-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              id="filter-search"
+              v-model="localFilters.search"
+              type="text"
+              class="form-input search-input"
+              placeholder="Cari sediaan, kode, batch, satuan..."
+            />
+            <button
+              v-if="localFilters.search"
+              type="button"
+              class="clear-search-btn"
+              title="Hapus pencarian"
+              @click="localFilters.search = ''; handleApply()"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Actions -->
       <div class="filter-actions">
         <button
           type="button"
-          class="btn-cancel"
+          class="btn btn-secondary"
           :disabled="loading"
           @click="handleReset"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="1 4 1 10 7 10"></polyline>
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
           </svg>
-          Reset
+          Reset Filter
         </button>
 
         <button
           type="submit"
-          class="btn-primary"
+          class="btn btn-primary"
           :disabled="loading"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+            <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          Tampilkan
+          Terapkan Filter
         </button>
       </div>
     </form>
@@ -179,18 +173,21 @@ const handleReset = () => {
 
 <style scoped>
 .filter-card {
-  padding: 1.25rem 1.4rem;
-  background: var(--color-card-bg, #ffffff);
-  border: 1px solid var(--color-border-soft, #e2e8f0);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
-  margin-bottom: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.5rem;
 }
 
 .filter-card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.875rem;
+  margin-bottom: 1.25rem;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
@@ -198,197 +195,182 @@ const handleReset = () => {
 .title-with-icon {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .filter-icon-box {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--color-primary-light, #dff7f4);
-  color: var(--color-primary, #087f78);
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #0d9488;
 }
 
 .filter-icon-box svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 .filter-card-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--color-text-navy, #17243d);
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
   margin: 0;
 }
 
 .filter-context-note {
-  font-size: 0.78rem;
-  color: var(--color-text-secondary, #64748b);
+  font-size: 0.8125rem;
+  color: #64748b;
 }
 
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
+  grid-template-columns: 1fr 1fr 1.5fr;
+  gap: 1.25rem;
+  align-items: flex-end;
+}
+
+@media (max-width: 900px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.375rem;
 }
 
 .form-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-text-navy, #17243d);
-}
-
-.form-input,
-.form-select {
-  width: 100%;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.85rem;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  border-radius: 6px;
-  background: #ffffff;
-  color: var(--color-text-navy, #17243d);
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.input-with-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-prefix {
-  position: absolute;
-  left: 0.75rem;
-  color: var(--color-text-secondary, #94a3b8);
-  font-weight: 600;
-  font-size: 0.85rem;
-  pointer-events: none;
-}
-
-.form-input.with-prefix {
-  padding-left: 1.6rem;
-}
-
-.form-input:focus,
-.form-select:focus {
-  border-color: var(--color-primary, #087f78);
-  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.12);
-}
-
-.date-range-inputs {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.date-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.date-sep {
-  color: var(--color-text-secondary, #94a3b8);
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #334155;
 }
 
 .select-wrapper {
   position: relative;
 }
 
-.select-wrapper::after {
-  content: '';
+.form-select,
+.form-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  color: #1e293b;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.form-select:focus,
+.form-input:focus {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+.search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
   position: absolute;
-  right: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid #64748b;
+  left: 0.875rem;
+  width: 18px;
+  height: 18px;
+  color: #94a3b8;
   pointer-events: none;
 }
 
-.form-select {
-  appearance: none;
-  padding-right: 2rem;
+.search-input {
+  padding-left: 2.5rem;
+  padding-right: 2.25rem;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 0.625rem;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
   cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.clear-search-btn:hover {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.clear-search-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .filter-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.65rem;
-  margin-top: 1rem;
-  padding-top: 0.85rem;
-  border-top: 1px dashed var(--color-border-soft, #e2e8f0);
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
 }
 
-.btn-cancel,
-.btn-primary {
+.btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  border-radius: 6px;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 38px;
+  padding: 0 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
 }
 
-.btn-cancel svg,
-.btn-primary svg {
-  width: 14px;
-  height: 14px;
+.btn-icon {
+  width: 16px;
+  height: 16px;
 }
 
-.btn-cancel {
+.btn-secondary {
   background: #ffffff;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  color: var(--color-text-navy, #17243d);
+  border-color: #cbd5e1;
+  color: #475569;
 }
 
-.btn-cancel:hover:not(:disabled) {
+.btn-secondary:hover:not(:disabled) {
   background: #f8fafc;
   border-color: #94a3b8;
+  color: #1e293b;
 }
 
 .btn-primary {
-  background: var(--color-primary, #087f78);
-  border: 1px solid var(--color-primary, #087f78);
+  background: #0d9488;
   color: #ffffff;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #066761;
+  background: #0f766e;
 }
 
-.btn-cancel:disabled,
-.btn-primary:disabled {
+.btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-@media (max-width: 1024px) {
-  .filter-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .filter-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

@@ -28,15 +28,16 @@ const emit = defineEmits(['close', 'confirm']);
           </svg>
         </div>
         <div>
-          <h3 class="modal-title">Hapus Draft Transaksi</h3>
-          <p class="modal-subtitle">Apakah Anda yakin ingin menghapus draft transaksi kasir ini?</p>
+          <h3 class="modal-title">Hapus Penjualan Bebas</h3>
+          <p class="modal-subtitle">Apakah Anda yakin ingin menghapus transaksi penjualan bebas ini?</p>
         </div>
       </div>
 
       <div class="modal-body">
         <p class="delete-warning-text">
-          Draft transaksi dengan nomor <strong class="font-mono">{{ sale.transactionNumber }}</strong> untuk pembeli
-          <strong>{{ sale.customerName }}</strong> akan dihapus secara permanen dari daftar antrean kasir.
+          Transaksi untuk pembeli <strong>{{ sale.pembeli || sale.customerName || '-' }}</strong> 
+          pada tanggal <strong>{{ sale.formattedDate || sale.date || '-' }}</strong> 
+          akan dihapus. Seluruh pengurangan stok sediaan pada transaksi ini akan dikembalikan secara otomatis ke gudang terkait.
         </p>
       </div>
 
@@ -58,7 +59,7 @@ const emit = defineEmits(['close', 'confirm']);
           <svg v-if="submitting" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
           </svg>
-          <span v-else>Ya, Hapus Draft</span>
+          <span v-else>Ya, Hapus Data</span>
         </button>
       </div>
     </div>

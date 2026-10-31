@@ -50,6 +50,10 @@ class LegacyImportAllCommand extends Command
             'legacy:import-medication-signas',
             'legacy:import-medicine-packages',
             'import:legacy-invoices',
+            'import:legacy-mutations',
+            'legacy:import-warehouse-stocks',
+            'legacy:import-stock-opnames',
+            'import:legacy-goods-issues',
             'legacy:link-polyclinic-warehouses',
         ],
         'Diagnosis, Prosedur & Penunjang Medis' => [
@@ -102,8 +106,8 @@ class LegacyImportAllCommand extends Command
             $this->warn('Petunjuk Penyelesaian:');
             $this->line('Kontainer MySQL Docker belum memiliki database legacy atau belum di-restore dari dump SQL.');
             $this->line('Silakan jalankan perintah berikut dari root proyek:');
-            $this->comment('  1. docker exec -i bigsirs-mysql mysql -uroot -pchange_root_password -e "CREATE DATABASE IF NOT EXISTS ' . $legacyDbName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"');
-            $this->comment('  2. docker exec -i bigsirs-mysql sh -c \'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" ' . $legacyDbName . ' < /backups/backup_db_simrs_masking.sql\'');
+            $this->comment('  1. docker exec -i bigsirs-mysql mysql -uroot -pchange_root_password -e "CREATE DATABASE IF NOT EXISTS '.$legacyDbName.' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"');
+            $this->comment('  2. docker exec -i bigsirs-mysql sh -c \'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" '.$legacyDbName.' < /backups/backup_db_simrs_masking.sql\'');
             $this->newLine();
 
             return Command::FAILURE;
@@ -116,7 +120,7 @@ class LegacyImportAllCommand extends Command
                 $this->newLine();
                 $this->error("DATABASE KOSONG: Database legacy '{$legacyDbName}' terhubung, namun tabel data master (seperti ref_pendidikan) belum ada.");
                 $this->warn('Silakan restore file dump SQL dengan perintah:');
-                $this->comment('  docker exec -i bigsirs-mysql sh -c \'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" ' . $legacyDbName . ' < /backups/backup_db_simrs_masking.sql\'');
+                $this->comment('  docker exec -i bigsirs-mysql sh -c \'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" '.$legacyDbName.' < /backups/backup_db_simrs_masking.sql\'');
                 $this->newLine();
 
                 return Command::FAILURE;

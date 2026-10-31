@@ -1,47 +1,34 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { usePosSales } from '@/composables/usePosSales';
 import AppToast from '@/components/common/AppToast.vue';
-import PosSaleSummaryCards from './components/PosSaleSummaryCards.vue';
-import PosSaleFilters from './components/PosSaleFilters.vue';
 import PosSaleTable from './components/PosSaleTable.vue';
-import PosSaleDetailModal from './components/PosSaleDetailModal.vue';
-import PosSaleVoidDialog from './components/PosSaleVoidDialog.vue';
 import PosSaleFormModal from './components/PosSaleFormModal.vue';
 import PosSaleDeleteDialog from './components/PosSaleDeleteDialog.vue';
 
+const router = useRouter();
+
 const {
-  locations,
-  paymentMethods,
-  transactionStatuses,
-  otcMedicines,
+  sales,
+  customers,
   loading,
   submitting,
-  tableState,
-  errorMessage,
   filters,
-  summary,
-  paginatedSales,
   paginationInfo,
-  applyFilters,
-  resetFilters,
+  fetchSales,
+  fetchCustomers,
   setPage,
   setPerPage,
-  setTableState,
   createSale,
-  voidSale,
-  deleteSale,
-  exportSalesCsv
+  updateSale,
+  deleteSale
 } = usePosSales();
 
 // Modal States
-const isDetailModalOpen = ref(false);
-const isVoidDialogOpen = ref(false);
 const isFormModalOpen = ref(false);
 const isDeleteDialogOpen = ref(false);
 
-const selectedSale = ref(null);
-const saleToVoid = ref(null);
 const saleToEdit = ref(null);
 const saleToDelete = ref(null);
 
@@ -61,6 +48,13 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
+onMounted(async () => {
+  await Promise.allSettled([
+    fetchSales(),
+    fetchCustomers()
+  ]);
+});
+
 // Handlers
 const openAddModal = () => {
   saleToEdit.value = null;
@@ -72,14 +66,10 @@ const handleOpenEdit = (sale) => {
   isFormModalOpen.value = true;
 };
 
-const handleOpenDetail = (sale) => {
-  selectedSale.value = sale;
-  isDetailModalOpen.value = true;
-};
-
-const handleOpenVoid = (sale) => {
-  saleToVoid.value = sale;
-  isVoidDialogOpen.value = true;
+const handleViewDetail = (sale) => {
+  if (router) {
+    router.push({ name: 'logistics.pos.detail', params: { id: sale.id } });
+  }
 };
 
 const handleOpenDelete = (sale) => {
@@ -87,88 +77,77 @@ const handleOpenDelete = (sale) => {
   isDeleteDialogOpen.value = true;
 };
 
-const handleFormSubmit = async ({ isDraft, ...payload }) => {
-  const res = await createSale(payload, isDraft);
-  if (res.success) {
-    isFormModalOpen.value = false;
-    showToast({
-      type: 'success',
-      title: isDraft ? 'Draft Disimpan' : 'Transaksi Berhasil',
-      message: isDraft
-        ? `Draft transaksi ${res.data.transactionNumber} berhasil disimpan.`
-        : `Pembayaran ${res.data.transactionNumber} sukses dicatat. Struk siap dicetak.`
-    });
-  }
+const handleSearch = (query) => {
+  filters.search = query;
+  setPage(1);
+  fetchSales({ search: query });
 };
 
-const handleVoidConfirm = async ({ id, reason }) => {
-  const num = saleToVoid.value?.transactionNumber;
-  const res = await voidSale(id, reason);
-  if (res.success) {
-    isVoidDialogOpen.value = false;
-    saleToVoid.value = null;
-    showToast({
-      type: 'success',
-      title: 'Transaksi Dibatalkan (Void)',
-      message: `Transaksi ${num} berhasil dibatalkan. Stok sediaan telah dikembalikan ke inventori.`
-    });
+const handleResetFilter = () => {
+  filters.search = '';
+  setPage(1);
+  fetchSales({ search: '' });
+};
+
+const handleFormSubmit = async (payload) => {
+  if (saleToEdit.value) {
+    const res = await updateSale(saleToEdit.value.id, payload);
+    if (res.success) {
+      isFormModalOpen.value = false;
+      saleToEdit.value = null;
+      showToast({
+        type: 'success',
+        title: 'Berhasil',
+        message: 'Data penjualan bebas berhasil diperbarui.'
+      });
+    } else {
+      showToast({
+        type: 'error',
+        title: 'Gagal Memperbarui',
+        message: res.message || 'Terjadi kesalahan saat memperbarui data penjualan.'
+      });
+    }
+  } else {
+    const res = await createSale(payload);
+    if (res.success) {
+      isFormModalOpen.value = false;
+      showToast({
+        type: 'success',
+        title: 'Berhasil Disimpan',
+        message: 'Data penjualan bebas berhasil ditambahkan.'
+      });
+      if (res.data?.id) {
+        router.push({ name: 'logistics.pos.detail', params: { id: res.data.id } });
+      }
+    } else {
+      showToast({
+        type: 'error',
+        title: 'Gagal Menyimpan',
+        message: res.message || 'Terjadi kesalahan saat menyimpan data penjualan.'
+      });
+    }
   }
 };
 
 const handleDeleteConfirm = async () => {
   if (!saleToDelete.value) return;
-  const num = saleToDelete.value.transactionNumber;
   const res = await deleteSale(saleToDelete.value.id);
   if (res.success) {
     isDeleteDialogOpen.value = false;
     saleToDelete.value = null;
     showToast({
       type: 'success',
-      title: 'Draft Dihapus',
-      message: `Draft transaksi ${num} telah dihapus dari antrean kasir.`
+      title: 'Data Dihapus',
+      message: 'Data penjualan bebas telah berhasil dihapus.'
+    });
+    await fetchSales();
+  } else {
+    showToast({
+      type: 'error',
+      title: 'Gagal Menghapus',
+      message: res.message || 'Terjadi kesalahan saat menghapus data penjualan.'
     });
   }
-};
-
-const handlePrint = (sale) => {
-  showToast({
-    type: 'info',
-    title: 'Cetak Struk Kasir',
-    message: sale
-      ? `Mencetak struk kasir untuk transaksi ${sale.transactionNumber}...`
-      : 'Mencetak struk transaksi penjualan bebas...'
-  });
-  window.print();
-};
-
-const handlePrintDailyReport = () => {
-  showToast({
-    type: 'info',
-    title: 'Rekap Kasir Harian',
-    message: 'Mencetak laporan Rekapitulasi Kasir Harian Shift 1 & 2...'
-  });
-  window.print();
-};
-
-const handleExport = () => {
-  exportSalesCsv();
-  showToast({
-    type: 'success',
-    title: 'Ekspor Berhasil',
-    message: 'Data riwayat transaksi kasir OTC berhasil diekspor ke file Excel/CSV.'
-  });
-};
-
-const handleRefresh = async () => {
-  loading.value = true;
-  tableState.value = 'normal';
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  loading.value = false;
-  showToast({
-    type: 'success',
-    title: 'Data Diperbarui',
-    message: 'Daftar riwayat transaksi kasir OTC berhasil disegarkan.'
-  });
 };
 </script>
 
@@ -183,139 +162,64 @@ const handleRefresh = async () => {
       @close="closeToast"
     />
 
-    <!-- 1. Header Halaman -->
+    <!-- Header Halaman Standar BigSIRS -->
     <div class="page-header">
       <div class="header-content">
-        <!-- Breadcrumbs -->
         <div class="breadcrumbs">
-          <span>Logistik Farmasi</span>
-          <span class="separator">&gt;</span>
-          <span class="current">Penjualan Bebas (OTC)</span>
+          <span>Logistik</span>
+          <span class="separator">/</span>
+          <span class="current">Penjualan Bebas</span>
         </div>
-
-        <!-- Page Title & Badges -->
         <div class="title-row">
           <h1 class="page-title">Penjualan Bebas</h1>
-          <div class="badges-wrapper">
-            <span class="otc-badge">OTC-FARMASI</span>
-            <span class="version-badge">POS V2.6</span>
-          </div>
+          <span class="module-badge">
+            <span class="bullet-dot">•</span> SIMRS-LOG
+          </span>
         </div>
-
-        <!-- Subtitle -->
         <p class="page-subtitle">
-          Kelola transaksi kasir langsung, inventaris obat bebas (OTC), vitamin, suplemen, dan BMHP non-kunjungan pasien.
+          Kelola data penjualan sediaan secara langsung kepada pembeli.
         </p>
       </div>
 
-      <!-- Header Action Buttons -->
       <div class="header-actions">
         <button
           type="button"
-          class="btn-outline"
-          title="Ekspor seluruh data transaksi ke Excel"
-          @click="handleExport"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="8" y1="13" x2="16" y2="13"></line>
-            <line x1="8" y1="17" x2="16" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-          Export Excel
-        </button>
-
-        <button
-          type="button"
-          class="btn-outline"
-          title="Cetak rekap kasir harian"
-          @click="handlePrintDailyReport"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 6 2 18 2 18 9"></polyline>
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-            <rect x="6" y="14" width="12" height="8"></rect>
-          </svg>
-          Rekap Kasir Harian
-        </button>
-
-        <button
-          type="button"
           class="btn-primary"
-          title="Buka kasir untuk transaksi baru"
           @click="openAddModal"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          + Transaksi Baru
+          Tambah Penjualan Bebas
         </button>
       </div>
     </div>
 
     <!-- Page Content Flow -->
     <div class="page-content">
-      <!-- 2. Kartu Ringkasan -->
-      <PosSaleSummaryCards :summary="summary" />
-
-      <!-- 3. Bagian Pencarian & Filter -->
-      <PosSaleFilters
-        :filters="filters"
-        :locations="locations"
-        :payment-methods="paymentMethods"
-        :statuses="transactionStatuses"
-        :loading="loading"
-        @apply="applyFilters"
-        @reset="resetFilters"
-      />
-
-      <!-- 4. Tabel Transaksi Kasir OTC (dengan Live State Switcher) -->
+      <!-- Tabel Penjualan Bebas (4 Kolom Sederhana) -->
       <PosSaleTable
-        :items="paginatedSales"
+        :items="sales"
         :pagination-info="paginationInfo"
         :loading="loading"
-        :table-state="tableState"
-        :error-message="errorMessage"
-        @view="handleOpenDetail"
+        :search="filters.search"
+        @view="handleViewDetail"
         @edit="handleOpenEdit"
-        @void="handleOpenVoid"
         @delete="handleOpenDelete"
-        @print="handlePrint"
-        @info-void="handleOpenDetail"
-        @refresh="handleRefresh"
+        @search="handleSearch"
+        @reset-filter="handleResetFilter"
         @page-change="setPage"
         @per-page-change="setPerPage"
-        @set-table-state="setTableState"
-        @retry="handleRefresh"
-        @reset-filter="resetFilters"
       />
     </div>
 
-    <!-- 5. Interactive Modals & Dialogs -->
-    <PosSaleDetailModal
-      :is-open="isDetailModalOpen"
-      :sale="selectedSale"
-      @close="isDetailModalOpen = false"
-      @print="handlePrint"
-    />
-
-    <PosSaleVoidDialog
-      :is-open="isVoidDialogOpen"
-      :sale="saleToVoid"
-      :submitting="submitting"
-      @close="isVoidDialogOpen = false"
-      @confirm="handleVoidConfirm"
-    />
-
+    <!-- Interactive Modals & Dialogs -->
     <PosSaleFormModal
       :is-open="isFormModalOpen"
       :sale-to-edit="saleToEdit"
-      :otc-medicines="otcMedicines"
-      :locations="locations"
-      :payment-methods="paymentMethods"
-      :submitting="submitting"
+      :customers="customers"
+      :is-submitting="submitting"
       @close="isFormModalOpen = false"
       @submit="handleFormSubmit"
     />
@@ -336,37 +240,30 @@ const handleRefresh = async () => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  background-color: var(--color-bg-main, #f8fafc);
-  min-height: calc(100vh - 64px);
 }
 
-/* 1. Header Styles */
+/* Page Header */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1.5rem;
   flex-wrap: wrap;
-}
-
-.header-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  gap: 1.25rem;
+  border-bottom: 1px solid var(--color-border-soft, #e2e8f0);
+  padding-bottom: 1.25rem;
 }
 
 .breadcrumbs {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary, #64748b);
-  font-weight: 500;
+  font-size: 0.825rem;
+  color: var(--color-text-muted, #64748b);
+  margin-bottom: 0.4rem;
 }
 
 .breadcrumbs .separator {
-  color: #94a3b8;
-  font-size: 0.72rem;
+  color: #cbd5e1;
 }
 
 .breadcrumbs .current {
@@ -378,111 +275,69 @@ const handleRefresh = async () => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
 }
 
 .page-title {
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: 1.65rem;
+  font-weight: 700;
   color: var(--color-text-navy, #17243d);
-  letter-spacing: -0.02em;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
-.badges-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.otc-badge {
+.module-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem 0.55rem;
+  gap: 0.35rem;
+  background-color: var(--color-primary-light, #e0f2f1);
+  color: var(--color-primary, #008779);
+  padding: 0.2rem 0.6rem;
   border-radius: 9999px;
-  background: var(--color-primary-light, #dff7f4);
-  color: var(--color-primary, #087f78);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
-.version-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.55rem;
-  border-radius: 9999px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+.bullet-dot {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .page-subtitle {
-  font-size: 0.84rem;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.875rem;
   margin: 0;
-  max-width: 720px;
+  max-width: 680px;
   line-height: 1.45;
 }
 
-/* Header Action Buttons */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.btn-outline {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 40px;
-  padding: 0 1.15rem;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  background: #ffffff;
-  color: var(--color-text-navy, #17243d);
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.btn-outline:hover {
-  background: #f8fafc;
-  border-color: var(--color-primary, #087f78);
-  color: var(--color-primary, #087f78);
-}
-
-.btn-outline svg {
-  width: 15px;
-  height: 15px;
 }
 
 .btn-primary {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  height: 40px;
-  padding: 0 1.25rem;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  background: var(--color-primary, #087f78);
+  background-color: var(--color-primary, #008779);
   color: #ffffff;
-  border: 1px solid var(--color-primary, #087f78);
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 4px rgba(8, 127, 120, 0.15);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .btn-primary:hover {
-  background: #076d67;
-  border-color: #076d67;
+  background-color: #007366;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .btn-primary svg {
@@ -490,32 +345,9 @@ const handleRefresh = async () => {
   height: 16px;
 }
 
-/* 2. Content Layout */
 .page-content {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-}
-
-@media (max-width: 768px) {
-  .page-container {
-    padding: 1rem;
-    gap: 1rem;
-  }
-
-  .page-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-actions {
-    justify-content: stretch;
-  }
-
-  .header-actions .btn-outline,
-  .header-actions .btn-primary {
-    flex: 1;
-    justify-content: center;
-  }
+  gap: 1.5rem;
 }
 </style>

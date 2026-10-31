@@ -1,41 +1,33 @@
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useGoodsIssues } from '@/composables/useGoodsIssues';
 import AppToast from '@/components/common/AppToast.vue';
-import GoodsIssueSummaryCards from './components/GoodsIssueSummaryCards.vue';
-import GoodsIssueFilters from './components/GoodsIssueFilters.vue';
 import GoodsIssueTable from './components/GoodsIssueTable.vue';
 import GoodsIssueFormModal from './components/GoodsIssueFormModal.vue';
-import GoodsIssueDetailModal from './components/GoodsIssueDetailModal.vue';
 import GoodsIssueDeleteDialog from './components/GoodsIssueDeleteDialog.vue';
 
+const router = useRouter();
+
 const {
-  warehouses,
   officers,
-  purposes,
-  catalogMedicines,
   filters,
   paginationInfo,
   loading,
   submitting,
-  summary,
   paginatedIssues,
-  applyFilters,
-  resetFilters,
+  fetchIssues,
   setPage,
   setPerPage,
   createIssue,
   updateIssue,
-  deleteIssue,
-  exportIssuesCsv
+  deleteIssue
 } = useGoodsIssues();
 
 // Modal States
 const isFormModalOpen = ref(false);
-const isDetailModalOpen = ref(false);
 const isDeleteDialogOpen = ref(false);
 
-const selectedIssue = ref(null);
 const issueToEdit = ref(null);
 const issueToDelete = ref(null);
 
@@ -55,7 +47,7 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
-// Actions & Handlers
+// Handlers
 const openAddModal = () => {
   issueToEdit.value = null;
   isFormModalOpen.value = true;
@@ -66,9 +58,10 @@ const handleOpenEdit = (issue) => {
   isFormModalOpen.value = true;
 };
 
-const handleOpenDetail = (issue) => {
-  selectedIssue.value = issue;
-  isDetailModalOpen.value = true;
+const handleViewDetail = (issue) => {
+  if (router) {
+    router.push({ name: 'logistics.goods-issues.detail', params: { id: issue.id } });
+  }
 };
 
 const handleOpenDelete = (issue) => {
@@ -76,30 +69,59 @@ const handleOpenDelete = (issue) => {
   isDeleteDialogOpen.value = true;
 };
 
-const handleFormSubmit = async ({ isDraft, ...payload }) => {
+const handleSearch = (query) => {
+  filters.search = query;
+  setPage(1);
+  fetchIssues({ search: query });
+};
+
+const handleResetFilter = () => {
+  filters.search = '';
+  setPage(1);
+  fetchIssues({ search: '' });
+};
+
+const handleRefresh = async () => {
+  await fetchIssues();
+  showToast({
+    type: 'success',
+    title: 'Data Diperbarui',
+    message: 'Data pengeluaran barang berhasil disegarkan.'
+  });
+};
+
+const handleFormSubmit = async (payload) => {
   if (issueToEdit.value) {
-    const res = await updateIssue(issueToEdit.value.id, payload, isDraft);
+    const res = await updateIssue(issueToEdit.value.id, payload);
     if (res.success) {
       isFormModalOpen.value = false;
       issueToEdit.value = null;
       showToast({
         type: 'success',
         title: 'Berhasil',
-        message: isDraft
-          ? 'Draft pengeluaran barang berhasil diperbarui.'
-          : 'Data pengeluaran barang berhasil diperbarui.'
+        message: 'Data pengeluaran barang berhasil diperbarui.'
+      });
+    } else {
+      showToast({
+        type: 'error',
+        title: 'Gagal Memperbarui',
+        message: res.message || 'Terjadi kesalahan saat memperbarui data pengeluaran.'
       });
     }
   } else {
-    const res = await createIssue(payload, isDraft);
+    const res = await createIssue(payload);
     if (res.success) {
       isFormModalOpen.value = false;
       showToast({
         type: 'success',
-        title: 'Berhasil',
-        message: isDraft
-          ? 'Draft pengeluaran barang berhasil disimpan.'
-          : 'Dokumen pengeluaran barang berhasil diterbitkan.'
+        title: 'Berhasil Disimpan',
+        message: 'Data pengeluaran barang berhasil ditambahkan.'
+      });
+    } else {
+      showToast({
+        type: 'error',
+        title: 'Gagal Menyimpan',
+        message: res.message || 'Terjadi kesalahan saat menyimpan pengeluaran.'
       });
     }
   }
@@ -107,48 +129,22 @@ const handleFormSubmit = async ({ isDraft, ...payload }) => {
 
 const handleDeleteConfirm = async () => {
   if (!issueToDelete.value) return;
-  const num = issueToDelete.value.issueNumber;
   const res = await deleteIssue(issueToDelete.value.id);
   if (res.success) {
     isDeleteDialogOpen.value = false;
     issueToDelete.value = null;
     showToast({
       type: 'success',
-      title: 'Draft Dihapus',
-      message: `Draft pengeluaran barang ${num} telah dihapus.`
+      title: 'Data Dihapus',
+      message: 'Data pengeluaran barang telah berhasil dihapus.'
+    });
+  } else {
+    showToast({
+      type: 'error',
+      title: 'Gagal Menghapus',
+      message: res.message || 'Terjadi kesalahan saat menghapus data pengeluaran.'
     });
   }
-};
-
-const handlePrint = (issue) => {
-  showToast({
-    type: 'info',
-    title: 'Cetak Dokumen',
-    message: issue
-      ? `Mencetak dokumen pengeluaran ${issue.issueNumber}...`
-      : 'Mencetak dokumen rekapitulasi bulanan pengeluaran barang...'
-  });
-  window.print();
-};
-
-const handleExport = () => {
-  exportIssuesCsv();
-  showToast({
-    type: 'success',
-    title: 'Ekspor Berhasil',
-    message: 'Data pengeluaran barang berhasil diekspor ke file Excel/CSV.'
-  });
-};
-
-const handleRefresh = async () => {
-  loading.value = true;
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  loading.value = false;
-  showToast({
-    type: 'success',
-    title: 'Data Diperbarui',
-    message: 'Data pengeluaran barang berhasil disegarkan.'
-  });
 };
 </script>
 
@@ -163,7 +159,7 @@ const handleRefresh = async () => {
       @close="closeToast"
     />
 
-    <!-- 1. Header Halaman -->
+    <!-- Header Halaman -->
     <div class="page-header">
       <div class="header-content">
         <div class="breadcrumbs">
@@ -185,34 +181,6 @@ const handleRefresh = async () => {
       <div class="header-actions">
         <button
           type="button"
-          class="btn-outline"
-          @click="handleExport"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="8" y1="13" x2="16" y2="13"></line>
-            <line x1="8" y1="17" x2="16" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-          Export Excel
-        </button>
-
-        <button
-          type="button"
-          class="btn-outline"
-          @click="handlePrint(null)"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 6 2 18 2 18 9"></polyline>
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-            <rect x="6" y="14" width="12" height="8"></rect>
-          </svg>
-          Cetak Rekap Bulanan
-        </button>
-
-        <button
-          type="button"
           class="btn-primary"
           @click="openAddModal"
         >
@@ -220,65 +188,41 @@ const handleRefresh = async () => {
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          + Tambah Pengeluaran
+          Tambah Pengeluaran
         </button>
       </div>
     </div>
 
     <!-- Page Content Flow -->
     <div class="page-content">
-      <!-- 2. Kartu Ringkasan -->
-      <GoodsIssueSummaryCards :summary="summary" />
-
-      <!-- 3. Bagian Pencarian & Filter -->
-      <GoodsIssueFilters
-        :filters="filters"
-        :warehouses="warehouses"
-        :officers="officers"
-        :purposes="purposes"
-        :loading="loading"
-        @apply="applyFilters"
-        @reset="resetFilters"
-      />
-
-      <!-- 4. Tabel Pengeluaran Barang -->
+      <!-- Tabel Pengeluaran Barang -->
       <GoodsIssueTable
         :items="paginatedIssues"
         :pagination-info="paginationInfo"
         :loading="loading"
-        @view="handleOpenDetail"
+        :search="filters.search"
+        @view="handleViewDetail"
         @edit="handleOpenEdit"
         @delete="handleOpenDelete"
-        @print="handlePrint"
+        @search="handleSearch"
         @refresh="handleRefresh"
         @page-change="setPage"
         @per-page-change="setPerPage"
-        @reset-filter="resetFilters"
+        @reset-filter="handleResetFilter"
       />
     </div>
 
-    <!-- 5. Modal Tambah / Edit Pengeluaran -->
+    <!-- Modal FORM INPUT (Tambah / Edit Pengeluaran) -->
     <GoodsIssueFormModal
       :is-open="isFormModalOpen"
       :issue-to-edit="issueToEdit"
-      :warehouses="warehouses"
       :officers="officers"
-      :purposes="purposes"
-      :medicines="catalogMedicines"
       :is-submitting="submitting"
       @close="isFormModalOpen = false"
       @submit="handleFormSubmit"
     />
 
-    <!-- 6. Modal Detail Pengeluaran -->
-    <GoodsIssueDetailModal
-      :is-open="isDetailModalOpen"
-      :issue="selectedIssue"
-      @close="isDetailModalOpen = false"
-      @print="handlePrint"
-    />
-
-    <!-- 7. Dialog Konfirmasi Hapus Draft -->
+    <!-- Dialog Konfirmasi Hapus Data -->
     <GoodsIssueDeleteDialog
       :is-open="isDeleteDialogOpen"
       :issue="issueToDelete"
@@ -305,6 +249,40 @@ const handleRefresh = async () => {
   }
 }
 
+/* 1. Header Layout */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.header-content {
+  flex: 1 1 520px;
+  min-width: 0;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+}
+
+.breadcrumbs .separator {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.breadcrumbs .current {
+  color: var(--color-primary, #087f78);
+  font-weight: 600;
+}
+
 .title-row {
   display: flex;
   align-items: center;
@@ -318,6 +296,7 @@ const handleRefresh = async () => {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text-navy, #17243d);
+  letter-spacing: -0.02em;
 }
 
 .module-badge {
@@ -338,18 +317,77 @@ const handleRefresh = async () => {
   line-height: 1;
 }
 
+.page-subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary, #64748b);
+  line-height: 1.45;
+  max-width: 720px;
+}
+
+/* 2. Header Action Button */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.header-actions .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 1.15rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+  line-height: 1;
+  background: var(--color-primary, #087f78);
+  color: #ffffff;
+  border: 1px solid var(--color-primary, #087f78);
+  box-shadow: 0 2px 4px rgba(8, 127, 120, 0.15);
+}
+
+.header-actions .btn-primary:hover {
+  background: #076d67;
+  border-color: #076d67;
+}
+
+.header-actions .btn-primary svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* 3. Responsive Styles */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+
+  .header-actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media print {
-  .header-actions,
-  .filter-card,
-  .table-toolbar,
-  .table-pagination-wrapper {
+  .header-actions {
     display: none !important;
   }
 }

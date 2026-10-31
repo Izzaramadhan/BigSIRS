@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useMutations } from '@/composables/useMutations';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
@@ -19,18 +19,25 @@ const {
   submitting,
   summary,
   paginatedMutations,
+  fetchInitialData,
   setPage,
   setPerPage,
   applyFilters,
   resetFilters,
   addMutation,
+  getMutationDetail,
   exportMutationsCsv
 } = useMutations();
+
+onMounted(async () => {
+  await fetchInitialData();
+});
 
 // Modals
 const isFormModalOpen = ref(false);
 const isDetailModalOpen = ref(false);
 const selectedMutation = ref(null);
+const formErrors = ref({});
 
 // Toast
 const toast = ref({
@@ -50,12 +57,21 @@ const closeToast = () => {
 
 // Handlers
 const openAddModal = () => {
+  formErrors.value = {};
   isFormModalOpen.value = true;
 };
 
-const handleOpenDetail = (mutation) => {
+const handleOpenDetail = async (mutation) => {
   selectedMutation.value = mutation;
   isDetailModalOpen.value = true;
+  try {
+    const detail = await getMutationDetail(mutation.id);
+    if (detail) {
+      selectedMutation.value = detail;
+    }
+  } catch (err) {
+    // Keep local table item data if detail API fails
+  }
 };
 
 const handleApplyFilters = (payload) => {
@@ -66,13 +82,23 @@ const handleApplyFilters = (payload) => {
 };
 
 const handleFormSubmit = async (payload) => {
+  formErrors.value = {};
   const res = await addMutation(payload);
   if (res.success) {
     isFormModalOpen.value = false;
     showToast({
       type: 'success',
       title: 'Berhasil',
-      message: 'Mutasi barang berhasil ditambahkan.'
+      message: 'Mutasi barang berhasil disimpan dan stok telah diperbarui.'
+    });
+  } else {
+    if (res.errors) {
+      formErrors.value = res.errors;
+    }
+    showToast({
+      type: 'error',
+      title: 'Gagal',
+      message: res.message || 'Gagal menyimpan mutasi barang.'
     });
   }
 };
@@ -81,13 +107,21 @@ const handlePrint = () => {
   window.print();
 };
 
-const handleExport = () => {
-  exportMutationsCsv();
-  showToast({
-    type: 'success',
-    title: 'Ekspor Berhasil',
-    message: 'Data mutasi barang berhasil diekspor ke file CSV.'
-  });
+const handleExport = async () => {
+  try {
+    await exportMutationsCsv();
+    showToast({
+      type: 'success',
+      title: 'Ekspor Berhasil',
+      message: 'Data mutasi barang berhasil diekspor ke file CSV.'
+    });
+  } catch (err) {
+    showToast({
+      type: 'error',
+      title: 'Ekspor Gagal',
+      message: 'Gagal mengekspor data mutasi barang.'
+    });
+  }
 };
 </script>
 
@@ -158,6 +192,7 @@ const handleExport = () => {
       :is-open="isFormModalOpen"
       :warehouses="warehouses"
       :medicines="medicines"
+      :api-errors="formErrors"
       :is-submitting="submitting"
       @close="isFormModalOpen = false"
       @submit="handleFormSubmit"
@@ -185,6 +220,22 @@ const handleExport = () => {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media print {
+  :deep(.app-header),
+  :deep(.app-sidebar),
+  :deep(.page-header),
+  .mutation-summary-cards,
+  .mutation-filters,
+  .mutation-audit-banner {
+    display: none !important;
+  }
+
+  .page-container {
+    padding: 0 !important;
+    background: transparent !important;
   }
 }
 </style>

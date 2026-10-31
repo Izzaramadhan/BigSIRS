@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch } from 'vue';
+import { reactive, computed, watch } from 'vue';
 
 const props = defineProps({
   filters: {
@@ -18,11 +18,24 @@ const props = defineProps({
 
 const emit = defineEmits(['apply', 'reset']);
 
+const normalizedWarehouses = computed(() => {
+  return props.warehouses.map((wh) => {
+    if (typeof wh === 'object' && wh !== null) {
+      return {
+        id: wh.id,
+        code: wh.code || '',
+        name: wh.name || ''
+      };
+    }
+    return { id: wh, code: '', name: wh };
+  });
+});
+
 const localFilters = reactive({
   startDate: props.filters.startDate || '',
   endDate: props.filters.endDate || '',
-  sourceWarehouse: props.filters.sourceWarehouse || '',
-  targetWarehouse: props.filters.targetWarehouse || '',
+  sourceWarehouseId: props.filters.sourceWarehouseId || props.filters.sourceWarehouse || '',
+  targetWarehouseId: props.filters.targetWarehouseId || props.filters.targetWarehouse || '',
   keyword: props.filters.keyword || ''
 });
 
@@ -32,8 +45,8 @@ watch(
     Object.assign(localFilters, {
       startDate: newVal.startDate || '',
       endDate: newVal.endDate || '',
-      sourceWarehouse: newVal.sourceWarehouse || '',
-      targetWarehouse: newVal.targetWarehouse || '',
+      sourceWarehouseId: newVal.sourceWarehouseId || newVal.sourceWarehouse || '',
+      targetWarehouseId: newVal.targetWarehouseId || newVal.targetWarehouse || '',
       keyword: newVal.keyword || ''
     });
   },
@@ -47,8 +60,8 @@ const handleApply = () => {
 const handleReset = () => {
   localFilters.startDate = '';
   localFilters.endDate = '';
-  localFilters.sourceWarehouse = '';
-  localFilters.targetWarehouse = '';
+  localFilters.sourceWarehouseId = '';
+  localFilters.targetWarehouseId = '';
   localFilters.keyword = '';
   emit('reset');
 };
@@ -97,12 +110,16 @@ const handleReset = () => {
           <div class="select-wrapper">
             <select
               id="filter-source"
-              v-model="localFilters.sourceWarehouse"
+              v-model="localFilters.sourceWarehouseId"
               class="form-select"
             >
               <option value="">Semua Gudang Asal</option>
-              <option v-for="wh in warehouses" :key="wh" :value="wh">
-                {{ wh }}
+              <option
+                v-for="warehouse in normalizedWarehouses"
+                :key="warehouse.id"
+                :value="warehouse.id"
+              >
+                {{ warehouse.name }}
               </option>
             </select>
           </div>
@@ -114,12 +131,17 @@ const handleReset = () => {
           <div class="select-wrapper">
             <select
               id="filter-target"
-              v-model="localFilters.targetWarehouse"
+              v-model="localFilters.targetWarehouseId"
               class="form-select"
             >
               <option value="">Semua Gudang Tujuan</option>
-              <option v-for="wh in warehouses" :key="wh" :value="wh">
-                {{ wh }}
+              <option
+                v-for="warehouse in normalizedWarehouses"
+                :key="warehouse.id"
+                :value="warehouse.id"
+                :disabled="Boolean(localFilters.sourceWarehouseId && warehouse.id === localFilters.sourceWarehouseId)"
+              >
+                {{ warehouse.name }}
               </option>
             </select>
           </div>

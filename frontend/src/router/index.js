@@ -378,10 +378,24 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/logistics/goods-issues/:id',
+      alias: ['/pengeluaran/:id', '/logistik/pengeluaran/:id'],
+      name: 'logistics.goods-issues.detail',
+      component: () => import('../views/logistics/GoodsIssueDetailView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/logistics/pos',
       alias: ['/penjualan', '/logistik/penjualan-bebas', '/pos'],
       name: 'logistics.pos',
       component: () => import('../views/logistics/PosSaleView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/logistics/pos/:id',
+      alias: ['/logistics/pos-sales/:id', '/logistics/pos-sales/:id/detail', '/penjualan/:id', '/logistik/penjualan-bebas/:id'],
+      name: 'logistics.pos.detail',
+      component: () => import('../views/logistics/PosSaleDetailView.vue'),
       meta: { requiresAuth: true }
     },
   ],

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, watch, computed } from 'vue';
 
 const props = defineProps({
   isOpen: {
@@ -10,19 +10,7 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  warehouses: {
-    type: Array,
-    default: () => []
-  },
   officers: {
-    type: Array,
-    default: () => []
-  },
-  purposes: {
-    type: Array,
-    default: () => []
-  },
-  medicines: {
     type: Array,
     default: () => []
   },
@@ -36,7 +24,7 @@ const emit = defineEmits(['close', 'submit']);
 
 const errors = ref({});
 
-const getNowDate = () => {
+const getTodayDate = () => {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -44,169 +32,141 @@ const getNowDate = () => {
   return `${year}-${month}-${day}`;
 };
 
-const getNowTime = () => {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
-};
-
-const generateNextIssueNumber = () => {
-  const now = new Date();
-  const yearMonth = now.toISOString().slice(0, 7).replace('-', '');
-  const randomSeq = Math.floor(1000 + Math.random() * 9000);
-  return `OUT-${yearMonth}-${randomSeq}`;
-};
-
-const createDefaultItemRow = () => {
-  const defaultMed = props.medicines[0] || {
-    id: 1,
-    name: 'Paracetamol 500 mg Tablet',
-    unit: 'Tablet',
-    defaultBatch: 'PCT-202604',
-    expDate: '2027-04-15',
-    availableStock: 1200
-  };
-
-  return {
-    id: Date.now() + Math.random(),
-    medicineId: defaultMed.id,
-    name: defaultMed.name,
-    batchNumber: defaultMed.defaultBatch,
-    expDate: defaultMed.expDate,
-    availableStock: defaultMed.availableStock,
-    quantity: 10,
-    unit: defaultMed.unit,
-    notes: ''
-  };
-};
-
 const formData = reactive({
-  issueNumber: generateNextIssueNumber(),
-  date: getNowDate(),
-  time: getNowTime(),
-  warehouse: props.warehouses[0] || 'Gudang Utama Farmasi (GOF-01)',
-  locationDetail: 'Rak Distribusi',
-  officerName: props.officers[0] || 'Apt. Budi Santoso, S.Farm',
-  purpose: props.purposes[0] || 'Kebutuhan Internal',
-  referenceNumber: '',
-  notes: '',
-  items: [createDefaultItemRow()]
+  date: getTodayDate(),
+  officerId: '',
+  officerName: '',
+  notes: ''
 });
 
-// Watch when modal opens or issueToEdit changes
+// Normalize officer list to { id, name }
+const normalizedOfficers = computed(() => {
+  return props.officers.map((item, index) => {
+    if (typeof item === 'object' && item !== null) {
+      return {
+        id: item.id || index + 1,
+        name: item.name || item.officerName || 'Petugas ' + (index + 1)
+      };
+    }
+    return {
+      id: index + 1,
+      name: String(item)
+    };
+  });
+});
+
+const initForm = () => {
+  errors.value = {};
+  if (props.issueToEdit) {
+    let rawDate = props.issueToEdit.issue_date || props.issueToEdit.date || '';
+    if (rawDate && rawDate.includes('T')) {
+      rawDate = rawDate.split('T')[0];
+    } else if (rawDate && rawDate.includes(' ')) {
+      rawDate = rawDate.split(' ')[0];
+    }
+    formData.date = rawDate || getTodayDate();
+    formData.officerId = props.issueToEdit.officer_id || props.issueToEdit.officerId || '';
+    formData.officerName = props.issueToEdit.officer_name || props.issueToEdit.officerName || '';
+
+    // If officerId is not set, try to match by name
+    if (!formData.officerId && formData.officerName) {
+      const match = normalizedOfficers.value.find((o) => o.name === formData.officerName);
+      if (match) formData.officerId = match.id;
+    }
+
+    formData.notes = props.issueToEdit.notes || props.issueToEdit.purpose || '';
+  } else {
+    formData.date = getTodayDate();
+    formData.officerId = normalizedOfficers.value[0]?.id || '';
+    formData.officerName = normalizedOfficers.value[0]?.name || '';
+    formData.notes = '';
+  }
+};
+
 watch(
-  () => [props.isOpen, props.issueToEdit],
-  ([isOpen, toEdit]) => {
-    if (isOpen) {
-      if (toEdit) {
-        // Editing mode
-        formData.issueNumber = toEdit.issueNumber;
-        const parts = (toEdit.dateTime || '').split(' ');
-        formData.date = parts[0] || getNowDate();
-        formData.time = parts[1] || getNowTime();
-        formData.warehouse = toEdit.warehouse || props.warehouses[0];
-        formData.locationDetail = toEdit.locationDetail || '';
-        formData.officerName = toEdit.officerName || props.officers[0];
-        formData.purpose = toEdit.purposeKey || toEdit.purpose || props.purposes[0];
-        formData.referenceNumber = toEdit.referenceNumber || '';
-        formData.notes = toEdit.notes || '';
-        formData.items = toEdit.items && toEdit.items.length > 0
-          ? JSON.parse(JSON.stringify(toEdit.items))
-          : [createDefaultItemRow()];
-      } else {
-        // New addition mode
-        formData.issueNumber = generateNextIssueNumber();
-        formData.date = getNowDate();
-        formData.time = getNowTime();
-        formData.warehouse = props.warehouses[0] || 'Gudang Utama Farmasi (GOF-01)';
-        formData.locationDetail = 'Rak Distribusi';
-        formData.officerName = props.officers[0] || 'Apt. Budi Santoso, S.Farm';
-        formData.purpose = props.purposes[0] || 'Kebutuhan Internal';
-        formData.referenceNumber = '';
-        formData.notes = '';
-        formData.items = [createDefaultItemRow()];
-      }
-      errors.value = {};
+  () => props.isOpen,
+  (open) => {
+    if (open) initForm();
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.officers,
+  () => {
+    if (props.isOpen && !formData.officerId && normalizedOfficers.value.length > 0) {
+      formData.officerId = normalizedOfficers.value[0].id;
+      formData.officerName = normalizedOfficers.value[0].name;
     }
   },
   { immediate: true }
 );
 
-const onMedicineSelectChange = (itemRow) => {
-  const found = props.medicines.find((m) => m.id === Number(itemRow.medicineId));
-  if (found) {
-    itemRow.name = found.name;
-    itemRow.batchNumber = found.defaultBatch || 'BATCH-REG';
-    itemRow.expDate = found.expDate || '2027-12-31';
-    itemRow.availableStock = found.availableStock;
-    itemRow.unit = found.unit;
-    if (itemRow.quantity > found.availableStock) {
-      itemRow.quantity = found.availableStock;
-    }
+watch(
+  () => props.issueToEdit,
+  () => {
+    if (props.isOpen) initForm();
   }
+);
+
+const handleOfficerChange = (e) => {
+  const id = e.target.value;
+  formData.officerId = id;
+  const match = normalizedOfficers.value.find((o) => String(o.id) === String(id));
+  formData.officerName = match ? match.name : '';
 };
 
-const addItemRow = () => {
-  formData.items.push(createDefaultItemRow());
-};
-
-const removeItemRow = (index) => {
-  if (formData.items.length > 1) {
-    formData.items.splice(index, 1);
-  }
+const handleReset = () => {
+  initForm();
 };
 
 const validate = () => {
   const errs = {};
-  if (!formData.warehouse) {
-    errs.warehouse = 'Gudang Asal wajib dipilih.';
+  if (!formData.date) {
+    errs.date = 'Tanggal wajib diisi.';
   }
-  if (!formData.officerName) {
-    errs.officerName = 'Petugas Otorisasi wajib diisi.';
+  if (!formData.officerId && !formData.officerName) {
+    errs.officer = 'Petugas wajib dipilih.';
   }
-  if (!formData.purpose) {
-    errs.purpose = 'Jenis Keperluan wajib dipilih.';
-  }
-  if (!formData.items || formData.items.length === 0) {
-    errs.items = 'Minimal satu item obat harus ditambahkan.';
-  } else {
-    for (const it of formData.items) {
-      if (!it.name || !it.quantity || Number(it.quantity) <= 0) {
-        errs.items = 'Pastikan semua baris item memiliki kuantitas lebih dari 0.';
-        break;
-      }
-      if (Number(it.quantity) > Number(it.availableStock)) {
-        errs.items = `Kuantitas untuk "${it.name}" melebihi stok yang tersedia (${it.availableStock} ${it.unit}).`;
-        break;
-      }
-    }
-  }
-
   errors.value = errs;
   return Object.keys(errs).length === 0;
 };
 
-const handleSaveDraft = () => {
+const handleSubmit = () => {
   if (!validate()) return;
-  emit('submit', { ...formData, isDraft: true });
-};
 
-const handleSaveIssue = () => {
-  if (!validate()) return;
-  emit('submit', { ...formData, isDraft: false });
+  const payload = {
+    date: formData.date,
+    issue_date: formData.date,
+    officer_id: formData.officerId ? Number(formData.officerId) : null,
+    officer_name: formData.officerName || undefined,
+    notes: formData.notes ? formData.notes.trim() : '',
+    purpose: formData.notes ? formData.notes.trim() : 'Kebutuhan Internal'
+  };
+
+  emit('submit', payload);
 };
 </script>
 
 <template>
   <Teleport to="body">
     <div v-if="isOpen" class="modal-overlay" @click.self="$emit('close')">
-      <div class="modal-content modal-xl">
+      <div class="modal-content modal-md">
         <!-- Header -->
         <div class="modal-header">
-          <div>
-            <h3>{{ issueToEdit ? 'Edit Draft Pengeluaran Barang' : 'Tambah Pengeluaran Barang' }}</h3>
-            <p>Formulir pengeluaran sediaan farmasi untuk kebutuhan nonpenjualan & mutasi pengurangan inventori.</p>
+          <div class="header-title-box">
+            <span class="header-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </span>
+            <h3 class="modal-title font-bold text-navy">
+              {{ issueToEdit ? 'Edit Pengeluaran' : 'Tambah Pengeluaran' }}
+            </h3>
           </div>
           <button
             type="button"
@@ -222,300 +182,102 @@ const handleSaveIssue = () => {
           </button>
         </div>
 
-        <!-- Body -->
-        <div class="modal-body">
-          <form autocomplete="off" id="goods-issue-form" @submit.prevent="handleSaveIssue">
-            <!-- Row 1: Nomor Pengeluaran & Tanggal/Waktu -->
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-no">
-                  Nomor Pengeluaran
-                  <span class="badge-auto">Otomatis</span>
-                </label>
-                <div class="input-readonly-wrap">
-                  <span class="input-icon">#</span>
-                  <input autocomplete="off"
-                    id="form-issue-no"
-                    v-model="formData.issueNumber"
-                    type="text"
-                    class="form-input readonly-input font-bold"
-                    readonly
-                  />
-                </div>
-              </div>
-
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-date">
-                  Tanggal Pengeluaran <span class="required">*</span>
-                </label>
-                <input autocomplete="off"
-                  id="form-issue-date"
-                  v-model="formData.date"
-                  type="date"
-                  class="form-input"
-                  required
-                />
-              </div>
-
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-time">
-                  Waktu Pengeluaran <span class="required">*</span>
-                </label>
-                <input autocomplete="off"
-                  id="form-issue-time"
-                  v-model="formData.time"
-                  type="time"
-                  class="form-input"
-                  required
-                />
-              </div>
+        <!-- Body: 3 Fields only -->
+        <form @submit.prevent="handleSubmit">
+          <div class="modal-body">
+            <!-- 1. Tanggal -->
+            <div class="form-group">
+              <label for="form-input-date" class="form-label">
+                Tanggal <span class="text-danger">*</span>
+              </label>
+              <input
+                id="form-input-date"
+                v-model="formData.date"
+                type="date"
+                class="form-control"
+                :class="{ 'is-invalid': errors.date }"
+                required
+              />
+              <span v-if="errors.date" class="invalid-feedback">{{ errors.date }}</span>
             </div>
 
-            <!-- Row 2: Gudang Asal & Detail Lokasi -->
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-wh">
-                  Gudang Asal <span class="required">*</span>
-                </label>
-                <select
-                  id="form-issue-wh"
-                  v-model="formData.warehouse"
-                  class="form-select"
-                  :class="{ 'has-error': errors.warehouse }"
-                  required
+            <!-- 2. Petugas -->
+            <div class="form-group">
+              <label for="form-input-officer" class="form-label">
+                Petugas <span class="text-danger">*</span>
+              </label>
+              <select
+                id="form-input-officer"
+                class="form-select"
+                :class="{ 'is-invalid': errors.officer }"
+                :value="formData.officerId"
+                required
+                @change="handleOfficerChange"
+              >
+                <option value="" disabled>-- Pilih Petugas --</option>
+                <option
+                  v-for="officer in normalizedOfficers"
+                  :key="officer.id"
+                  :value="officer.id"
                 >
-                  <option v-for="wh in warehouses" :key="wh" :value="wh">
-                    {{ wh }}
-                  </option>
-                </select>
-                <span v-if="errors.warehouse" class="error-msg">{{ errors.warehouse }}</span>
-              </div>
-
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-loc">Detail Area / Rak</label>
-                <input autocomplete="off"
-                  id="form-issue-loc"
-                  v-model="formData.locationDetail"
-                  type="text"
-                  class="form-input"
-                  placeholder="Contoh: Rak A-12 (Injeksi & Parenteral)"
-                />
-              </div>
+                  {{ officer.name }}
+                </option>
+              </select>
+              <span v-if="errors.officer" class="invalid-feedback">{{ errors.officer }}</span>
             </div>
 
-            <!-- Row 3: Petugas Otorisasi & Jenis Keperluan -->
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-officer">
-                  Petugas Otorisasi <span class="required">*</span>
+            <!-- 3. Keperluan -->
+            <div class="form-group">
+              <div class="label-with-counter">
+                <label for="form-input-notes" class="form-label">
+                  Keperluan
                 </label>
-                <select
-                  id="form-issue-officer"
-                  v-model="formData.officerName"
-                  class="form-select"
-                  :class="{ 'has-error': errors.officerName }"
-                  required
-                >
-                  <option v-for="off in officers" :key="off" :value="off">
-                    {{ off }}
-                  </option>
-                </select>
-                <span v-if="errors.officerName" class="error-msg">{{ errors.officerName }}</span>
+                <span class="char-counter text-muted">
+                  {{ formData.notes ? formData.notes.length : 0 }} / 1000
+                </span>
               </div>
-
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-purpose">
-                  Jenis Keperluan <span class="required">*</span>
-                </label>
-                <select
-                  id="form-issue-purpose"
-                  v-model="formData.purpose"
-                  class="form-select"
-                  :class="{ 'has-error': errors.purpose }"
-                  required
-                >
-                  <option v-for="pur in purposes" :key="pur" :value="pur">
-                    {{ pur }}
-                  </option>
-                </select>
-                <span v-if="errors.purpose" class="error-msg">{{ errors.purpose }}</span>
-              </div>
+              <textarea
+                id="form-input-notes"
+                v-model="formData.notes"
+                class="form-textarea"
+                rows="4"
+                maxlength="1000"
+                placeholder="Masukkan keperluan atau catatan pengeluaran..."
+              ></textarea>
             </div>
+          </div>
 
-            <!-- Row 4: Nomor Referensi / BAP & Catatan -->
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-ref">
-                  Nomor Referensi / BAP / Disposisi
-                </label>
-                <input autocomplete="off"
-                  id="form-issue-ref"
-                  v-model="formData.referenceNumber"
-                  type="text"
-                  class="form-input"
-                  placeholder="Contoh: Ref: SBPB-098/FAR/26 atau BAP-2026/09/04"
-                />
-              </div>
-
-              <div class="form-group flex-1">
-                <label class="form-label" for="form-issue-notes">
-                  Catatan Pengeluaran
-                </label>
-                <input autocomplete="off"
-                  id="form-issue-notes"
-                  v-model="formData.notes"
-                  type="text"
-                  class="form-input"
-                  placeholder="Catatan keperluan atau keterangan tambahan..."
-                />
-              </div>
-            </div>
-
-            <!-- Items Section -->
-            <div class="items-form-section">
-              <div class="items-form-header">
-                <div>
-                  <h4 class="items-form-title">Daftar Item Obat & Sediaan</h4>
-                  <span class="items-form-sub">Tentukan item, nomor batch, masa kedaluwarsa, dan jumlah kuantitas keluar</span>
-                </div>
-                <button
-                  type="button"
-                  class="btn-add-item"
-                  @click="addItemRow"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  Tambah Item
-                </button>
-              </div>
-
-              <span v-if="errors.items" class="error-msg mb-2">{{ errors.items }}</span>
-
-              <div class="table-wrap">
-                <table class="form-items-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 35%;">Item / Obat</th>
-                      <th style="width: 15%;">No. Batch</th>
-                      <th style="width: 15%;">Tgl. Expired</th>
-                      <th style="width: 12%;" class="text-center">Stok Ada</th>
-                      <th style="width: 15%;">Kuantitas Keluar</th>
-                      <th style="width: 8%;" class="text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, idx) in formData.items" :key="row.id || idx">
-                      <!-- Obat Select -->
-                      <td>
-                        <select
-                          v-model="row.medicineId"
-                          class="form-select select-sm"
-                          @change="onMedicineSelectChange(row)"
-                        >
-                          <option v-for="med in medicines" :key="med.id" :value="med.id">
-                            {{ med.name }}
-                          </option>
-                        </select>
-                      </td>
-
-                      <!-- Batch -->
-                      <td>
-                        <input autocomplete="off"
-                          v-model="row.batchNumber"
-                          type="text"
-                          class="form-input input-sm"
-                          placeholder="No. Batch"
-                        />
-                      </td>
-
-                      <!-- Exp Date -->
-                      <td>
-                        <input autocomplete="off"
-                          v-model="row.expDate"
-                          type="date"
-                          class="form-input input-sm"
-                        />
-                      </td>
-
-                      <!-- Stok Ada -->
-                      <td class="text-center">
-                        <span class="stock-badge">{{ row.availableStock }} {{ row.unit }}</span>
-                      </td>
-
-                      <!-- Qty -->
-                      <td>
-                        <div class="qty-input-group">
-                          <input autocomplete="off"
-                            v-model.number="row.quantity"
-                            type="number"
-                            min="1"
-                            :max="row.availableStock"
-                            class="form-input input-sm text-center font-bold"
-                          />
-                          <span class="unit-label">{{ row.unit }}</span>
-                        </div>
-                      </td>
-
-                      <!-- Hapus -->
-                      <td class="text-center">
-                        <button
-                          type="button"
-                          class="btn-row-del"
-                          :disabled="formData.items.length <= 1"
-                          title="Hapus Baris"
-                          @click="removeItemRow(idx)"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </form>
-        </div>
-
-        <!-- Footer -->
-        <div class="modal-footer">
-          <button
-            type="button"
-            class="btn-cancel"
-            :disabled="isSubmitting"
-            @click="$emit('close')"
-          >
-            Batal
-          </button>
-
-          <div class="footer-actions-right">
+          <!-- Footer Actions -->
+          <div class="modal-footer">
             <button
               type="button"
-              class="btn-outline"
+              class="btn-cancel"
               :disabled="isSubmitting"
-              @click="handleSaveDraft"
+              @click="$emit('close')"
             >
-              Simpan Draft
+              Batal
             </button>
-
             <button
+              v-if="!issueToEdit"
               type="button"
+              class="btn-reset"
+              :disabled="isSubmitting"
+              @click="handleReset"
+            >
+              Reset
+            </button>
+            <button
+              type="submit"
               class="btn-primary"
               :disabled="isSubmitting"
-              @click="handleSaveIssue"
             >
-              <span v-if="isSubmitting" class="spinner"></span>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"></polyline>
+              <svg v-if="isSubmitting" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle cx="12" cy="12" r="10" stroke-width="4" stroke-dasharray="32" stroke-linecap="round"></circle>
               </svg>
-              <span>{{ issueToEdit ? 'Perbarui Pengeluaran' : 'Simpan Pengeluaran' }}</span>
+              <span>{{ isSubmitting ? 'Menyimpan...' : 'Simpan' }}</span>
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   </Teleport>
@@ -525,7 +287,7 @@ const handleSaveIssue = () => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
@@ -536,47 +298,63 @@ const handleSaveIssue = () => {
 
 .modal-content {
   background: #ffffff;
-  border-radius: 14px;
+  border-radius: 12px;
   width: 100%;
-  max-width: 950px;
-  max-height: 90vh;
+  max-width: 520px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+  animation: modalScale 0.2s ease-out;
 }
 
-@keyframes modalEnter {
+@keyframes modalScale {
   from {
     opacity: 0;
-    transform: scale(0.97) translateY(8px);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1);
   }
 }
 
 .modal-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft, #e2e8f0);
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
 }
 
-.modal-header h3 {
-  font-size: 1.1rem;
+.header-title-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--color-primary-light, #dff7f4);
+  color: var(--color-primary, #087f78);
+}
+
+.header-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--color-text-navy, #17243d);
-  margin: 0;
-}
-
-.modal-header p {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary, #64748b);
-  margin: 0.25rem 0 0 0;
 }
 
 .btn-close {
@@ -584,7 +362,7 @@ const handleSaveIssue = () => {
   border: none;
   color: #94a3b8;
   cursor: pointer;
-  padding: 0.25rem;
+  padding: 0.35rem;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -593,8 +371,8 @@ const handleSaveIssue = () => {
 }
 
 .btn-close:hover {
-  background: #f1f5f9;
-  color: #334155;
+  background: #e2e8f0;
+  color: #1e293b;
 }
 
 .btn-close svg {
@@ -603,332 +381,156 @@ const handleSaveIssue = () => {
 }
 
 .modal-body {
-  padding: 1.25rem 1.5rem;
-  overflow-y: auto;
-  max-height: calc(90vh - 140px);
-}
-
-.form-row {
+  padding: 1.5rem;
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.flex-1 {
-  flex: 1;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-height: calc(85vh - 140px);
+  overflow-y: auto;
 }
 
 .form-group {
-  margin-bottom: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .form-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-text-navy, #17243d);
-  margin-bottom: 0.35rem;
-}
-
-.required {
-  color: #ef4444;
-}
-
-.badge-auto {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 0.1rem 0.4rem;
-  background: #e0f2fe;
-  color: #0369a1;
-  border-radius: 4px;
-}
-
-.input-readonly-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-icon {
-  position: absolute;
-  left: 0.75rem;
-  color: #94a3b8;
-  font-weight: 700;
-}
-
-.readonly-input {
-  background: #f8fafc !important;
-  color: var(--color-primary, #087f78) !important;
-  padding-left: 1.6rem;
-  cursor: default;
-}
-
-.form-input,
-.form-select {
-  width: 100%;
-  padding: 0.55rem 0.75rem;
   font-size: 0.85rem;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  border-radius: 6px;
-  background: #ffffff;
-  color: var(--color-text-navy, #17243d);
+  font-weight: 600;
+  color: #334155;
+}
+
+.label-with-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.char-counter {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.form-control,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.875rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #1e293b;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-textarea:focus {
   outline: none;
-  transition: all 0.15s ease;
-}
-
-.form-input:focus,
-.form-select:focus {
   border-color: var(--color-primary, #087f78);
-  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.12);
+  box-shadow: 0 0 0 3px rgba(8, 127, 120, 0.15);
 }
 
-.has-error {
+.form-textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.is-invalid {
   border-color: #ef4444 !important;
 }
 
-.error-msg {
-  display: block;
-  font-size: 0.74rem;
-  color: #ef4444;
-  margin-top: 0.25rem;
-}
-
-.mb-2 {
-  margin-bottom: 0.5rem;
-}
-
-/* Items Section */
-.items-form-section {
-  border-top: 1px solid var(--color-border-soft, #e2e8f0);
-  padding-top: 1.25rem;
-  margin-top: 1rem;
-}
-
-.items-form-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 0.75rem;
-}
-
-.items-form-title {
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--color-text-navy, #17243d);
-  margin: 0;
-}
-
-.items-form-sub {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #64748b);
-}
-
-.btn-add-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.85rem;
+.invalid-feedback {
   font-size: 0.78rem;
-  font-weight: 600;
-  border-radius: 6px;
-  background: var(--color-primary-light, #dff7f4);
-  color: var(--color-primary, #087f78);
-  border: 1px solid var(--color-primary, #087f78);
-  cursor: pointer;
-  transition: all 0.15s ease;
+  color: #ef4444;
 }
 
-.btn-add-item:hover {
-  background: #ccfbf1;
-}
-
-.btn-add-item svg {
-  width: 14px;
-  height: 14px;
-}
-
-.table-wrap {
-  border: 1px solid var(--color-border-soft, #e2e8f0);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.form-items-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.form-items-table th {
-  background: #f8fafc;
-  color: #475569;
-  font-size: 0.74rem;
-  font-weight: 700;
-  padding: 0.65rem 0.75rem;
-  border-bottom: 1px solid var(--color-border-soft, #e2e8f0);
-}
-
-.form-items-table td {
-  padding: 0.5rem 0.65rem;
-  border-bottom: 1px solid var(--color-border-soft, #f1f5f9);
-  vertical-align: middle;
-}
-
-.select-sm,
-.input-sm {
-  padding: 0.4rem 0.55rem;
-  font-size: 0.8rem;
-}
-
-.qty-input-group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.unit-label {
-  font-size: 0.75rem;
-  color: #64748b;
-  white-space: nowrap;
-}
-
-.stock-badge {
-  display: inline-block;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 0.74rem;
-  font-weight: 600;
-}
-
-.btn-row-del {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  background: #ffffff;
-  color: #94a3b8;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-row-del:hover:not(:disabled) {
-  background: #fee2e2;
-  border-color: #fca5a5;
-  color: #dc2626;
-}
-
-.btn-row-del:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-row-del svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* Modal Footer */
 .modal-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
   padding: 1rem 1.5rem;
-  border-top: 1px solid var(--color-border-soft, #e2e8f0);
+  border-top: 1px solid #f1f5f9;
   background: #f8fafc;
-}
-
-.footer-actions-right {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
 }
 
 .btn-cancel,
-.btn-outline,
+.btn-reset,
 .btn-primary {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1.1rem;
-  font-size: 0.82rem;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 38px;
+  padding: 0 1.25rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
   font-weight: 600;
-  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .btn-cancel {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.btn-reset {
   background: transparent;
   border: 1px solid transparent;
   color: #64748b;
 }
 
-.btn-cancel:hover:not(:disabled) {
-  background: #e2e8f0;
-  color: #1e293b;
-}
-
-.btn-outline {
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  color: var(--color-text-navy, #17243d);
-}
-
-.btn-outline:hover:not(:disabled) {
+.btn-reset:hover:not(:disabled) {
   background: #f1f5f9;
-  border-color: #94a3b8;
+  color: #1e293b;
 }
 
 .btn-primary {
   background: var(--color-primary, #087f78);
   border: 1px solid var(--color-primary, #087f78);
   color: #ffffff;
+  box-shadow: 0 2px 4px rgba(8, 127, 120, 0.15);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #066761;
+  background: #076d67;
+  border-color: #076d67;
 }
 
-.btn-primary svg {
-  width: 14px;
-  height: 14px;
+.btn-primary:disabled,
+.btn-cancel:disabled,
+.btn-reset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.spin-icon {
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.text-center { text-align: center; }
-.font-bold { font-weight: 700; }
-
-@media (max-width: 768px) {
-  .form-row {
-    flex-direction: column;
-    gap: 0;
-  }
-  .modal-footer {
-    flex-direction: column-reverse;
-    gap: 0.75rem;
-  }
-  .footer-actions-right {
-    width: 100%;
-    justify-content: flex-end;
-  }
+.text-danger {
+  color: #ef4444;
 }
 </style>

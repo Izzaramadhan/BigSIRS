@@ -1,7 +1,7 @@
 <script setup>
+import { ref, watch } from 'vue';
 import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
 import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
-import GoodsIssueStatusBadge from './GoodsIssueStatusBadge.vue';
 
 const props = defineProps({
   items: {
@@ -15,6 +15,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  search: {
+    type: String,
+    default: ''
   }
 });
 
@@ -22,53 +26,97 @@ const emit = defineEmits([
   'view',
   'edit',
   'delete',
-  'print',
+  'search',
   'refresh',
   'page-change',
   'per-page-change',
   'reset-filter'
 ]);
 
-const getRowNumber = (index) => {
-  return (props.paginationInfo.from || 1) + index;
+const localSearch = ref(props.search);
+let searchTimeout = null;
+
+watch(
+  () => props.search,
+  (newVal) => {
+    localSearch.value = newVal;
+  }
+);
+
+const handleSearchInput = (e) => {
+  const val = e.target.value;
+  localSearch.value = val;
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    emit('search', val);
+  }, 300);
 };
 
 const handlePerPageChange = (event) => {
   emit('per-page-change', Number(event.target.value));
 };
+
+const getRowNumber = (index) => {
+  return (props.paginationInfo.from || 1) + index;
+};
+
+const formatDateIndo = (val) => {
+  if (!val) return '-';
+  if (/^\d{2}-\d{2}-\d{4}$/.test(val)) return val;
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch {
+    return val;
+  }
+};
+
+const getPurposeDisplay = (item) => {
+  if (item.notes && item.notes.trim() !== '') return item.notes;
+  if (item.purpose && item.purpose.trim() !== '' && item.purpose !== 'Kebutuhan Internal' && item.purpose !== '-') {
+    return item.purpose;
+  }
+  return '-';
+};
 </script>
 
 <template>
   <div class="issue-table-card card">
-    <!-- Toolbar Header -->
+    <!-- Toolbar Controls (Per-page & Search) -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <h3 class="table-title">DAFTAR PENGELUARAN NONPENJUALAN</h3>
-        <span class="document-badge">{{ paginationInfo.total || 0 }} Dokumen</span>
+        <label for="records-select" class="per-page-label">
+          <select
+            id="records-select"
+            class="records-select"
+            :value="paginationInfo.per_page || 10"
+            @change="handlePerPageChange"
+          >
+            <option :value="10">10</option>
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+          <span class="records-text">records</span>
+        </label>
       </div>
 
       <div class="toolbar-right">
-        <button
-          type="button"
-          class="btn-refresh"
-          :disabled="loading"
-          @click="emit('refresh')"
-        >
-          <svg
-            :class="{ 'spin-icon': loading }"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          <span>Refresh Live</span>
-        </button>
+        <div class="search-input-wrapper">
+          <label for="table-search-input" class="search-label">Search:</label>
+          <input
+            id="table-search-input"
+            type="text"
+            class="search-input"
+            :value="localSearch"
+            placeholder="Cari data..."
+            @input="handleSearchInput"
+          />
+        </div>
       </div>
     </div>
 
@@ -77,16 +125,11 @@ const handlePerPageChange = (event) => {
       <table class="issue-table">
         <thead>
           <tr>
-            <th class="col-no text-center">NO</th>
-            <th class="col-issue-no">NO. PENGELUARAN</th>
-            <th class="col-date">TANGGAL & WAKTU</th>
-            <th class="col-warehouse">GUDANG ASAL</th>
-            <th class="col-officer">PETUGAS OTORISASI</th>
-            <th class="col-purpose">KEPERLUAN</th>
-            <th class="col-item-count text-center">JENIS ITEM</th>
-            <th class="col-qty">TOTAL KUANTITAS</th>
-            <th class="col-status text-center">STATUS</th>
-            <th class="col-actions text-center">AKSI</th>
+            <th class="col-no text-center">No.</th>
+            <th class="col-date">Tanggal</th>
+            <th class="col-officer">Petugas</th>
+            <th class="col-purpose">Keperluan</th>
+            <th class="col-actions text-center">Aksi</th>
           </tr>
         </thead>
 
@@ -95,25 +138,20 @@ const handlePerPageChange = (event) => {
           <template v-if="loading">
             <tr v-for="n in 6" :key="'skel-' + n" class="skeleton-row">
               <td class="text-center"><div class="skeleton-pill skel-no"></div></td>
-              <td><div class="skeleton-line skel-wide"></div><div class="skeleton-line skel-sub"></div></td>
-              <td><div class="skeleton-line skel-mid"></div><div class="skeleton-line skel-sub"></div></td>
-              <td><div class="skeleton-line skel-wide"></div><div class="skeleton-line skel-sub"></div></td>
-              <td><div class="skeleton-line skel-mid"></div><div class="skeleton-line skel-sub"></div></td>
-              <td><div class="skeleton-pill skel-badge"></div></td>
-              <td class="text-center"><div class="skeleton-pill skel-num"></div></td>
-              <td><div class="skeleton-line skel-mid"></div></td>
-              <td class="text-center"><div class="skeleton-pill skel-badge"></div></td>
-              <td class="text-center"><div class="skeleton-pill skel-btn"></div></td>
+              <td><div class="skeleton-line skel-date"></div></td>
+              <td><div class="skeleton-line skel-officer"></div></td>
+              <td><div class="skeleton-line skel-purpose"></div></td>
+              <td class="text-center"><div class="skeleton-pill skel-actions"></div></td>
             </tr>
           </template>
 
           <!-- Empty State -->
           <tr v-else-if="items.length === 0">
-            <td colspan="10" class="empty-cell">
+            <td colspan="5" class="empty-cell">
               <MasterDataEmptyState
-                :is-search="true"
+                :is-search="Boolean(search)"
                 title="Data pengeluaran barang tidak ditemukan"
-                search-message="Data pengeluaran barang tidak ditemukan. Silakan sesuaikan kriteria filter atau reset filter."
+                search-message="Tidak ada data pengeluaran yang cocok dengan kriteria pencarian Anda."
               >
                 <template #action>
                   <button type="button" class="btn-primary" @click="emit('reset-filter')">
@@ -129,174 +167,74 @@ const handlePerPageChange = (event) => {
             v-for="(item, index) in items"
             v-else
             :key="item.id"
-            :class="{ 'row-cancelled': item.status === 'Dibatalkan' }"
+            class="data-row"
           >
             <!-- 1. No -->
-            <td class="col-no text-center text-muted font-medium">
+            <td class="col-no text-center font-medium">
               {{ getRowNumber(index) }}
             </td>
 
-            <!-- 2. No. Pengeluaran -->
-            <td class="col-issue-no">
-              <button
-                type="button"
-                class="issue-number-link font-bold text-primary"
-                @click="emit('view', item)"
-              >
-                {{ item.issueNumber }}
-              </button>
-              <span
-                v-if="item.validationNote"
-                class="sub-text block text-danger font-semibold"
-              >
-                {{ item.validationNote }}
-              </span>
-              <span v-else-if="item.referenceNumber" class="sub-text block text-muted">
-                {{ item.referenceNumber }}
-              </span>
-            </td>
-
-            <!-- 3. Tanggal & Waktu -->
+            <!-- 2. Tanggal -->
             <td class="col-date">
-              <span class="date-bold">{{ item.dateDisplay }}</span>
-              <span class="sub-text block text-muted">{{ item.timeDisplay }}</span>
+              <span class="date-text font-medium text-navy">
+                {{ item.formattedDate || item.formatted_date || formatDateIndo(item.issue_date || item.issueDate) }}
+              </span>
             </td>
 
-            <!-- 4. Gudang Asal -->
-            <td class="col-warehouse">
-              <span class="warehouse-name font-bold text-navy">{{ item.warehouse }}</span>
-              <span class="sub-text block text-muted">{{ item.locationDetail }}</span>
-            </td>
-
-            <!-- 5. Petugas Otorisasi -->
+            <!-- 3. Petugas -->
             <td class="col-officer">
-              <span class="officer-name font-semibold text-navy">{{ item.officerName }}</span>
-              <span class="sub-text block text-muted">{{ item.officerRole }}</span>
+              <span class="officer-name font-semibold text-navy">
+                {{ item.officerName || item.officer_name || '-' }}
+              </span>
             </td>
 
-            <!-- 6. Keperluan -->
+            <!-- 4. Keperluan -->
             <td class="col-purpose">
-              <GoodsIssueStatusBadge
-                type="purpose"
-                :value="item.purpose"
-              />
-            </td>
-
-            <!-- 7. Jenis Item -->
-            <td class="col-item-count text-center">
-              <div class="item-count-box">
-                <span class="item-type-pill">{{ item.itemCount }}</span>
-                <span class="item-type-text">Jenis</span>
-              </div>
-            </td>
-
-            <!-- 8. Total Kuantitas -->
-            <td class="col-qty">
-              <span class="qty-bold font-bold text-navy">
-                {{ item.totalQuantity }} {{ item.quantityUnit }}
-              </span>
-              <span v-if="item.quantitySubtitle" class="sub-text block text-muted">
-                {{ item.quantitySubtitle }}
+              <span class="purpose-text text-secondary">
+                {{ getPurposeDisplay(item) }}
               </span>
             </td>
 
-            <!-- 9. Status -->
-            <td class="col-status text-center">
-              <GoodsIssueStatusBadge
-                type="status"
-                :value="item.status"
-              />
-            </td>
-
-            <!-- 10. Aksi -->
+            <!-- 5. Aksi (Detail, Edit, Hapus) -->
             <td class="col-actions text-center">
               <div class="action-buttons-group">
-                <!-- Status: Selesai -->
-                <template v-if="item.status === 'Selesai'">
-                  <button
-                    type="button"
-                    class="btn-icon-action"
-                    title="Lihat Detail Pengeluaran"
-                    aria-label="Lihat Detail"
-                    @click="emit('view', item)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                      <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-icon-action"
-                    title="Cetak Dokumen Pengeluaran"
-                    aria-label="Cetak"
-                    @click="emit('print', item)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                      <rect x="6" y="14" width="12" height="8"></rect>
-                    </svg>
-                  </button>
-                </template>
+                <button
+                  type="button"
+                  class="btn-action-icon btn-detail"
+                  title="Lihat Detail Pengeluaran"
+                  @click="emit('view', item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
 
-                <!-- Status: Draft -->
-                <template v-else-if="item.status === 'Draft'">
-                  <button
-                    type="button"
-                    class="btn-icon-action"
-                    title="Lihat Detail Pengeluaran"
-                    aria-label="Lihat Detail"
-                    @click="emit('view', item)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                      <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-icon-action text-primary"
-                    title="Edit Draft Pengeluaran"
-                    aria-label="Edit Draft"
-                    @click="emit('edit', item)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-icon-action text-danger"
-                    title="Hapus / Batalkan Draft"
-                    aria-label="Hapus Draft"
-                    @click="emit('delete', item)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                      <line x1="10" y1="11" x2="10" y2="17"></line>
-                      <line x1="14" y1="11" x2="14" y2="17"></line>
-                    </svg>
-                  </button>
-                </template>
+                <button
+                  type="button"
+                  class="btn-action-icon btn-edit"
+                  title="Edit Pengeluaran"
+                  @click="emit('edit', item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </button>
 
-                <!-- Status: Dibatalkan -->
-                <template v-else-if="item.status === 'Dibatalkan'">
-                  <button
-                    type="button"
-                    class="btn-icon-action"
-                    title="Lihat Detail Pembatalan"
-                    aria-label="Lihat Detail"
-                    @click="emit('view', item)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                      <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                  </button>
-                </template>
+                <button
+                  type="button"
+                  class="btn-action-icon btn-delete"
+                  title="Hapus Pengeluaran"
+                  @click="emit('delete', item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </button>
               </div>
             </td>
           </tr>
@@ -304,114 +242,93 @@ const handlePerPageChange = (event) => {
       </table>
     </div>
 
-    <!-- Table Footer / Pagination -->
+    <!-- Table Pagination Footer -->
     <div class="table-pagination-wrapper">
-      <div class="pagination-info-summary">
-        Menampilkan {{ paginationInfo.from || 0 }}–{{ paginationInfo.to || 0 }} dari {{ paginationInfo.total || 0 }} dokumen pengeluaran
+      <div class="pagination-info text-muted">
+        Showing {{ paginationInfo.from || 0 }} to {{ paginationInfo.to || 0 }} of {{ paginationInfo.total || 0 }} entries
       </div>
-
-      <div class="pagination-right-controls">
-        <div class="per-page-selector">
-          <label for="issue-per-page-select">Tampilkan</label>
-          <select
-            id="issue-per-page-select"
-            :value="paginationInfo.per_page"
-            class="per-page-input"
-            @change="handlePerPageChange"
-          >
-            <option :value="10">10 data</option>
-            <option :value="25">25 data</option>
-            <option :value="50">50 data</option>
-          </select>
-        </div>
-
-        <MasterDataPagination
-          :pagination="paginationInfo"
-          :loading="loading"
-          :item-count="items.length"
-          @page-change="emit('page-change', $event)"
-        />
-      </div>
+      <MasterDataPagination
+        :pagination="paginationInfo"
+        :loading="loading"
+        @page-change="(p) => emit('page-change', p)"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
 .issue-table-card {
-  background: var(--color-card-bg, #ffffff);
+  background: #ffffff;
+  border-radius: 10px;
   border: 1px solid var(--color-border-soft, #e2e8f0);
-  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   overflow: hidden;
+  margin-bottom: 2rem;
 }
 
+/* Toolbar Controls */
 .table-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--color-border-soft, #e8edf3);
+  border-bottom: 1px solid #f1f5f9;
   flex-wrap: wrap;
   gap: 1rem;
 }
 
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.table-title {
-  font-size: 0.88rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--color-text-navy, #17243d);
-  margin: 0;
-}
-
-.document-badge {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 0.2rem 0.6rem;
-  border-radius: 9999px;
-  background: var(--color-primary-light, #dff7f4);
-  color: var(--color-primary, #087f78);
-}
-
-.btn-refresh {
+.per-page-label {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.85rem;
-  font-size: 0.78rem;
-  font-weight: 600;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.records-select {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  border: 1px solid #cbd5e1;
   border-radius: 6px;
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  color: var(--color-text-navy, #17243d);
+  background-color: #ffffff;
+  color: #1e293b;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
-.btn-refresh:hover:not(:disabled) {
-  background: #f8fafc;
+.records-select:focus {
+  outline: none;
   border-color: var(--color-primary, #087f78);
-  color: var(--color-primary, #087f78);
 }
 
-.btn-refresh svg {
-  width: 14px;
-  height: 14px;
+.search-input-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.spin-icon {
-  animation: spin 0.8s linear infinite;
+.search-label {
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 500;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.search-input {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  width: 220px;
+  color: #1e293b;
+  transition: border-color 0.15s ease;
 }
 
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #087f78);
+  box-shadow: 0 0 0 2px rgba(8, 127, 120, 0.1);
+}
+
+/* Table */
 .table-responsive {
   width: 100%;
   overflow-x: auto;
@@ -421,220 +338,209 @@ const handlePerPageChange = (event) => {
 .issue-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   text-align: left;
-  white-space: nowrap;
 }
 
 .issue-table th {
-  background: #f8fafc;
+  background-color: #f8fafc;
   color: #475569;
-  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 0.85rem 0.9rem;
-  border-bottom: 1px solid var(--color-border-soft, #e2e8f0);
+  padding: 0.85rem 1rem;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
 }
 
 .issue-table td {
-  padding: 0.85rem 0.9rem;
-  border-bottom: 1px solid var(--color-border-soft, #f1f5f9);
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
 }
 
-.issue-table tbody tr:hover {
-  background: #f8fafc;
+.data-row:hover {
+  background-color: #f8fafc;
 }
 
-.row-cancelled {
-  opacity: 0.6;
-  background: #fafafa;
+.col-no {
+  width: 60px;
 }
 
-.issue-number-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 0.82rem;
-  color: var(--color-primary, #087f78);
-  text-decoration: none;
-  cursor: pointer;
-  text-align: left;
+.col-date {
+  width: 140px;
+  white-space: nowrap;
 }
 
-.issue-number-link:hover {
-  text-decoration: underline;
+.col-officer {
+  width: 220px;
 }
 
-.sub-text {
-  font-size: 0.72rem;
-  margin-top: 0.15rem;
+.col-purpose {
+  min-width: 200px;
 }
 
-.block {
-  display: block;
+.col-actions {
+  width: 130px;
+  white-space: nowrap;
 }
 
-.date-bold {
+.text-center {
+  text-align: center;
+}
+
+.font-medium {
+  font-weight: 500;
+}
+
+.font-semibold {
   font-weight: 600;
+}
+
+.text-navy {
   color: var(--color-text-navy, #17243d);
 }
 
-.warehouse-name {
-  font-size: 0.82rem;
+.text-secondary {
+  color: #475569;
 }
 
-.officer-name {
-  font-size: 0.8rem;
-}
-
-.item-count-box {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.item-type-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.15rem 0.45rem;
-  background: #eff6ff;
-  color: #2563eb;
-  font-weight: 700;
-  border-radius: 4px;
-  font-size: 0.75rem;
-}
-
-.item-type-text {
-  font-size: 0.74rem;
+.text-muted {
   color: #64748b;
 }
 
-.qty-bold {
-  font-size: 0.82rem;
-}
-
+/* Action Buttons Group */
 .action-buttons-group {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  gap: 0.4rem;
 }
 
-.btn-icon-action {
+.btn-action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
-  border: 1px solid var(--color-border-soft, #e2e8f0);
+  border: 1px solid #e2e8f0;
   background: #ffffff;
-  color: #64748b;
+  color: #475569;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.btn-icon-action:hover {
-  background: #f8fafc;
+.btn-action-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-detail:hover {
+  background: #f0fdfa;
+  border-color: #5eead4;
   color: var(--color-primary, #087f78);
-  border-color: var(--color-primary, #087f78);
 }
 
-.btn-icon-action.text-primary:hover {
-  color: #066761;
+.btn-edit:hover {
+  background: #fefce8;
+  border-color: #fde047;
+  color: #ca8a04;
 }
 
-.btn-icon-action.text-danger:hover {
-  background: #fee2e2;
+.btn-delete:hover {
+  background: #fef2f2;
   border-color: #fca5a5;
-  color: #dc2626;
+  color: #ef4444;
 }
 
-.btn-icon-action svg {
-  width: 14px;
-  height: 14px;
+/* Table Footer */
+.table-pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.empty-cell {
-  padding: 3rem 1rem;
-  text-align: center;
+.pagination-info {
+  font-size: 0.85rem;
+  color: #64748b;
 }
 
-/* Skeleton Loading */
+/* Skeletons */
 .skeleton-row td {
-  padding: 1rem 0.9rem;
+  padding: 1rem;
 }
 
 .skeleton-pill,
 .skeleton-line {
   background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
   background-size: 200% 100%;
-  animation: skeletonPulse 1.5s infinite;
+  animation: shimmer 1.5s infinite;
   border-radius: 4px;
 }
 
-@keyframes skeletonPulse {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+.skel-no {
+  width: 24px;
+  height: 16px;
+  margin: 0 auto;
 }
 
-.skel-no { width: 20px; height: 16px; margin: 0 auto; }
-.skel-wide { width: 140px; height: 14px; margin-bottom: 4px; }
-.skel-mid { width: 100px; height: 14px; margin-bottom: 4px; }
-.skel-sub { width: 80px; height: 10px; }
-.skel-num { width: 32px; height: 16px; margin: 0 auto; }
-.skel-badge { width: 90px; height: 22px; border-radius: 9999px; margin: 0 auto; }
-.skel-btn { width: 50px; height: 26px; border-radius: 6px; margin: 0 auto; }
-
-/* Table Pagination Wrapper */
-.table-pagination-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.85rem 1.25rem;
-  border-top: 1px solid var(--color-border-soft, #e8edf3);
-  flex-wrap: wrap;
-  gap: 1rem;
-  background: #ffffff;
+.skel-date {
+  width: 90px;
+  height: 16px;
 }
 
-.pagination-info-summary {
-  font-size: 0.82rem;
-  color: var(--color-text-secondary, #64748b);
+.skel-officer {
+  width: 140px;
+  height: 16px;
 }
 
-.pagination-right-controls {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  flex-wrap: wrap;
+.skel-purpose {
+  width: 180px;
+  height: 16px;
 }
 
-.per-page-selector {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--color-text-secondary, #64748b);
-}
-
-.per-page-input {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
+.skel-actions {
+  width: 90px;
+  height: 28px;
+  margin: 0 auto;
   border-radius: 6px;
-  background: #ffffff;
-  color: var(--color-text-navy, #17243d);
 }
 
-/* Utilities */
-.text-center { text-align: center; }
-.text-primary { color: var(--color-primary, #087f78); }
-.text-navy { color: var(--color-text-navy, #17243d); }
-.text-muted { color: var(--color-text-secondary, #64748b); }
-.text-danger { color: #dc2626; }
-.font-bold { font-weight: 700; }
-.font-medium { font-weight: 500; }
-.font-semibold { font-weight: 600; }
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.empty-cell {
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input-wrapper {
+    width: 100%;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .table-pagination-wrapper {
+    flex-direction: column;
+    align-items: center;
+  }
+}
 </style>

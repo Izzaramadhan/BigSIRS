@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 
 const props = defineProps({
   isOpen: {
@@ -23,6 +23,15 @@ const props = defineProps({
 const emit = defineEmits(['close', 'submit']);
 
 const errors = ref({});
+
+const normalizedWarehouses = computed(() => {
+  return props.warehouses.map((w) => {
+    if (typeof w === 'object' && w !== null) {
+      return { id: w.id, name: w.name };
+    }
+    return { id: w, name: String(w) };
+  });
+});
 
 const getNowLocalDateTime = () => {
   const now = new Date();
@@ -53,9 +62,10 @@ watch(
   () => props.isOpen,
   (val) => {
     if (val) {
+      const defaultWh = normalizedWarehouses.value[0]?.id || normalizedWarehouses.value[0]?.name || 'Gudang Utama Farmasi';
       formData.opnameNumber = generateNextOpnameNumber();
       formData.startDateTime = getNowLocalDateTime();
-      formData.warehouse = props.warehouses[0] || 'Gudang Utama Farmasi';
+      formData.warehouse = defaultWh;
       formData.locationDetail = 'Rak A1 - Rak C4';
       formData.type = 'Audit Rutin';
       formData.officerName = 'Apt. Budi Santoso, S.Farm';
@@ -164,8 +174,12 @@ const handleStartOpname = () => {
                   required
                 >
                   <option value="" disabled>Pilih Gudang / Depo Farmasi</option>
-                  <option v-for="wh in warehouses" :key="wh" :value="wh">
-                    {{ wh }}
+                  <option
+                    v-for="wh in normalizedWarehouses"
+                    :key="wh.id || wh.name"
+                    :value="wh.id"
+                  >
+                    {{ wh.name }}
                   </option>
                 </select>
                 <span v-if="errors.warehouse" class="error-msg">{{ errors.warehouse }}</span>

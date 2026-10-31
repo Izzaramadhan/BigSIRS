@@ -12,7 +12,7 @@ defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'print']);
+const emit = defineEmits(['close', 'print', 'finalize', 'cancel']);
 </script>
 
 <template>
@@ -159,6 +159,32 @@ const emit = defineEmits(['close', 'print']);
           </button>
 
           <div class="footer-actions">
+            <button
+              v-if="issue.status === 'Draft'"
+              type="button"
+              class="btn-primary"
+              @click="emit('finalize', issue)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Finalisasi Pengeluaran</span>
+            </button>
+
+            <button
+              v-else-if="issue.status === 'Selesai'"
+              type="button"
+              class="btn-cancel text-danger"
+              @click="emit('cancel', issue)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+              </svg>
+              <span>Batalkan Transaksi</span>
+            </button>
+
             <button
               type="button"
               class="btn-outline"

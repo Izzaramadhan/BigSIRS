@@ -1,19 +1,20 @@
 import { ref, reactive, computed } from 'vue';
-import { initialMutations, mockWarehouses, mockMutationMedicines } from '@/mocks/mutations';
+import mutationsService from '@/services/logistics/mutations.service';
 
 export function useMutations() {
-  const mutations = ref(JSON.parse(JSON.stringify(initialMutations)));
-  const warehouses = ref(mockWarehouses);
-  const medicines = ref(mockMutationMedicines);
+  const mutations = ref([]);
+  const warehouses = ref([]);
+  const medicines = ref([]);
 
   const loading = ref(false);
   const submitting = ref(false);
+  const error = ref(null);
 
   const defaultFilters = () => ({
     startDate: '',
     endDate: '',
-    sourceWarehouse: '',
-    targetWarehouse: '',
+    sourceWarehouseId: '',
+    targetWarehouseId: '',
     keyword: ''
   });
 
@@ -22,221 +23,211 @@ export function useMutations() {
 
   const pagination = reactive({
     current_page: 1,
-    per_page: 10
+    per_page: 10,
+    total: 0,
+    last_page: 1,
+    from: 0,
+    to: 0
   });
 
-  // Summary Cards Data
-  const summary = computed(() => {
-    const list = mutations.value;
-    const totalTransactions = 84; // Standardized baseline reflecting hospital transaction volume
-    const estimatedValue = 'Rp428.650.000';
-
-    // Source warehouse occurrences
-    const sourceCounts = {};
-    list.forEach((m) => {
-      sourceCounts[m.sourceWarehouse] = (sourceCounts[m.sourceWarehouse] || 0) + 1;
-    });
-
-    // Target warehouse occurrences
-    const targetCounts = {};
-    list.forEach((m) => {
-      targetCounts[m.targetWarehouse] = (targetCounts[m.targetWarehouse] || 0) + 1;
-    });
-
-    return {
-      totalTransactions: `${totalTransactions} Transaksi`,
-      estimatedValue,
-      topSource: 'Gudang Utama',
-      topSourceSubtitle: '56 mutasi keluar (66.7% volume)',
-      topTarget: 'Apotek Rawat Jalan',
-      topTargetSubtitle: '38 mutasi masuk diproses',
-      integrity: '100%',
-      integrityBadge: 'Tersinkronisasi',
-      integritySubtitle: 'Audit log sinkron tanpa selisih ledger'
-    };
+  const summary = ref({
+    totalTransactions: '0 Transaksi',
+    totalCount: 0,
+    estimatedValue: 'Rp0',
+    topSource: '-',
+    topSourceCount: 0,
+    topSourceSubtitle: 'Belum ada mutasi keluar',
+    topTarget: '-',
+    topTargetCount: 0,
+    topTargetSubtitle: 'Belum ada mutasi masuk',
+    integrity: '100%',
+    integrityBadge: 'Tersinkronisasi',
+    integritySubtitle: 'Audit log sinkron tanpa selisih ledger'
   });
 
-  // Filtered mutations
-  const filteredMutations = computed(() => {
-    let result = [...mutations.value];
+  const paginationInfo = computed(() => ({
+    current_page: pagination.current_page,
+    per_page: pagination.per_page,
+    last_page: pagination.last_page,
+    total: pagination.total,
+    from: pagination.from,
+    to: pagination.to
+  }));
 
-    if (appliedFilters.startDate) {
-      result = result.filter((m) => {
-        const mutationDate = m.date.split(' ')[0];
-        return mutationDate >= appliedFilters.startDate;
-      });
+  const paginatedMutations = computed(() => mutations.value);
+  const filteredMutations = computed(() => mutations.value);
+
+  // Fetch warehouses lookup
+  const fetchWarehouses = async () => {
+    try {
+      const res = await mutationsService.getWarehousesLookup();
+      warehouses.value = res.data || res || [];
+    } catch {
+      warehouses.value = [];
     }
+  };
 
-    if (appliedFilters.endDate) {
-      result = result.filter((m) => {
-        const mutationDate = m.date.split(' ')[0];
-        return mutationDate <= appliedFilters.endDate;
-      });
+  // Fetch summary
+  const fetchSummary = async (params = {}) => {
+    try {
+      const res = await mutationsService.getSummary(params);
+      summary.value = {
+        totalTransactions: res.totalTransactions || `${res.totalCount || 0} Transaksi`,
+        totalCount: res.totalCount || 0,
+        estimatedValue: res.estimatedValue || 'Rp0',
+        topSource: res.topSource || '-',
+        topSourceCount: res.topSourceCount || 0,
+        topSourceSubtitle: res.topSourceSubtitle || 'Belum ada mutasi keluar',
+        topTarget: res.topTarget || '-',
+        topTargetCount: res.topTargetCount || 0,
+        topTargetSubtitle: res.topTargetSubtitle || 'Belum ada mutasi masuk',
+        integrity: res.integrity || '100%',
+        integrityBadge: res.integrityBadge || 'Tersinkronisasi',
+        integritySubtitle: res.integritySubtitle || 'Audit log sinkron tanpa selisih ledger'
+      };
+    } catch (err) {
+      error.value = err.message;
     }
+  };
 
-    if (appliedFilters.sourceWarehouse) {
-      result = result.filter((m) => m.sourceWarehouse === appliedFilters.sourceWarehouse);
+  // Fetch mutations list
+  const fetchMutations = async () => {
+    loading.value = true;
+    error.value = null;
+    try {
+      const params = {
+        page: pagination.current_page,
+        per_page: pagination.per_page,
+        search: appliedFilters.keyword || undefined,
+        start_date: appliedFilters.startDate || undefined,
+        end_date: appliedFilters.endDate || undefined,
+        source_warehouse_id: appliedFilters.sourceWarehouseId || undefined,
+        target_warehouse_id: appliedFilters.targetWarehouseId || undefined
+      };
+
+      const res = await mutationsService.getMutations(params);
+      mutations.value = res.data || [];
+
+      if (res.meta) {
+        pagination.current_page = res.meta.current_page;
+        pagination.per_page = res.meta.per_page;
+        pagination.last_page = res.meta.last_page;
+        pagination.total = res.meta.total;
+        pagination.from = res.meta.from ?? 0;
+        pagination.to = res.meta.to ?? 0;
+      } else {
+        pagination.total = mutations.value.length;
+        pagination.from = mutations.value.length > 0 ? 1 : 0;
+        pagination.to = mutations.value.length;
+        pagination.last_page = 1;
+      }
+    } catch (err) {
+      error.value = err.message || 'Gagal memuat data mutasi';
+      mutations.value = [];
+    } finally {
+      loading.value = false;
     }
-
-    if (appliedFilters.targetWarehouse) {
-      result = result.filter((m) => m.targetWarehouse === appliedFilters.targetWarehouse);
-    }
-
-    if (appliedFilters.keyword) {
-      const q = appliedFilters.keyword.toLowerCase().trim();
-      result = result.filter(
-        (m) =>
-          m.mutationNumber.toLowerCase().includes(q) ||
-          (m.notes && m.notes.toLowerCase().includes(q)) ||
-          m.createdBy.toLowerCase().includes(q) ||
-          m.items.some((it) => it.medicineName.toLowerCase().includes(q))
-      );
-    }
-
-    return result;
-  });
-
-  // Paginated list
-  const paginatedMutations = computed(() => {
-    const start = (pagination.current_page - 1) * pagination.per_page;
-    const end = start + pagination.per_page;
-    return filteredMutations.value.slice(start, end);
-  });
-
-  // Pagination info for MasterDataPagination
-  const paginationInfo = computed(() => {
-    const total = filteredMutations.value.length;
-    const perPage = pagination.per_page;
-    const lastPage = Math.max(1, Math.ceil(total / perPage));
-    const currentPage = Math.min(pagination.current_page, lastPage);
-    const from = total === 0 ? 0 : (currentPage - 1) * perPage + 1;
-    const to = total === 0 ? 0 : Math.min(currentPage * perPage, total);
-
-    return {
-      current_page: currentPage,
-      per_page: perPage,
-      last_page: lastPage,
-      total,
-      from,
-      to
-    };
-  });
+  };
 
   const setPage = (page) => {
-    if (page >= 1 && page <= paginationInfo.value.last_page) {
+    if (page >= 1 && page <= pagination.last_page) {
       pagination.current_page = page;
+      fetchMutations();
     }
   };
 
   const setPerPage = (perPage) => {
     pagination.per_page = Number(perPage);
     pagination.current_page = 1;
+    fetchMutations();
   };
 
   const applyFilters = (newFilters) => {
-    loading.value = true;
     if (newFilters) {
+      Object.assign(filters, newFilters);
       Object.assign(appliedFilters, newFilters);
     } else {
       Object.assign(appliedFilters, filters);
     }
     pagination.current_page = 1;
-    setTimeout(() => {
-      loading.value = false;
-    }, 150);
+    fetchMutations();
+    fetchSummary();
   };
 
   const resetFilters = () => {
     Object.assign(filters, defaultFilters());
     Object.assign(appliedFilters, defaultFilters());
     pagination.current_page = 1;
+    fetchMutations();
+    fetchSummary();
   };
 
-  // Add new mutation to local state
-  const addMutation = (payload) => {
+  const addMutation = async (payload) => {
     submitting.value = true;
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const nextId = mutations.value.length > 0 ? Math.max(...mutations.value.map((m) => m.id)) + 1 : 1;
-        const now = new Date();
-        const yearMonth = now.toISOString().slice(0, 7).replace('-', '');
-        const padSeq = String(nextId + 32).padStart(4, '0');
-        const mutationNumber = payload.mutationNumber || `MUT-${yearMonth}-${padSeq}`;
+    try {
+      const formattedPayload = {
+        mutationDate: payload.date || payload.mutationDate,
+        sourceWarehouseId: payload.sourceWarehouseId,
+        targetWarehouseId: payload.targetWarehouseId,
+        notes: payload.notes || null,
+        items: (payload.items || []).map((it) => ({
+          medicineId: it.medicineId,
+          quantity: Number(it.quantity)
+        }))
+      };
 
-        const day = String(now.getDate()).padStart(2, '0');
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        const hours = String(now.getHours()).padStart(2, '0');
-        const mins = String(now.getMinutes()).padStart(2, '0');
-        const dateDisplay = `${day} ${months[now.getMonth()]} ${now.getFullYear()}, ${hours}:${mins} WIB`;
+      const res = await mutationsService.createMutation(formattedPayload);
 
-        const totalQuantity = payload.items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
-        const itemCount = payload.items.length;
+      // Refresh data
+      await Promise.all([fetchMutations(), fetchSummary()]);
 
-        const newMutation = {
-          id: nextId,
-          mutationNumber,
-          date: payload.date || now.toISOString().replace('T', ' ').slice(0, 16),
-          dateDisplay,
-          sourceWarehouse: payload.sourceWarehouse,
-          targetWarehouse: payload.targetWarehouse,
-          itemCount,
-          totalQuantity,
-          unit: payload.items[0]?.unit || 'Unit',
-          notes: payload.notes || '-',
-          createdBy: 'Apt. Novita Anggraini',
-          createdInitials: 'NA',
-          items: payload.items.map((it, idx) => ({
-            id: idx + 1,
-            medicineId: it.medicineId,
-            medicineName: it.medicineName,
-            quantity: Number(it.quantity) || 0,
-            unit: it.unit || 'Unit'
-          }))
-        };
-
-        mutations.value.unshift(newMutation);
-        submitting.value = false;
-        resolve({ success: true, data: newMutation });
-      }, 250);
-    });
+      return { success: true, data: res.data || res };
+    } catch (err) {
+      const validationErrors = err.response?.data?.errors || null;
+      const message = err.response?.data?.message || err.message || 'Gagal menyimpan mutasi barang.';
+      return { success: false, error: err, errors: validationErrors, message };
+    } finally {
+      submitting.value = false;
+    }
   };
 
-  // Export to CSV on frontend
-  const exportMutationsCsv = () => {
-    const list = filteredMutations.value;
-    const headers = [
-      'No',
-      'Nomor Mutasi',
-      'Tanggal Mutasi',
-      'Gudang Asal',
-      'Gudang Tujuan',
-      'Jumlah Sediaan',
-      'Total Kuantitas',
-      'Catatan Keperluan',
-      'Dibuat Oleh'
-    ];
+  const getMutationDetail = async (id) => {
+    const res = await mutationsService.getMutation(id);
+    return res.data || res;
+  };
 
-    const rows = list.map((m, idx) => [
-      idx + 1,
-      m.mutationNumber,
-      `"${m.dateDisplay}"`,
-      `"${m.sourceWarehouse}"`,
-      `"${m.targetWarehouse}"`,
-      m.itemCount,
-      m.totalQuantity,
-      `"${(m.notes || '').replace(/"/g, '""')}"`,
-      `"${m.createdBy}"`
-    ]);
+  const exportMutationsCsv = async () => {
+    const params = {
+      search: appliedFilters.keyword || undefined,
+      start_date: appliedFilters.startDate || undefined,
+      end_date: appliedFilters.endDate || undefined,
+      source_warehouse_id: appliedFilters.sourceWarehouseId || undefined,
+      target_warehouse_id: appliedFilters.targetWarehouseId || undefined
+    };
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const blob = await mutationsService.exportCsv(params);
+    const url = window.URL.createObjectURL(new Blob([blob], { type: 'text/csv' }));
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.href = url;
     link.setAttribute('download', `Daftar_Mutasi_Barang_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
     return true;
+  };
+
+  const fetchInitialData = async () => {
+    loading.value = true;
+    try {
+      await Promise.all([
+        fetchWarehouses(),
+        fetchSummary(),
+        fetchMutations()
+      ]);
+    } finally {
+      loading.value = false;
+    }
   };
 
   return {
@@ -249,14 +240,22 @@ export function useMutations() {
     paginationInfo,
     loading,
     submitting,
+    error,
     summary,
     filteredMutations,
     paginatedMutations,
+    fetchWarehouses,
+    fetchSummary,
+    fetchMutations,
+    fetchInitialData,
     setPage,
     setPerPage,
     applyFilters,
     resetFilters,
     addMutation,
+    getMutationDetail,
     exportMutationsCsv
   };
 }
+
+export default useMutations;

@@ -2,6 +2,11 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CaptchaController;
+use App\Http\Controllers\Api\V1\Logistics\GoodsIssueController;
+use App\Http\Controllers\Api\V1\Logistics\InvoiceController;
+use App\Http\Controllers\Api\V1\Logistics\PosSaleController;
+use App\Http\Controllers\Api\V1\Logistics\StockMutationController;
+use App\Http\Controllers\Api\V1\Logistics\StockOpnameController;
 use App\Http\Controllers\Api\V1\LookupController;
 use App\Http\Controllers\Api\V1\MasterData\ActivityTypeController;
 use App\Http\Controllers\Api\V1\MasterData\BedController;
@@ -9,10 +14,12 @@ use App\Http\Controllers\Api\V1\MasterData\BuildingController;
 use App\Http\Controllers\Api\V1\MasterData\DietTypeController;
 use App\Http\Controllers\Api\V1\MasterData\DistrictController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorController;
-use App\Http\Controllers\Api\V1\MasterData\FloorController;
 use App\Http\Controllers\Api\V1\MasterData\DoctorScheduleController;
 use App\Http\Controllers\Api\V1\MasterData\EducationController;
 use App\Http\Controllers\Api\V1\MasterData\EmployeeController;
+use App\Http\Controllers\Api\V1\MasterData\FloorController;
+use App\Http\Controllers\Api\V1\MasterData\FollowUpHandlingController;
+use App\Http\Controllers\Api\V1\MasterData\GenericMedicineController;
 use App\Http\Controllers\Api\V1\MasterData\GuarantorController;
 use App\Http\Controllers\Api\V1\MasterData\Icd10CodeController;
 use App\Http\Controllers\Api\V1\MasterData\Icd9CmController;
@@ -21,14 +28,12 @@ use App\Http\Controllers\Api\V1\MasterData\LaboratoryGroupController;
 use App\Http\Controllers\Api\V1\MasterData\LaboratoryItemController;
 use App\Http\Controllers\Api\V1\MasterData\LetterTypeController;
 use App\Http\Controllers\Api\V1\MasterData\MedicalProcedureController;
-use App\Http\Controllers\Api\V1\MasterData\GenericMedicineController;
+use App\Http\Controllers\Api\V1\MasterData\MedicationSignaController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineCategoryController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineController;
-use App\Http\Controllers\Api\V1\MasterData\MedicationSignaController;
+use App\Http\Controllers\Api\V1\MasterData\MedicinePackageController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineRouteController;
 use App\Http\Controllers\Api\V1\MasterData\MedicineUnitController;
-use App\Http\Controllers\Api\V1\MasterData\MedicinePackageController;
-use App\Http\Controllers\Api\V1\MasterData\FollowUpHandlingController;
 use App\Http\Controllers\Api\V1\MasterData\OccupationController;
 use App\Http\Controllers\Api\V1\MasterData\PolyclinicController;
 use App\Http\Controllers\Api\V1\MasterData\PositionController;
@@ -49,7 +54,6 @@ use App\Http\Controllers\Api\V1\MasterData\SupplierController;
 use App\Http\Controllers\Api\V1\MasterData\TariffComponentController;
 use App\Http\Controllers\Api\V1\MasterData\TariffTypeController;
 use App\Http\Controllers\Api\V1\MasterData\VillageController;
-use App\Http\Controllers\Api\V1\Logistics\InvoiceController;
 use App\Http\Controllers\Api\V1\MasterData\WardController;
 use App\Http\Controllers\Api\V1\MasterData\WarehouseController;
 use Illuminate\Support\Facades\Route;
@@ -212,6 +216,42 @@ Route::prefix('v1')->group(function () {
             Route::get('invoices/summary', [InvoiceController::class, 'summary']);
             Route::get('invoices/export', [InvoiceController::class, 'export']);
             Route::apiResource('invoices', InvoiceController::class);
+
+            Route::get('mutations/summary', [StockMutationController::class, 'summary']);
+            Route::get('mutations/export', [StockMutationController::class, 'export']);
+            Route::get('warehouses/{warehouse}/available-stocks', [GoodsIssueController::class, 'availableStocks']);
+            Route::get('warehouse-stocks', [StockMutationController::class, 'warehouseStocks']);
+            Route::apiResource('mutations', StockMutationController::class)->only(['index', 'show', 'store']);
+
+            // Stock Opname (Direct Warehouse Stocks & Adjustments)
+            Route::get('stock-opnames/export', [StockOpnameController::class, 'export']);
+            Route::get('stock-opnames', [StockOpnameController::class, 'index']);
+            Route::get('stock-opnames/{stock}', [StockOpnameController::class, 'show']);
+            Route::patch('stock-opnames/{stock}', [StockOpnameController::class, 'update']);
+            Route::put('stock-opnames/{stock}', [StockOpnameController::class, 'update']);
+
+            // Goods Issues (Pengeluaran Barang Nonpenjualan)
+            Route::get('goods-issues/summary', [GoodsIssueController::class, 'summary']);
+            Route::get('goods-issues/form-options', [GoodsIssueController::class, 'formOptions']);
+            Route::get('goods-issues/export', [GoodsIssueController::class, 'export']);
+            Route::post('goods-issues/{goods_issue}/finalize', [GoodsIssueController::class, 'finalize']);
+            Route::post('goods-issues/{goods_issue}/cancel', [GoodsIssueController::class, 'cancel']);
+            Route::post('goods-issues/{goods_issue}/items', [GoodsIssueController::class, 'addItem']);
+            Route::put('goods-issues/{goods_issue}/items/{item}', [GoodsIssueController::class, 'updateItem']);
+            Route::delete('goods-issues/{goods_issue}/items/{item}', [GoodsIssueController::class, 'deleteItem']);
+            Route::apiResource('goods-issues', GoodsIssueController::class);
+
+            // POS OTC Sales (Penjualan Bebas)
+            Route::get('pos-sales/customers', [PosSaleController::class, 'customers']);
+            Route::get('pos-sales/summary', [PosSaleController::class, 'summary']);
+            Route::get('pos-sales/statistics', [PosSaleController::class, 'summary']);
+            Route::get('pos-sales/form-options', [PosSaleController::class, 'formOptions']);
+            Route::get('pos-sales/export', [PosSaleController::class, 'export']);
+            Route::post('pos-sales/{pos_sale}/cancel', [PosSaleController::class, 'cancel']);
+            Route::post('pos-sales/{pos_sale}/items', [PosSaleController::class, 'addItem']);
+            Route::put('pos-sales/{pos_sale}/items/{item}', [PosSaleController::class, 'updateItem']);
+            Route::delete('pos-sales/{pos_sale}/items/{item}', [PosSaleController::class, 'deleteItem']);
+            Route::apiResource('pos-sales', PosSaleController::class);
         });
 
         Route::get('invoices/summary', [InvoiceController::class, 'summary']);

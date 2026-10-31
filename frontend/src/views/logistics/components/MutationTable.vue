@@ -1,6 +1,7 @@
 <script setup>
 import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
 import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
+import MasterDataSkeletonRow from '@/components/master-data/shared/MasterDataSkeletonRow.vue';
 
 const props = defineProps({
   items: {
@@ -35,6 +36,23 @@ const getRowNumber = (index) => {
   const currentPage = props.paginationInfo?.current_page || 1;
   const perPage = props.paginationInfo?.per_page || 10;
   return (currentPage - 1) * perPage + index + 1;
+};
+
+const formatMutationDate = (mut) => {
+  if (mut.dateDisplay) return mut.dateDisplay;
+  if (!mut.mutationDate) return '-';
+  try {
+    const d = new Date(mut.mutationDate);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${month} ${year}, ${hours}:${mins} WIB`;
+  } catch {
+    return mut.mutationDate;
+  }
 };
 </script>
 
@@ -101,23 +119,22 @@ const getRowNumber = (index) => {
       <table class="data-table">
         <thead>
           <tr>
-            <th class="col-no text-center">NO.</th>
-            <th class="col-mutation-num">NOMOR MUTASI</th>
-            <th class="col-date">TANGGAL MUTASI</th>
-            <th class="col-warehouse">GUDANG ASAL</th>
-            <th class="col-warehouse">GUDANG TUJUAN</th>
-            <th class="col-item-type text-center">JENIS ITEM</th>
-            <th class="col-qty text-center">TOTAL KUANTITAS</th>
-            <th class="col-notes">CATATAN KEPERLUAN</th>
-            <th class="col-user">DIBUAT OLEH</th>
-            <th class="col-actions text-center">AKSI</th>
+            <th class="col-no text-center">No</th>
+            <th class="col-date">Tanggal</th>
+            <th class="col-source">Gudang Asal</th>
+            <th class="col-target">Gudang Tujuan</th>
+            <th class="col-notes">Catatan</th>
+            <th class="col-actions text-center">Aksi</th>
           </tr>
         </thead>
 
         <tbody>
+          <!-- Loading State Skeleton -->
+          <MasterDataSkeletonRow v-if="loading" :columns="6" :rows="5" />
+
           <!-- Empty State Row -->
-          <tr v-if="items.length === 0">
-            <td colspan="10" class="empty-cell">
+          <tr v-else-if="items.length === 0">
+            <td colspan="6" class="empty-cell">
               <MasterDataEmptyState
                 :is-search="true"
                 title="Data mutasi tidak ditemukan"
@@ -132,61 +149,38 @@ const getRowNumber = (index) => {
             </td>
           </tr>
 
-          <!-- Data Rows -->
-          <tr v-for="(mut, index) in items" :key="mut.id">
+          <!-- Data Rows: 6 Columns -->
+          <tr v-else v-for="(mut, index) in items" :key="mut.id">
             <!-- 1. No -->
             <td class="col-no text-center text-muted font-medium">
               {{ getRowNumber(index) }}
             </td>
 
-            <!-- 2. Nomor Mutasi -->
-            <td class="col-mutation-num font-bold text-primary">
-              {{ mut.mutationNumber }}
-            </td>
-
-            <!-- 3. Tanggal Mutasi -->
+            <!-- 2. Tanggal -->
             <td class="col-date text-muted">
-              {{ mut.dateDisplay }}
+              {{ formatMutationDate(mut) }}
             </td>
 
-            <!-- 4. Gudang Asal -->
-            <td class="col-warehouse">
+            <!-- 3. Gudang Asal -->
+            <td class="col-source">
               <span class="wh-badge source-badge">
                 {{ mut.sourceWarehouse }}
               </span>
             </td>
 
-            <!-- 5. Gudang Tujuan -->
-            <td class="col-warehouse">
+            <!-- 4. Gudang Tujuan -->
+            <td class="col-target">
               <span class="wh-badge target-badge">
                 {{ mut.targetWarehouse }}
               </span>
             </td>
 
-            <!-- 6. Jenis Item -->
-            <td class="col-item-type text-center font-medium">
-              {{ mut.itemCount }} Sediaan
-            </td>
-
-            <!-- 7. Total Kuantitas -->
-            <td class="col-qty text-center font-bold text-primary">
-              {{ mut.totalQuantity.toLocaleString('id-ID') }} {{ mut.unit }}
-            </td>
-
-            <!-- 8. Catatan Keperluan -->
-            <td class="col-notes text-muted truncate-cell" :title="mut.notes">
+            <!-- 5. Catatan -->
+            <td class="col-notes text-muted truncate-cell" :title="mut.notes || '-'">
               {{ mut.notes || '-' }}
             </td>
 
-            <!-- 9. Dibuat Oleh -->
-            <td class="col-user">
-              <div class="user-pill">
-                <span class="user-avatar">{{ mut.createdInitials || 'AP' }}</span>
-                <span class="user-name text-navy font-medium">{{ mut.createdBy }}</span>
-              </div>
-            </td>
-
-            <!-- 10. Aksi: Lihat Detail -->
+            <!-- 6. Aksi: Lihat Detail -->
             <td class="col-actions text-center">
               <button
                 type="button"
@@ -298,7 +292,7 @@ const getRowNumber = (index) => {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-  min-width: 1050px;
+  min-width: 820px;
 }
 
 .data-table th {
@@ -328,16 +322,35 @@ const getRowNumber = (index) => {
   background: #f9fbfa;
 }
 
-/* Columns */
-.col-no { width: 50px; }
-.col-mutation-num { min-width: 140px; }
-.col-date { min-width: 140px; }
-.col-warehouse { min-width: 140px; }
-.col-item-type { min-width: 90px; }
-.col-qty { min-width: 110px; }
-.col-notes { min-width: 200px; max-width: 280px; }
-.col-user { min-width: 170px; }
-.col-actions { width: 130px; }
+/* Columns: No, Tanggal, Gudang Asal, Gudang Tujuan, Catatan, Aksi */
+.col-no {
+  width: 60px;
+  min-width: 50px;
+}
+
+.col-date {
+  width: 190px;
+  min-width: 170px;
+}
+
+.col-source {
+  width: 180px;
+  min-width: 150px;
+}
+
+.col-target {
+  width: 180px;
+  min-width: 150px;
+}
+
+.col-notes {
+  min-width: 250px;
+}
+
+.col-actions {
+  width: 130px;
+  min-width: 120px;
+}
 
 .wh-badge {
   display: inline-flex;
@@ -365,30 +378,7 @@ const getRowNumber = (index) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.user-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.user-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #e0f2fe;
-  color: #0369a1;
-  font-size: 0.65rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.user-name {
-  font-size: 0.82rem;
+  max-width: 420px;
 }
 
 .btn-detail {
@@ -437,6 +427,23 @@ const getRowNumber = (index) => {
   .toolbar-right {
     width: 100%;
     justify-content: space-between;
+  }
+}
+
+@media print {
+  .table-toolbar,
+  .table-pagination-wrapper,
+  .col-actions {
+    display: none !important;
+  }
+
+  .mutation-table-card {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .data-table {
+    min-width: 100% !important;
   }
 }
 </style>

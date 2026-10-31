@@ -48,7 +48,7 @@ defineProps({
       </div>
       <div class="card-divider"></div>
       <div class="card-bottom">
-        <span class="counter-badge">56</span>
+        <span class="counter-badge">{{ summary.topSourceCount ?? 0 }}</span>
         <span class="bottom-label">{{ summary.topSourceSubtitle }}</span>
       </div>
     </div>
@@ -70,7 +70,7 @@ defineProps({
       </div>
       <div class="card-divider"></div>
       <div class="card-bottom">
-        <span class="counter-badge badge-green">38</span>
+        <span class="counter-badge badge-green">{{ summary.topTargetCount ?? 0 }}</span>
         <span class="bottom-label">{{ summary.topTargetSubtitle }}</span>
       </div>
     </div>

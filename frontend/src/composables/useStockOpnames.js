@@ -1,289 +1,256 @@
 import { ref, reactive, computed } from 'vue';
-import {
-  initialStockOpnames,
-  mockOpnameWarehouses,
-  mockOpnameTypes,
-  mockOpnameStatuses
-} from '@/mocks/stockOpnames';
+import stockOpnamesService from '@/services/logistics/stockOpnames.service';
 
 export function useStockOpnames() {
-  const opnames = ref(JSON.parse(JSON.stringify(initialStockOpnames)));
-  const warehouses = ref(mockOpnameWarehouses);
-  const opnameTypes = ref(mockOpnameTypes);
-  const opnameStatuses = ref(mockOpnameStatuses);
+  const stocks = ref([]);
+  const warehouses = ref([]);
 
   const loading = ref(false);
   const submitting = ref(false);
+  const error = ref(null);
 
   const defaultFilters = () => ({
-    opnameNumber: '',
-    startDate: '',
-    endDate: '',
-    warehouse: 'Semua Gudang',
-    status: 'Semua Status'
+    warehouse_id: '',
+    hide_zero_stock: true,
+    search: '',
+    page: 1,
+    per_page: 10
   });
 
   const filters = reactive(defaultFilters());
   const appliedFilters = reactive(defaultFilters());
 
-  const pagination = reactive({
+  const paginationInfo = ref({
     current_page: 1,
-    per_page: 10
+    per_page: 10,
+    last_page: 1,
+    total: 0,
+    from: 0,
+    to: 0
   });
 
-  // Summary Cards computation
-  const summary = computed(() => {
-    return {
-      inProgressSessions: '3 Sesi',
-      inProgressNote: '1.420 item dalam proses hitung fisik',
-      pendingReviewWarehouses: '2 Gudang',
-      pendingReviewNote: 'Perlu persetujuan Apoteker & PJ Logistik',
-      completedThisMonthSessions: '18 Sesi',
-      completedThisMonthNote: 'Akurasi stok rata-rata 99,4%',
-      discrepancyItems: '14 Item',
-      discrepancyValue: 'Rp1.840.000',
-      discrepancyRatio: '8+ / 6-'
-    };
+  const hasActiveFilters = computed(() => {
+    return Boolean(
+      (appliedFilters.warehouse_id && appliedFilters.warehouse_id !== '' && appliedFilters.warehouse_id !== 'all') ||
+      appliedFilters.hide_zero_stock === false ||
+      (appliedFilters.search && appliedFilters.search.trim() !== '')
+    );
   });
 
-  // Filtered opname sessions
-  const filteredOpnames = computed(() => {
-    let result = [...opnames.value];
+  // Alias for backward compatibility if components reference `opnames` or `paginatedOpnames`
+  const opnames = computed(() => stocks.value);
+  const paginatedOpnames = computed(() => stocks.value);
 
-    // Filter by Opname Number
-    if (appliedFilters.opnameNumber && appliedFilters.opnameNumber.trim() !== '') {
-      const q = appliedFilters.opnameNumber.toLowerCase().trim();
-      result = result.filter(
-        (o) =>
-          o.opnameNumber.toLowerCase().includes(q) ||
-          (o.title && o.title.toLowerCase().includes(q))
-      );
-    }
-
-    // Filter by Start Date
-    if (appliedFilters.startDate) {
-      result = result.filter((o) => {
-        const itemDate = o.dateTime.split(' ')[0];
-        return itemDate >= appliedFilters.startDate;
-      });
-    }
-
-    // Filter by End Date
-    if (appliedFilters.endDate) {
-      result = result.filter((o) => {
-        const itemDate = o.dateTime.split(' ')[0];
-        return itemDate <= appliedFilters.endDate;
-      });
-    }
-
-    // Filter by Warehouse
-    if (appliedFilters.warehouse && appliedFilters.warehouse !== 'Semua Gudang') {
-      result = result.filter((o) => o.warehouse === appliedFilters.warehouse);
-    }
-
-    // Filter by Status
-    if (appliedFilters.status && appliedFilters.status !== 'Semua Status') {
-      result = result.filter((o) => o.status === appliedFilters.status);
-    }
-
-    return result;
-  });
-
-  // Paginated opname sessions
-  const paginatedOpnames = computed(() => {
-    const start = (pagination.current_page - 1) * pagination.per_page;
-    return filteredOpnames.value.slice(start, start + pagination.per_page);
-  });
-
-  // Pagination info for MasterDataPagination
-  const paginationInfo = computed(() => {
-    const total = filteredOpnames.value.length;
-    const lastPage = Math.max(1, Math.ceil(total / pagination.per_page));
-    const from = total === 0 ? 0 : (pagination.current_page - 1) * pagination.per_page + 1;
-    const to = Math.min(pagination.current_page * pagination.per_page, total);
-
-    return {
-      current_page: pagination.current_page,
-      per_page: pagination.per_page,
-      last_page: lastPage,
-      total,
-      from,
-      to
-    };
-  });
-
-  // Handlers
-  const applyFilters = (newFilters) => {
-    if (newFilters) {
-      Object.assign(appliedFilters, newFilters);
-    } else {
-      Object.assign(appliedFilters, filters);
-    }
-    pagination.current_page = 1;
-  };
-
-  const resetFilters = () => {
-    Object.assign(filters, defaultFilters());
-    Object.assign(appliedFilters, defaultFilters());
-    pagination.current_page = 1;
-  };
-
-  const setPage = (page) => {
-    if (page >= 1 && page <= paginationInfo.value.last_page) {
-      pagination.current_page = page;
-    }
-  };
-
-  const setPerPage = (count) => {
-    pagination.per_page = Number(count);
-    pagination.current_page = 1;
-  };
-
-  // Generate next SO number
-  const generateOpnameNumber = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const seq = String(opnames.value.length + 46).padStart(4, '0');
-    return `SO-${year}${month}-${seq}`;
-  };
-
-  // Add stock opname (Draft or Active)
-  const createStockOpname = async (payload, isDraft = false) => {
-    submitting.value = true;
+  /**
+   * Fetch active warehouses for dropdown filters
+   */
+  const fetchWarehouses = async () => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      const res = await stockOpnamesService.getWarehousesLookup();
+      if (Array.isArray(res)) {
+        warehouses.value = res;
+      } else if (res && res.data) {
+        warehouses.value = res.data;
+      }
+    } catch {
+      // Keep existing warehouses if request fails
+    }
+  };
 
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-      const monthStr = monthNames[now.getMonth()];
-      const year = now.getFullYear();
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
+  /**
+   * Fetch direct stock opname records from backend API
+   */
+  const fetchStockOpnames = async () => {
+    loading.value = true;
+    error.value = null;
 
-      const dateDisplay = `${day} ${monthStr} ${year}`;
-      const timeDisplay = `${hours}:${minutes} WIB`;
-      const dateTime = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}-${day} ${hours}:${minutes}`;
-
-      const newOpname = {
-        id: Date.now(),
-        opnameNumber: payload.opnameNumber || generateOpnameNumber(),
-        title: payload.title || (isDraft ? 'Draft Sesi Audit' : 'Audit Fisik Persediaan'),
-        type: payload.type || 'Audit Rutin',
-        dateDisplay,
-        timeDisplay,
-        dateTime,
-        warehouse: payload.warehouse || 'Gudang Utama Farmasi',
-        locationDetail: payload.locationDetail || 'Semua Rak Unit',
-        totalItems: payload.totalItems || 150,
-        countedItems: isDraft ? 0 : 0,
-        differenceCount: isDraft ? 0 : 0,
-        differenceStatus: isDraft ? '- Belum Dihitung -' : 'Belum Dihitung',
-        differenceType: 'muted',
-        progressPercent: 0,
-        progressText: isDraft ? '0% – Menunggu Mulai' : '0% – Mulai Hitung',
-        officerName: payload.officerName || 'Apt. Budi Santoso, S.Farm',
-        officerRole: 'Staf Farmasi',
-        status: isDraft ? 'Draft Sesi' : 'Sedang Dihitung',
-        notes: payload.notes || '',
-        items: []
+    try {
+      const params = {
+        page: filters.page,
+        per_page: filters.per_page,
+        hide_zero_stock: filters.hide_zero_stock ? 1 : 0
       };
 
-      opnames.value.unshift(newOpname);
-      return { success: true, data: newOpname };
+      if (filters.warehouse_id && filters.warehouse_id !== 'all') {
+        params.warehouse_id = filters.warehouse_id;
+      }
+
+      if (filters.search && filters.search.trim() !== '') {
+        params.search = filters.search.trim();
+      }
+
+      const res = await stockOpnamesService.getStockOpnames(params);
+
+      if (res && res.data) {
+        stocks.value = res.data;
+
+        if (res.meta) {
+          paginationInfo.value = {
+            current_page: res.meta.current_page || 1,
+            per_page: res.meta.per_page || filters.per_page,
+            last_page: res.meta.last_page || 1,
+            total: res.meta.total || 0,
+            from: res.meta.from || 0,
+            to: res.meta.to || 0
+          };
+        } else {
+          paginationInfo.value = {
+            current_page: 1,
+            per_page: stocks.value.length,
+            last_page: 1,
+            total: stocks.value.length,
+            from: stocks.value.length > 0 ? 1 : 0,
+            to: stocks.value.length
+          };
+        }
+      } else if (Array.isArray(res)) {
+        stocks.value = res;
+        paginationInfo.value = {
+          current_page: 1,
+          per_page: res.length,
+          last_page: 1,
+          total: res.length,
+          from: res.length > 0 ? 1 : 0,
+          to: res.length
+        };
+      } else {
+        stocks.value = [];
+      }
+
+      // Sync applied filters
+      Object.assign(appliedFilters, {
+        warehouse_id: filters.warehouse_id,
+        hide_zero_stock: filters.hide_zero_stock,
+        search: filters.search,
+        page: filters.page,
+        per_page: filters.per_page
+      });
+    } catch (err) {
+      error.value = err.response?.data?.message || err.message || 'Gagal memuat saldo stok.';
+      stocks.value = [];
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  /**
+   * Apply filters
+   */
+  const applyFilters = async (newFilters = {}) => {
+    Object.assign(filters, newFilters, { page: 1 });
+    await fetchStockOpnames();
+  };
+
+  /**
+   * Reset filters to defaults
+   */
+  const resetFilters = async () => {
+    Object.assign(filters, defaultFilters());
+    await fetchStockOpnames();
+  };
+
+  /**
+   * Set active page
+   */
+  const setPage = async (page) => {
+    if (page < 1 || (paginationInfo.value.last_page && page > paginationInfo.value.last_page)) {
+      return;
+    }
+    filters.page = page;
+    await fetchStockOpnames();
+  };
+
+  /**
+   * Set per-page amount
+   */
+  const setPerPage = async (perPage) => {
+    filters.per_page = Number(perPage);
+    filters.page = 1;
+    await fetchStockOpnames();
+  };
+
+  /**
+   * Update stock via Edit modal
+   */
+  const updateStock = async (id, payload) => {
+    submitting.value = true;
+    error.value = null;
+
+    try {
+      const res = await stockOpnamesService.updateStockOpname(id, payload);
+      await fetchStockOpnames();
+      return {
+        success: true,
+        data: res.data || res,
+        message: res.message || 'Stok opname berhasil diperbarui.'
+      };
+    } catch (err) {
+      const apiErrors = err.response?.data?.errors;
+      const message = err.response?.data?.message || err.message || 'Gagal memperbarui stok sediaan.';
+      return {
+        success: false,
+        message,
+        errors: apiErrors || {}
+      };
     } finally {
       submitting.value = false;
     }
   };
 
-  // Cancel stock opname
-  const cancelStockOpname = async (id, reason) => {
-    const item = opnames.value.find((o) => o.id === id);
-    if (item) {
-      item.status = 'Dibatalkan';
-      item.progressPercent = 0;
-      item.progressText = 'Dibatalkan';
-      item.cancelReason = reason || 'Dibatalkan oleh petugas logistik.';
+  /**
+   * Export stock opnames to CSV
+   */
+  const exportStocksCsv = async () => {
+    try {
+      const params = {
+        hide_zero_stock: filters.hide_zero_stock ? 1 : 0
+      };
+      if (filters.warehouse_id && filters.warehouse_id !== 'all') {
+        params.warehouse_id = filters.warehouse_id;
+      }
+      if (filters.search && filters.search.trim() !== '') {
+        params.search = filters.search.trim();
+      }
+
+      const blob = await stockOpnamesService.exportCsv(params);
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'text/csv' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `data-stok-opname-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
       return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message || 'Gagal mengekspor data stok.'
+      };
     }
-    return { success: false, message: 'Data tidak ditemukan' };
-  };
-
-  // Review / Approve discrepancy
-  const approveStockOpname = async (id) => {
-    const item = opnames.value.find((o) => o.id === id);
-    if (item) {
-      item.status = 'Selesai';
-      item.differenceStatus = `${item.differenceCount} Item (Adjusted)`;
-      item.differenceType = 'warning';
-      item.progressPercent = 100;
-      item.progressText = '100% – Telah Disesuaikan';
-      return { success: true };
-    }
-    return { success: false, message: 'Data tidak ditemukan' };
-  };
-
-  // Export CSV
-  const exportStockOpnamesCsv = () => {
-    const headers = [
-      'No',
-      'Nomor Opname',
-      'Judul',
-      'Tanggal Mulai',
-      'Gudang',
-      'Total Item',
-      'Sudah Dihitung',
-      'Status Selisih',
-      'Petugas',
-      'Status'
-    ];
-
-    const rows = filteredOpnames.value.map((o, idx) => [
-      idx + 1,
-      `"${o.opnameNumber}"`,
-      `"${o.title || ''}"`,
-      `"${o.dateDisplay} ${o.timeDisplay}"`,
-      `"${o.warehouse}"`,
-      o.totalItems,
-      o.countedItems !== null ? o.countedItems : '-',
-      `"${o.differenceStatus}"`,
-      `"${o.officerName}"`,
-      `"${o.status}"`
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Daftar_Stok_Opname_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return {
+    stocks,
     opnames,
+    paginatedOpnames,
     warehouses,
-    opnameTypes,
-    opnameStatuses,
     loading,
     submitting,
+    error,
     filters,
     appliedFilters,
-    pagination,
-    summary,
-    filteredOpnames,
-    paginatedOpnames,
+    hasActiveFilters,
     paginationInfo,
+    fetchWarehouses,
+    fetchStockOpnames,
     applyFilters,
     resetFilters,
     setPage,
     setPerPage,
-    generateOpnameNumber,
-    createStockOpname,
-    cancelStockOpname,
-    approveStockOpname,
-    exportStockOpnamesCsv
+    updateStock,
+    exportStocksCsv
   };
 }
+
+export default useStockOpnames;

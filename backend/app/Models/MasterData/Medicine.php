@@ -2,6 +2,10 @@
 
 namespace App\Models\MasterData;
 
+use App\Models\Logistics\StockMovement;
+use App\Models\Logistics\StockMutationItem;
+use App\Models\Logistics\StockOpnameItem;
+use App\Models\Logistics\WarehouseStock;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -54,5 +58,25 @@ class Medicine extends Model
     public function generic()
     {
         return $this->belongsTo(GenericMedicine::class, 'generic_medicine_id');
+    }
+
+    public function warehouseStocks()
+    {
+        return $this->hasMany(WarehouseStock::class, 'medicine_id');
+    }
+
+    public function mutationItems()
+    {
+        return $this->hasMany(StockMutationItem::class, 'medicine_id');
+    }
+
+    public function stockMovements()
+    {
+        return $this->hasMany(StockMovement::class, 'medicine_id');
+    }
+
+    public function stockOpnameItems()
+    {
+        return $this->hasMany(StockOpnameItem::class, 'medicine_id');
     }
 }
