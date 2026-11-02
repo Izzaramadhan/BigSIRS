@@ -144,12 +144,7 @@ const handleLogin = async () => {
 
           <!-- Form Options -->
           <div class="form-options">
-            <label class="checkbox-container">
-              <input type="checkbox" v-model="showPassword" />
-              <span class="checkmark"></span>
-              Lihat Password
-            </label>
-            <a href="#" class="help-link">Bantuan Login?</a>
+            <a href="#" class="help-link" @click.prevent>Bantuan Login?</a>
           </div>
 
           <!-- Submit -->
@@ -424,23 +419,10 @@ const handleLogin = async () => {
 
 .form-options {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   font-size: 0.875rem;
-}
-
-.checkbox-container {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  color: #64748b;
-  user-select: none;
-}
-
-.checkbox-container input {
-  cursor: pointer;
 }
 
 .help-link {

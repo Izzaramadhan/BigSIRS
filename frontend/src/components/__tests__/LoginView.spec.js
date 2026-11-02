@@ -44,7 +44,7 @@ describe('LoginView.vue', () => {
     expect(wrapper.find('.captcha-input').exists()).toBe(true)
   })
 
-  it('can toggle password visibility', async () => {
+  it('can toggle password visibility via eye icon button back and forth', async () => {
     api.get.mockResolvedValueOnce({
       data: { data: { captcha_id: '123', captcha_image: 'data:image/svg+xml;base64,xxx' } }
     })
@@ -52,10 +52,38 @@ describe('LoginView.vue', () => {
     const wrapper = mount(LoginView)
 
     const passwordInput = wrapper.find('#password')
-    expect(passwordInput.attributes('type')).toBe('password')
+    const toggleButton = wrapper.find('.toggle-password')
 
-    await wrapper.find('.toggle-password').trigger('click')
+    // Initial state: password hidden (type="password")
+    expect(passwordInput.attributes('type')).toBe('password')
+    expect(toggleButton.find('line').exists()).toBe(true) // eye-off line slash
+
+    // Click to show password
+    await toggleButton.trigger('click')
     expect(passwordInput.attributes('type')).toBe('text')
+    expect(toggleButton.find('line').exists()).toBe(false) // open eye without line slash
+
+    // Click again to hide password
+    await toggleButton.trigger('click')
+    expect(passwordInput.attributes('type')).toBe('password')
+    expect(toggleButton.find('line').exists()).toBe(true)
+  })
+
+  it('does not render "Lihat Password" checkbox and renders "Bantuan Login?" link', () => {
+    api.get.mockResolvedValueOnce({
+      data: { data: { captcha_id: '123', captcha_image: 'data:image/svg+xml;base64,xxx' } }
+    })
+
+    const wrapper = mount(LoginView)
+
+    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(wrapper.find('.checkbox-container').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Lihat Password')
+
+    const helpLink = wrapper.find('.help-link')
+    expect(helpLink.exists()).toBe(true)
+    expect(helpLink.text()).toBe('Bantuan Login?')
+    expect(wrapper.find('.form-options').exists()).toBe(true)
   })
 
   it('submits form to auth store', async () => {
