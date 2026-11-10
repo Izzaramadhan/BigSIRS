@@ -1,87 +1,118 @@
-# Panduan Onboarding & Setup Lokal BigSIRS Rebuild
+# Panduan Menjalankan & Onboarding Project BigSIRS
 
-Dokumentasi resmi ini ditujukan bagi pengembang yang baru pertama kali melakukan *clone* repositori **BigSIRS**. Panduan ini mencakup alur instalasi dari awal (*zero to running*), mulai dari konfigurasi *environment*, kontainer database Docker, migrasi & seeder Laravel 13, sinkronisasi data master riil dari database *legacy*, hingga menjalankan antarmuka web Vue 3 / Vite pada *localhost*.
+Dokumentasi resmi ini menjelaskan arsitektur terbaru **BigSIRS** serta panduan langkah demi langkah untuk menjalankan project secara lokal dari awal (*zero to running*), baik menggunakan **Full Docker Compose** (direkomendasikan) maupun **Mode Hybrid** (MySQL di Docker, Laravel & Vite di host).
+
+> [!IMPORTANT]
+> **Pembaruan Arsitektur Terbaru (Direct Legacy DB Access):**  
+> BigSIRS saat ini sudah terhubung **langsung** ke database asli SIMRS (`simrs_legacy`) untuk seluruh modul **Master Data**, **Lookups**, dan **Logistik Farmasi** (`USE_DIRECT_LEGACY=true` secara default). Setelah database `simrs_legacy` di-restore, **Anda tidak lagi wajib menjalankan perintah sinkronisasi `php artisan legacy:import-all`**.
 
 ---
 
 ## Daftar Isi
-1. [Arsitektur & Port Layanan](#1-arsitektur--port-layanan)
+1. [Arsitektur Layanan, Port & Status Modul](#1-arsitektur-layanan-port--status-modul)
 2. [Prasyarat Sistem (Prerequisites)](#2-prasyarat-sistem-prerequisites)
 3. [Langkah 1: Persiapan Environment File (.env)](#langkah-1-persiapan-environment-file-env)
-4. [Langkah 2: Menjalankan Kontainer Database (Docker)](#langkah-2-menjalankan-kontainer-database-docker)
-5. [Langkah 3: Setup & Inisialisasi Backend (Laravel 13)](#langkah-3-setup--inisialisasi-backend-laravel-13)
-6. [Langkah 4: Sinkronisasi Data Master dari Database Legacy (Wajib untuk Data Awal)](#langkah-4-sinkronisasi-data-master-dari-database-legacy-wajib-untuk-data-awal)
-7. [Langkah 5: Menjalankan Server Backend](#langkah-5-menjalankan-server-backend)
-8. [Langkah 6: Setup & Menjalankan Frontend (Vue 3 / Vite)](#langkah-6-setup--menjalankan-frontend-vue-3--vite)
-9. [Kredensial Login Sistem](#kredensial-login-sistem)
-10. [Rangkuman Troubleshooting Cepat](#rangkuman-troubleshooting-cepat)
+4. [Langkah 2: Menjalankan Container (Pilih Opsi A atau B)](#langkah-2-menjalankan-container-pilih-opsi-a-atau-b)
+5. [Langkah 3: Restore Database `simrs_legacy` & Migrasi `bigsirs_dev`](#langkah-3-restore-database-simrs_legacy--migrasi-bigsirs_dev)
+6. [Langkah 4: Menjalankan Server & Login Aplikasi](#langkah-4-menjalankan-server--login-aplikasi)
+7. [Pengujian (Test), Lint & Reset Cache](#pengujian-test-lint--reset-cache)
+8. [Mode Opsional: Sinkronisasi Manual ke `bigsirs_dev`](#mode-opsional-sinkronisasi-manual-ke-bigsirs_dev)
+9. [Rangkuman Troubleshooting Cepat](#rangkuman-troubleshooting-cepat)
 
 ---
 
-## 1. Arsitektur & Port Layanan
+## 1. Arsitektur Layanan, Port & Status Modul
 
-Aplikasi berjalan pada lingkungan lokal menggunakan konfigurasi port berikut:
+### Port & Komponen Aplikasi
+| Komponen | Service Compose | Teknologi / Image | Port Host | Akses / Keterangan |
+| :--- | :--- | :--- | :--- | :--- |
+| **Frontend Web** | `frontend` | Vue 3 + Vite 8 (`node:24-alpine`) | `5173` | [http://localhost:5173](http://localhost:5173) |
+| **Backend API** | `backend` | Laravel 13 (`php:8.5.12-cli`) | `8000` | [http://127.0.0.1:8000](http://127.0.0.1:8000) (Prefix: `/api/v1`) |
+| **Database** | `mysql` (`bigsirs-mysql`) | MySQL 8.4 | `3307` | Host `127.0.0.1:3307` (`bigsirs_dev` & `simrs_legacy`) |
 
-| Komponen | Teknologi | Port Host | URL / Alamat Akses |
-| :--- | :--- | :--- | :--- |
-| **Frontend Web** | Vue 3 + Vite | `5173` | [http://localhost:5173](http://localhost:5173) |
-| **Backend API** | Laravel 13 (PHP 8.3+) | `8000` | [http://127.0.0.1:8000](http://127.0.0.1:8000) (Prefix: `/api/v1`) |
-| **Database Kontainer** | MySQL 8.4 (Docker) | `3307` | `127.0.0.1:3307` (Database: `bigsirs_dev` & `simrs_legacy`) |
+### Peran Kedua Database
+* **`simrs_legacy` (Koneksi `legacy`)**: Database utama SIMRS asli yang diakses langsung (baca & tulis) oleh **Master Data**, **Lookups**, dan **Logistik Farmasi** (`Faktur`, `Mutasi`, `Stok Opname`, `Pengeluaran Barang`, `Penjualan Bebas`).
+* **`bigsirs_dev` (Koneksi default `mysql`)**: Database aplikasi Laravel baru untuk autentikasi (`users`), token Sanctum (`personal_access_tokens`), `migrations`, `cache`, serta tabel fallback bila mode direct legacy dimatikan.
+
+### Ringkasan Status Modul Saat Ini
+| Grup Menu | Status Koneksi Data |
+| :--- | :--- |
+| **Master Data** (Poliklinik, Data Dasar, Dokter, Pegawai, Tindakan, Lab, Radiologi, Obat/Logistik, Bed, ICD-10, ICD-9-CM, Penanganan Lanjutan) | Terhubung langsung ke `simrs_legacy` *(kecuali **Ketersediaan Bed SIRS** yang masih prototipe UI)*. |
+| **Logistik Farmasi** (Faktur, Mutasi, Stok Opname, Pengeluaran Barang, Penjualan Bebas) | Terhubung langsung ke `simrs_legacy` (`lgs_faktur`, `lgs_mutasi`, `lgs_log_stok`, `lgs_stok_opname`, `lgs_pengeluaran`). |
+| **Pelayanan Klinis** (Dashboard, Pendaftaran, Admisi, Pemeriksaan, Billing Rawat Jalan) | Masih menggunakan data mock / prototipe frontend. |
+| **Laporan & Pengaturan** | Dinonaktifkan sementara di sidebar (`disabled`). |
 
 ---
 
 ## 2. Prasyarat Sistem (Prerequisites)
 
-Pastikan perangkat lokal Anda telah terpasang perangkat lunak berikut:
-* **Git** (versi terbaru)
-* **Docker Desktop** (versi terbaru, pastikan daemon Docker dalam status **Running**)
-* **PHP** (minimal v8.3, direkomendasikan PHP 8.4/8.5) dengan ekstensi `pdo_mysql`, `mbstring`, `curl`, `openssl`, `zip`.
-* **Composer** (minimal v2.x)
-* **Node.js** (minimal v20.x atau v22.x LTS) & **npm**
+* **Wajib (Semua Mode):**
+  * **Git** versi terbaru
+  * **Docker Desktop** (pastikan daemon Docker sudah dalam status **Running**)
+  * File dump database legacy (`backups/backup_db_simrs_masking.sql` atau dump SQL `simrs_legacy` terbaru dari tim)
+* **Tambahan hanya jika memakai Opsi B (menjalankan Backend/Frontend di Host tanpa container):**
+  * **PHP `^8.5`** (ekstensi: `pdo_mysql`, `intl`, `zip`, `bcmath`, `pcntl`, `mbstring`, `openssl`)
+  * **Composer v2.x**
+  * **Node.js `^22.18.0` atau `>=24.12.0`** & **npm**
 
 ---
 
-## Langkah 1: Persiapan Environment File (.env)
+## Langkah 1: Persiapan Environment File (`.env`)
 
-> ⚠️ **PENTING (Format Encoding .env):**  
-> Seluruh file `.env` wajib tersimpan dalam format **UTF-8 (without BOM)**. Jangan menyalin/mengedit file `.env` menggunakan redirect PowerShell (`>` atau `>>`) tanpa `-Encoding utf8`, karena dapat menghasilkan format UTF-16 yang memicu error null-byte: `Failed to parse dotenv file. Encountered an invalid name at [L\000E\000G\000A...]`.
+> [!WARNING]
+> **Format Encoding `.env` (Penting di Windows!):**  
+> Seluruh file `.env` wajib disimpan dalam format **UTF-8 (without BOM)**. Jangan memakai redirect PowerShell (`>` atau `>>`) tanpa `-Encoding utf8` karena menghasilkan UTF-16 null-byte (`Encountered an invalid name at [L\000E...]`).  
+> Khusus `backend/.env.example`, bagian bawahnya memiliki sisa karakter UTF-16 pada komentar legacy sehingga disarankan memeriksa/merapikan bagian bawah `backend/.env` setelah menyalinnya.
 
-### A. Konfigurasi Docker (Root Folder Proyek)
-Buka terminal di root direktori proyek, buat folder `backups` jika belum ada, lalu salin file konfigurasi:
+### A. Konfigurasi Docker di Root Folder Project
+Buat folder `backups` (taruh file dump SQL `simrs_legacy` di sini), lalu salin `.env.docker.example` menjadi **`.env.docker` dan `.env`** (di root folder, agar perintah `docker compose` tanpa `--env-file` tetap membaca `MYSQL_VOLUME_NAME` dengan benar):
 
 ```powershell
 # Windows PowerShell
 if (-not (Test-Path backups)) { New-Item -ItemType Directory -Path backups }
-copy .env.docker.example .env.docker
+Copy-Item .env.docker.example .env.docker
+Copy-Item .env.docker.example .env
+```
 
-# Linux / macOS
+```bash
+# Linux / macOS / Git Bash
 mkdir -p backups
 cp .env.docker.example .env.docker
+cp .env.docker.example .env
 ```
 
-### B. Konfigurasi Backend Laravel
-Masuk ke folder `backend` dan salin file template:
+Isi standar `.env.docker` & `.env` root:
+```env
+MYSQL_DATABASE=bigsirs_dev
+MYSQL_USER=bigsirs_user
+MYSQL_PASSWORD=change_me
+MYSQL_ROOT_PASSWORD=change_root_password
+MYSQL_VOLUME_NAME=bigsirs_mysql_data
+```
+
+### B. Konfigurasi Backend (`backend/.env`)
+Salin template ke `backend/.env`:
 
 ```powershell
-cd backend
-
-# Windows CMD / PowerShell
-copy .env.example .env
+# Windows PowerShell
+Copy-Item backend\.env.example backend\.env
 
 # Linux / macOS
-cp .env.example .env
-
-# Kembali ke root folder
-cd ..
+cp backend/.env.example backend/.env
 ```
 
-*Verifikasi parameter penting di `backend/.env`:*
+Buka `backend/.env` dan pastikan bagian penting berikut tertulis bersih dalam UTF-8:
+
 ```env
-# Akun Login Admin Development
+APP_NAME=Laravel
+APP_ENV=local
 DEV_ADMIN_USERNAME=admin
 DEV_ADMIN_PASSWORD=12345
+APP_KEY=
+APP_DEBUG=true
+APP_URL=http://localhost:8000
 
-# Koneksi Database Baru (MySQL 8.4 di Container Docker)
+# Koneksi Database Baru (untuk akses dari host gunakan 127.0.0.1:3307)
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3307
@@ -89,7 +120,8 @@ DB_DATABASE=bigsirs_dev
 DB_USERNAME=root
 DB_PASSWORD=change_root_password
 
-# Koneksi Database Legacy (di Container MySQL yang sama)
+# Koneksi Database Legacy SIMRS (Direct Access)
+USE_DIRECT_LEGACY=true
 LEGACY_DB_CONNECTION=mysql
 LEGACY_DB_HOST=127.0.0.1
 LEGACY_DB_PORT=3307
@@ -98,263 +130,219 @@ LEGACY_DB_USERNAME=root
 LEGACY_DB_PASSWORD=change_root_password
 ```
 
-### C. Konfigurasi Frontend (Vue 3 / Vite)
-Masuk ke folder `frontend` dan salin file template:
+> [!NOTE]
+> Jika menjalankan **Opsi A (Full Docker)**, Anda tetap memakai nilai `127.0.0.1:3307` di `backend/.env` (berguna saat menjalankan perintah dari host). Di dalam container `backend`, `docker-compose.yml` otomatis menimpa `DB_HOST=mysql`, `DB_PORT=3306`, `LEGACY_DB_HOST=mysql`, dan `LEGACY_DB_PORT=3306`.
+
+### C. Konfigurasi Frontend (`frontend/.env`)
+Salin template ke `frontend/.env`:
 
 ```powershell
-cd frontend
-
-# Windows CMD / PowerShell
-copy .env.example .env
+# Windows PowerShell
+Copy-Item frontend\.env.example frontend\.env
 
 # Linux / macOS
-cp .env.example .env
-
-# Kembali ke root folder
-cd ..
+cp frontend/.env.example frontend/.env
 ```
 
-*Verifikasi parameter penting di `frontend/.env`:*
+Pastikan isi `frontend/.env`:
 ```env
-# URL API Backend (Wajib menyertakan prefix /api/v1)
 VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
-
-# Aktifkan Mock Dashboard UI agar metrik dan grafik dashboard tampil lengkap
 VITE_USE_DASHBOARD_MOCK=true
 ```
 
 ---
 
-## Langkah 2: Menjalankan Kontainer Database (Docker)
+## Langkah 2: Menjalankan Container (Pilih Opsi A atau B)
 
-Buat volume Docker terlebih dahulu (jika baru pertama kali), lalu jalankan service database MySQL dari root direktori proyek:
-
-> 💡 **PENTING:** Gunakan opsi `mysql` pada perintah `docker compose up` agar hanya kontainer database yang dijalankan. Hal ini mencegah benturan port 8000 dan 5173 dengan server development lokal di host.
+Buat volume persistent MySQL terlebih dahulu (wajib karena `docker-compose.yml` menandainya sebagai `external: true`):
 
 ```powershell
-# 1. Buat volume eksternal jika belum pernah dibuat
 docker volume create bigsirs_mysql_data
-
-# 2. Jalankan kontainer database MySQL
-docker compose --env-file .env.docker up -d mysql
 ```
 
-### Verifikasi Kontainer:
-Periksa apakah kontainer database telah berjalan secara sehat (*healthy*):
+### Opsi A: Full Docker Compose (Direkomendasikan)
+Menjalankan sekaligus container `mysql`, `backend` (Laravel 13 di port `8000`), dan `frontend` (Vite di port `5173`) tanpa perlu menginstal PHP 8.5 atau Node 24 di komputer lokal:
+
 ```powershell
-docker ps
+docker compose up -d --build
 ```
-Pastikan kontainer `bigsirs-mysql` berstatus **Up (healthy)** dan memetakan port `3307:3306`.
 
-### 3. Inisialisasi & Restore Database Legacy (SIMRS Lama)
-Database legacy (`simrs_legacy`) diperlukan untuk sinkronisasi data master riil (Langkah 4). Kontainer MySQL Docker hanya membuat database `bigsirs_dev` secara default. Jalankan perintah berikut dari **root direktori proyek** untuk membuat database `simrs_legacy` dan merestore file dump SQL (`backups/backup_db_simrs_masking.sql`):
+Verifikasi bahwa seluruh layanan berstatus **Up** dan `bigsirs-mysql` sudah **healthy**:
 
 ```powershell
-# Windows PowerShell / CMD
+docker compose ps
+```
+
+### Opsi B: Mode Hybrid (MySQL di Docker, Backend & Frontend di Host)
+Gunakan opsi ini jika Anda ingin menjalankan `php artisan serve` dan `npm run dev` langsung di terminal lokal tanpa container backend/frontend (mencegah benturan port `8000` dan `5173`):
+
+```powershell
+docker compose up -d mysql
+```
+
+Setelah `bigsirs-mysql` berstatus **Up (healthy)**, pasang dependensi lokal di masing-masing folder:
+
+```powershell
+# Install dependensi Backend
+cd backend
+composer install
+cd ..
+
+# Install dependensi Frontend
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+## Langkah 3: Restore Database `simrs_legacy` & Migrasi `bigsirs_dev`
+
+### 1. Restore Database Asli (`simrs_legacy`)
+Pastikan file SQL dump asli sudah diletakkan di folder `backups/` (misalnya `backups/backup_db_simrs_masking.sql`), lalu jalankan dari **root direktori project**:
+
+```powershell
 # a. Buat database simrs_legacy
 docker exec -i bigsirs-mysql mysql -uroot -pchange_root_password -e "CREATE DATABASE IF NOT EXISTS simrs_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-# b. Restore file dump SQL ke database simrs_legacy
-docker exec -i bigsirs-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" simrs_legacy < /backups/backup_db_simrs_masking.sql'
-
-# Linux / macOS
-docker exec -i bigsirs-mysql mysql -uroot -pchange_root_password -e "CREATE DATABASE IF NOT EXISTS simrs_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+# b. Restore file dump SQL ke simrs_legacy
 docker exec -i bigsirs-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" simrs_legacy < /backups/backup_db_simrs_masking.sql'
 ```
-*(Proses restore membutuhkan waktu sekitar 10–20 detik).*
+*(Proses restore biasanya memakan waktu sekitar 10–25 detik tergantung spesifikasi mesin).*
 
----
+### 2. Inisialisasi Skema `bigsirs_dev` & Akun Admin
+Jalankan sesuai mode yang Anda pilih pada Langkah 2:
 
-## Langkah 3: Setup & Inisialisasi Backend (Laravel 13)
+**Jika memakai Opsi A (Full Docker):**
+```powershell
+docker compose exec backend php artisan key:generate
+docker compose exec backend php artisan migrate
+docker compose exec backend php artisan db:seed --class=AdminDevelopmentSeeder
+docker compose exec backend php artisan optimize:clear
+```
 
-Buka terminal dan masuk ke folder `backend`:
-
+**Jika memakai Opsi B (Lokal di Host):**
 ```powershell
 cd backend
-```
-
-### A. Pasang Dependensi PHP
-```powershell
-composer install
-```
-
-### B. Generate Application Key & Bersihkan Cache
-```powershell
 php artisan key:generate
-php artisan config:clear
-```
-
-### C. Jalankan Migrasi Skema & Seeder Admin
-```powershell
-# 1. Bangun seluruh tabel skema sistem BigSIRS baru
 php artisan migrate
-
-# 2. Inisialisasi akun login admin development
 php artisan db:seed --class=AdminDevelopmentSeeder
-```
-*Output sukses: `Admin user seeded successfully.`*
-
----
-
-## Langkah 4: Sinkronisasi Data Master dari Database Legacy (Wajib untuk Data Awal)
-
-Agar modul Master Data langsung terisi dengan data riil (bukan data dummy buatan), jalankan proses sinkronisasi dari database `simrs_legacy` yang sudah terpasang di kontainer Docker.
-
-### Cara Cepat (Rekomendasi - Cukup 1 Baris Perintah):
-Jalankan satu perintah berikut di dalam folder `backend` untuk menyinkronkan seluruh modul secara otomatis dan berurutan:
-
-```powershell
-php artisan legacy:import-all
-```
-*(Catatan: Perintah di atas secara default sengaja melewati data Kelurahan agar proses sinkronisasi awal berjalan cepat, karena terdapat ~75.000+ data kelurahan di seluruh Indonesia).*
-
-**Untuk mengimpor data Kelurahan / Desa:**
-```powershell
-# Jalankan perintah khusus kelurahan (direkomendasikan, tidak perlu mengulang modul lain):
-php artisan legacy:import-villages
-
-# Atau jalankan import-all beserta kelurahan sekaligus:
-php artisan legacy:import-all --with-villages
-```
-*(Proses import kelurahan membutuhkan waktu sekitar 3–7 menit tergantung performa PC).*
-
-<details>
-<summary><b>Klik di sini jika ingin menjalankan sinkronisasi per modul secara manual</b></summary>
-
-```powershell
-# 1. Data Wilayah (Provinsi, Kabupaten, Kecamatan, Kelurahan) & Referensi Dasar
-php artisan legacy:import-references
-
-# 2. Pelayanan Klinis (Poliklinik, Dokter, Jadwal, Pegawai, Jabatan, Penjamin, Jenis Layanan, Asuhan Gizi, Kegiatan, Surat)
-php artisan legacy:import-polyclinics
-php artisan legacy:import-guarantors
-php artisan legacy:import-doctors
-php artisan legacy:import-doctor-specializations
-php artisan legacy:import-doctor-schedules
-php artisan import:legacy-employees
-php artisan import:legacy-positions
-php artisan legacy:import-service-types
-php artisan legacy:import-diet-types
-php artisan legacy:import-activity-types
-php artisan import:legacy-letter-types
-
-# 3. Fasilitas & Tempat Tidur (Gedung, Lantai, Bangsal, Kelas Rawat, Kamar, Bed)
-php artisan legacy:import-buildings
-php artisan legacy:import-floors
-php artisan legacy:import-wards
-php artisan legacy:import-room-classes
-php artisan legacy:import-rooms
-php artisan legacy:import-beds
-
-# 4. Logistik Farmasi (Gudang, Supplier, Satuan, Kategori, Rute, Obat, Paket Obat, Signa)
-php artisan import:legacy-warehouses
-php artisan import:legacy-suppliers
-php artisan import:medicine-categories
-php artisan import:medicine-units
-php artisan import:medicine-routes
-php artisan import:legacy-medicines
-php artisan legacy:import-medication-signas
-php artisan legacy:import-medicine-packages
-php artisan legacy:link-polyclinic-warehouses
-
-# 5. Diagnosis, Prosedur & Penunjang Medis (ICD-10, ICD-9-CM, Tindakan, Lab, Radiologi)
-php artisan legacy:import-icd10
-php artisan legacy:import-icd9-cms
-php artisan legacy:import-procedure-categories
-php artisan legacy:import-tariff-components
-php artisan legacy:import-tariff-types
-php artisan legacy:import-procedures
-php artisan legacy:import-procedure-packages
-php artisan legacy:import-procedure-user-mappings
-php artisan legacy:import-report-groups
-php artisan import:legacy-laboratory-categories
-php artisan import:laboratory-groups
-php artisan import:legacy-laboratory-items
-php artisan import:radiology-types
-php artisan import:radiology-item-groups
-php artisan legacy:import-radiology-categories
-php artisan legacy:import-radiology-groups
-php artisan legacy:import-radiology-items
-php artisan legacy:import-follow-up-handlings
-```
-</details>
-
----
-
-## Langkah 5: Menjalankan Server Backend
-
-Setelah seluruh dependensi dan data selesai disiapkan, bersihkan cache dan jalankan server API Laravel:
-
-```powershell
 php artisan optimize:clear
-php artisan serve
+cd ..
 ```
 
-Backend API sekarang aktif di: **`http://127.0.0.1:8000`**
+*Output sukses seeder:* `Admin user seeded successfully.`
+
+> [!TIP]
+> Tidak perlu menjalankan `php artisan legacy:import-all`. Begitu `simrs_legacy` selesai di-restore, seluruh modul Master Data dan Logistik Farmasi otomatis membaca/menulis langsung ke tabel asli di `simrs_legacy`.
 
 ---
 
-## Langkah 6: Setup & Menjalankan Frontend (Vue 3 / Vite)
+## Langkah 4: Menjalankan Server & Login Aplikasi
 
-Buka jendela terminal baru khusus untuk antarmuka web, lalu masuk ke folder `frontend`:
+### Menjalankan Server
+* **Jika memakai Opsi A (Full Docker):**  
+  Container `backend` dan `frontend` sudah langsung berjalan otomatis setelah `docker compose up -d`.
+  *(Jika sebelumnya Anda baru menjalankan `key:generate`, cukup lanjut akses aplikasi atau jalankan `docker compose restart backend` bila konfigurasi belum terbaca).*
+* **Jika memakai Opsi B (Lokal di Host):**  
+  Buka **2 terminal terpisah** dari root project:
+  ```powershell
+  # Terminal 1 - Backend API (port 8000)
+  cd backend
+  php artisan serve
+  ```
+  ```powershell
+  # Terminal 2 - Frontend Web (port 5173)
+  cd frontend
+  npm run dev
+  ```
 
-```powershell
-cd frontend
-```
-
-### A. Pasang Dependensi Node.js
-```powershell
-npm install
-```
-
-### B. Jalankan Development Server
-```powershell
-npm run dev
-```
-
-Aplikasi web sekarang aktif dan dapat dibuka di: **`http://localhost:5173`**
-
----
-
-## Kredensial Login Sistem
-
-Buka browser di **[http://localhost:5173](http://localhost:5173)**:
+### Akses & Kredensial Login
+Buka browser ke **[http://localhost:5173](http://localhost:5173)**:
 
 * **Username:** `admin`
 * **Password:** `12345`
-* **Security Code / CAPTCHA:** Ketik 5 karakter CAPTCHA yang tampil pada kotak input.
+* **Security Code / CAPTCHA:** Masukkan 5 karakter CAPTCHA yang tampil di layar.
+
+> [!NOTE]
+> Username `admin` pada `bigsirs_dev.users` otomatis dipetakan ke `simrs_legacy.tbl_user` (`id = 103`) saat aplikasi mencatat kolom audit `id_user` ke database asli. Jika membuat user baru di `bigsirs_dev.users`, pastikan `username`-nya juga terdaftar di `simrs_legacy.tbl_user`.
 
 ---
 
-## Protokol Reset Data / Cache Tampilan
+## Pengujian (Test), Lint & Reset Cache
 
-Apabila Anda baru saja memperbarui data atau file environment namun tampilan di browser belum ter-update:
+### Menjalankan Automated Test & Lint
+```powershell
+# Backend PHPUnit / Laravel Test (Opsi A - Docker)
+docker compose exec backend php artisan test
 
-1. **Hard Refresh Browser:** Tekan `Ctrl + Shift + R` (Windows) atau `Cmd + Shift + R` (macOS).
-2. **Bersihkan Cache Backend:**
+# Backend Test (Opsi B - Host)
+cd backend
+php artisan test
+
+# Frontend Unit Test, Lint & Build (Opsi A - Docker)
+docker compose exec frontend npm run test:unit -- --run
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run build
+
+# Frontend (Opsi B - Host)
+cd frontend
+npm run test:unit -- --run
+npm run lint
+npm run build
+```
+
+### Protokol Reset Cache Saat Update Kode / `.env`
+1. **Hard Refresh Browser:** `Ctrl + Shift + R` (Windows/Linux) atau `Cmd + Shift + R` (macOS).
+2. **Bersihkan Cache Config Laravel:**
    ```powershell
-   cd backend
-   php artisan optimize:clear
+   # Docker
+   docker compose exec backend php artisan optimize:clear
+
+   # Host
+   cd backend; php artisan optimize:clear
    ```
-3. **Restart Vite Server dengan Flag Pembersih Cache:**
+3. **Jika ada perubahan `composer.json` / `package.json` di mode Docker:**  
+   Rebuild image agar named volume (`backend_vendor` / `frontend_node_modules`) ikut diperbarui:
    ```powershell
-   cd frontend
-   npm run dev -- --force
+   docker compose up -d --build
    ```
+
+---
+
+## Mode Opsional: Sinkronisasi Manual ke `bigsirs_dev`
+
+Bagian ini **hanya diperlukan** jika Anda sengaja mematikan akses langsung (`USE_DIRECT_LEGACY=false` di `backend/.env`) dan ingin menyalin data master dari `simrs_legacy` ke `bigsirs_dev`:
+
+<details>
+<summary><b>Klik untuk melihat perintah import legacy ke bigsirs_dev (tidak perlu untuk mode Direct Legacy)</b></summary>
+
+Jalankan di dalam container (`docker compose exec backend ...`) atau folder `backend/`:
+
+```powershell
+# Impor semua master data kecuali kelurahan (~75.000+ baris)
+php artisan legacy:import-all
+
+# Atau impor kelurahan saja / seluruhnya termasuk kelurahan
+php artisan legacy:import-villages
+php artisan legacy:import-all --with-villages
+```
+
+</details>
 
 ---
 
 ## Rangkuman Troubleshooting Cepat
 
-| Pesan Kendala | Akar Masalah | Solusi Cepat |
+| Gejala / Pesan Error | Penyebab | Solusi |
 | :--- | :--- | :--- |
-| `Conflict. The container name "/bigsirs-mysql" is already in use` | Kontainer lama tertinggal di daemon Docker | Jalankan `docker rm -f bigsirs-mysql` lalu jalankan kembali `docker compose --env-file .env.docker up -d mysql`. |
-| `Bind for 0.0.0.0:8000 failed: port is already allocated` | Service backend Docker ikut menyala saat `compose up` | Hentikan service backend kontainer dengan `docker compose --env-file .env.docker stop backend frontend`, atau jalankan hanya `docker compose up -d mysql`. |
-| `Failed to parse dotenv file. Encountered an invalid name at [L\000E...]` | File `.env` tersimpan dalam format UTF-16 (null-byte) | Salin ulang dari `.env.example` yang sudah bersih dan pastikan editor menyimpan dengan format **UTF-8 without BOM**. |
-| `SQLSTATE[HY000] [1045] Access denied for user 'root'` | Password MySQL di `backend/.env` tidak sesuai kontainer | Samakan `DB_PASSWORD=change_root_password` sesuai `MYSQL_ROOT_PASSWORD` di `.env.docker`, lalu jalankan `php artisan config:clear`. |
-| `SQLSTATE[HY000] [1049] Unknown database 'simrs_legacy'` | Database legacy belum dibuat atau direstore di kontainer MySQL | Jalankan perintah pembuatan database `simrs_legacy` dan restore dump SQL pada Langkah 2 (Bagian 3). |
-| `DEV_ADMIN_USERNAME atau DEV_ADMIN_PASSWORD belum diatur di .env. Seeder diabaikan.` | Variabel admin kosong di `backend/.env` | Pastikan `DEV_ADMIN_USERNAME=admin` dan `DEV_ADMIN_PASSWORD=12345` terisi di `backend/.env`, lalu jalankan ulang `php artisan db:seed --class=AdminDevelopmentSeeder`. |
-| `POST http://localhost:8000/api/auth/login 404 (Not Found)` | `VITE_API_BASE_URL` di `frontend/.env` belum menyertakan `/v1` | Ubah menjadi `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` dan restart Vite (`npm run dev`). |
-| `Data dashboard belum terhubung` / Tampilan dashboard kosong | Variabel mock dashboard disetel false | Ubah menjadi `VITE_USE_DASHBOARD_MOCK=true` pada `frontend/.env` lalu restart Vite server. |
-| `Tabel Master Data (Kabupaten/Kecamatan/Obat) kosong` | Perintah sinkronisasi legacy belum dijalankan | Jalankan perintah import pada Langkah 4, lalu lakukan Hard Refresh di browser (`Ctrl + Shift + R`). |
-| `VITE_API_BASE_URL belum dikonfigurasi` | File `frontend/.env` belum dibuat | Salin `frontend/.env.example` ke `frontend/.env`, verifikasi nilainya, dan jalankan `npm run dev`. |
+| `The "MYSQL_VOLUME_NAME" variable is not set` | File `.env` di root folder belum ada saat menjalankan `docker compose` | Salin `.env.docker.example` ke `.env` dan `.env.docker` di root, lalu buat volume `docker volume create bigsirs_mysql_data`. |
+| `Conflict. The container name "/bigsirs-mysql" is already in use` | Container lama tertinggal di Docker | Jalankan `docker rm -f bigsirs-mysql` lalu jalankan `docker compose up -d`. |
+| URL frontend terbuka di `http://localhost:5174` atau port `8000` bentrok | Container `frontend`/`backend` di Docker masih menyala sementara Anda juga menjalankan `npm run dev` / `php artisan serve` di host | Pilih salah satu mode: hentikan container (`docker compose stop backend frontend`) jika ingin run di host, atau akses container langsung di port `5173`/`8000`. |
+| `Failed to parse dotenv file. Encountered an invalid name at [L\000E...]` | File `backend/.env` mengandung karakter UTF-16 null-byte (terutama sisa di bawah `backend/.env.example`) | Pastikan `backend/.env` disimpan ulang dalam format **UTF-8 without BOM** sesuai contoh pada Langkah 1B. |
+| `SQLSTATE[HY000] [1045] Access denied` | Password MySQL di `backend/.env` tidak cocok dengan `.env.docker` | Pastikan `DB_PASSWORD` / `LEGACY_DB_PASSWORD` sesuai dengan `MYSQL_ROOT_PASSWORD` di `.env.docker`, lalu jalankan `php artisan optimize:clear`. |
+| `SQLSTATE[HY000] [1049] Unknown database 'simrs_legacy'` | Database `simrs_legacy` belum dibuat/di-restore di `bigsirs-mysql` | Jalankan perintah `CREATE DATABASE` dan restore SQL pada Langkah 3 (Bagian 1). |
+| `Identitas pengguna tidak terdaftar atau tidak dapat dipetakan ke database SIMRS.` | `username` yang login di `bigsirs_dev.users` belum ada di `simrs_legacy.tbl_user` | Pastikan login memakai akun `admin` (`AdminDevelopmentSeeder`) atau pastikan `username` tersedia dan aktif di `simrs_legacy.tbl_user`. |
+| `POST http://localhost:8000/api/auth/login 404` | `VITE_API_BASE_URL` di `frontend/.env` belum menyertakan `/api/v1` | Ubah ke `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` lalu restart server frontend. |
+| `Data dashboard belum terhubung` / Dashboard kosong | `VITE_USE_DASHBOARD_MOCK` masih `false` di `frontend/.env` | Set `VITE_USE_DASHBOARD_MOCK=true` di `frontend/.env` (pada mode Docker compose nilai ini sudah otomatis `true`). |
+| Class/paket Composer atau npm baru tidak ditemukan di Docker | Named volume `backend_vendor` atau `frontend_node_modules` masih menyimpan versi lama | Jalankan `docker compose up -d --build` atau `docker compose exec backend composer install` / `docker compose exec frontend npm ci`. |
