@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -23,12 +24,18 @@ class UpdateRadiologyCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
+        $id = $this->route('radiology_category')?->id ?? $this->route('radiology_category');
+
+        $uniqueRule = LegacyAccess::isAvailable('ref_kategori_rad')
+            ? Rule::unique('legacy.ref_kategori_rad', 'nama')->ignore($id)->whereNull('deleted_at')
+            : Rule::unique('radiology_categories', 'name')->ignore($this->route('radiology_category'));
+
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('radiology_categories', 'name')->ignore($this->route('radiology_category')),
+                $uniqueRule,
             ],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],

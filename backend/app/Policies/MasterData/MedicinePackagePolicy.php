@@ -2,9 +2,7 @@
 
 namespace App\Policies\MasterData;
 
-use App\Models\MasterData\MedicinePackage;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class MedicinePackagePolicy
 {
@@ -13,7 +11,7 @@ class MedicinePackagePolicy
         return true;
     }
 
-    public function view(User $user, MedicinePackage $medicinePackage): bool
+    public function view(User $user, mixed $medicinePackage = null): bool
     {
         return true;
     }
@@ -23,22 +21,22 @@ class MedicinePackagePolicy
         return true;
     }
 
-    public function update(User $user, MedicinePackage $medicinePackage): bool
+    public function update(User $user, mixed $medicinePackage = null): bool
     {
         return true;
     }
 
-    public function delete(User $user, MedicinePackage $medicinePackage): bool
+    public function delete(User $user, mixed $medicinePackage = null): bool
     {
         return true;
     }
 
-    public function restore(User $user, MedicinePackage $medicinePackage): bool
+    public function restore(User $user, mixed $medicinePackage = null): bool
     {
         return true;
     }
 
-    public function forceDelete(User $user, MedicinePackage $medicinePackage): bool
+    public function forceDelete(User $user, mixed $medicinePackage = null): bool
     {
         return true;
     }

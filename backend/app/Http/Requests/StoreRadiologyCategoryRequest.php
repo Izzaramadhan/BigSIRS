@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreRadiologyCategoryRequest extends FormRequest
 {
@@ -22,8 +24,12 @@ class StoreRadiologyCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
+        $uniqueRule = LegacyAccess::isAvailable('ref_kategori_rad')
+            ? Rule::unique('legacy.ref_kategori_rad', 'nama')->whereNull('deleted_at')
+            : 'unique:radiology_categories,name';
+
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:radiology_categories,name'],
+            'name' => ['required', 'string', 'max:255', $uniqueRule],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
             'loinc_code' => ['nullable', 'string', 'max:255'],

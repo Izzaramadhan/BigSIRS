@@ -2,9 +2,8 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyMedicineRoute;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Gate;
-use App\Models\MasterData\MedicineRoute;
 
 class StoreMedicineRouteRequest extends FormRequest
 {
@@ -13,7 +12,7 @@ class StoreMedicineRouteRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return Gate::allows('create', MedicineRoute::class);
+        return $this->user()?->can('create', LegacyMedicineRoute::class) ?? true;
     }
 
     /**
@@ -28,5 +27,13 @@ class StoreMedicineRouteRequest extends FormRequest
             'object_code' => ['nullable', 'string', 'max:50'],
             'is_active' => ['nullable', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => is_string($this->name) ? trim($this->name) : $this->name,
+            'object_code' => is_string($this->object_code) ? trim($this->object_code) : $this->object_code,
+        ]);
     }
 }

@@ -28,8 +28,8 @@ class Icd9CmResource extends JsonResource
             'class_1_tariff' => $this->class_1_tariff !== null ? (float) $this->class_1_tariff : null,
             'class_2_tariff' => $this->class_2_tariff !== null ? (float) $this->class_2_tariff : null,
             'class_3_tariff' => $this->class_3_tariff !== null ? (float) $this->class_3_tariff : null,
-            'created_at' => $this->created_at?->toIso8601String(),
-            'updated_at' => $this->updated_at?->toIso8601String(),
+            'created_at' => $this->created_at instanceof \DateTimeInterface ? $this->created_at->toIso8601String() : $this->created_at,
+            'updated_at' => $this->updated_at instanceof \DateTimeInterface ? $this->updated_at->toIso8601String() : $this->updated_at,
         ];
     }
 }

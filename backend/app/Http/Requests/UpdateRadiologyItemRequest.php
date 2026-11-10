@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -22,9 +23,13 @@ class UpdateRadiologyItemRequest extends FormRequest
      */
     public function rules(): array
     {
+        $groupExists = LegacyAccess::isAvailable('ref_item_rad')
+            ? 'exists:legacy.ref_kelompok_item_rad,id'
+            : 'exists:radiology_item_groups,id';
+
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'radiology_item_group_id' => ['sometimes', 'required', 'integer', 'exists:radiology_item_groups,id'],
+            'radiology_item_group_id' => ['sometimes', 'required', 'integer', $groupExists],
             'is_active' => ['nullable', 'boolean'],
         ];
     }

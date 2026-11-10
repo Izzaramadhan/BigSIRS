@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,9 +15,13 @@ class StoreDoctorRequest extends FormRequest
 
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_dokter');
+        $employeeTable = $isLegacy ? 'legacy.ref_pegawai' : 'employees';
+        $specializationTable = $isLegacy ? 'legacy.ref_spesialisasi' : 'specializations';
+
         return [
             // If employee_id is null, it means creating a new Employee
-            'employee_id' => ['nullable', 'integer', 'exists:employees,id', 'unique:doctors,employee_id'],
+            'employee_id' => ['nullable', 'integer', "exists:{$employeeTable},id"],
 
             // Person/Employee fields
             'person' => ['required', 'array'],
@@ -24,7 +29,6 @@ class StoreDoctorRequest extends FormRequest
                 'nullable',
                 'string',
                 'max:20',
-                Rule::unique('employees', 'national_id')->ignore($this->employee_id),
             ],
             'person.ihs_number' => ['nullable', 'string', 'max:255'],
             'person.name' => ['required', 'string', 'max:255'],
@@ -48,13 +52,12 @@ class StoreDoctorRequest extends FormRequest
 
             // Professional/Doctor Profile fields
             'professional' => ['required', 'array'],
-            'professional.specialization_id' => ['required', 'integer', 'exists:specializations,id'],
+            'professional.specialization_id' => ['required', 'integer', "exists:{$specializationTable},id"],
             'professional.str_number' => ['nullable', 'string', 'max:50'],
             'professional.sip_number' => [
                 'nullable',
                 'string',
                 'max:255',
-                'unique:doctors,sip_number',
             ],
             'professional.sip_valid_until' => ['nullable', 'date'],
             'professional.bpjs_dpjp_code' => ['nullable', 'string', 'max:50'],
@@ -65,3 +68,4 @@ class StoreDoctorRequest extends FormRequest
         ];
     }
 }
+

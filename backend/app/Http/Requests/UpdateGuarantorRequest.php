@@ -3,8 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Enums\GuarantorType;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 
 class UpdateGuarantorRequest extends FormRequest
@@ -22,12 +24,13 @@ class UpdateGuarantorRequest extends FormRequest
         $guarantor = $this->route('guarantor');
         $code = $this->code;
         if ($code === null || trim((string) $code) === '') {
-            $code = $guarantor?->code ?? ('ASR-' . strtoupper(substr(uniqid(), -6)));
+            $code = (is_object($guarantor) ? ($guarantor->code ?? null) : null) ?? ('ASR-' . strtoupper(substr(uniqid(), -6)));
         }
 
         $type = $this->type;
         if ($type === null || trim((string) $type) === '') {
-            $type = $guarantor?->type?->value ?? (filter_var($this->is_government, FILTER_VALIDATE_BOOLEAN)
+            $existingType = is_object($guarantor) && isset($guarantor->type) ? ($guarantor->type instanceof GuarantorType ? $guarantor->type->value : (string) $guarantor->type) : null;
+            $type = $existingType ?? (filter_var($this->is_government, FILTER_VALIDATE_BOOLEAN)
                 ? GuarantorType::Bpjs->value
                 : GuarantorType::Other->value);
         }
@@ -52,12 +55,16 @@ class UpdateGuarantorRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route('guarantor')->id ?? $this->route('guarantor');
+        $id = $this->route('guarantor')?->id ?? $this->route('guarantor');
+
+        $uniqueCodeRule = LegacyAccess::isAvailable('ref_jenis_asuransi')
+            ? Rule::unique('legacy.ref_jenis_asuransi', 'kode')->ignore($id)->whereNull('deleted_at')
+            : Rule::unique('guarantors', 'code')->ignore($id)->whereNull('deleted_at');
 
         return [
-            'code' => ['required', 'string', 'max:30', 'unique:guarantors,code,'.$id],
+            'code' => ['required', 'string', 'max:50', $uniqueCodeRule],
             'name' => ['required', 'string', 'max:150'],
-            'legacy_id' => ['nullable', 'integer', 'unique:guarantors,legacy_id,'.$id],
+            'legacy_id' => ['nullable', 'integer'],
             'type' => ['required', new Enum(GuarantorType::class)],
             'is_active' => ['boolean'],
             'is_government' => ['required', 'boolean'],

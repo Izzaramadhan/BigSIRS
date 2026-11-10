@@ -35,8 +35,8 @@ class InvoiceItemResource extends JsonResource
             'margin' => (float) $this->margin,
             'batchNumber' => $this->batch_number,
             'batch_number' => $this->batch_number,
-            'expiredDate' => $this->expired_date?->format('Y-m-d') ?? $this->expired_date,
-            'expired_date' => $this->expired_date?->format('Y-m-d') ?? $this->expired_date,
+            'expiredDate' => $this->expired_date instanceof \DateTimeInterface ? $this->expired_date->format('Y-m-d') : ($this->expired_date ? substr((string) $this->expired_date, 0, 10) : null),
+            'expired_date' => $this->expired_date instanceof \DateTimeInterface ? $this->expired_date->format('Y-m-d') : ($this->expired_date ? substr((string) $this->expired_date, 0, 10) : null),
             'notes' => $this->notes,
         ];
     }

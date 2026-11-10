@@ -55,12 +55,20 @@ class UpdateInvoiceRequest extends FormRequest
         }
         $isPaid = in_array(strtolower((string) ($rawStatus ?? 'Belum Lunas')), ['lunas', 'paid'], true);
 
+        $isLegacy = \App\Support\LegacyAccess::isAvailable('lgs_faktur');
+        $supplierRule = $isLegacy ? 'exists:legacy.ref_supplier,id' : 'exists:suppliers,id';
+        $warehouseRule = $isLegacy ? 'exists:legacy.ref_gudang,id' : 'exists:warehouses,id';
+        $medicineRule = $isLegacy ? 'exists:legacy.ref_obat,id' : 'exists:medicines,id';
+        $uniqueInvoiceRule = $isLegacy
+            ? Rule::unique('legacy.lgs_faktur', 'nomor')->ignore($invoiceId)
+            : Rule::unique('invoices', 'invoice_number')->ignore($invoiceId);
+
         return [
             'invoice_number' => [
                 'required',
                 'string',
                 'max:100',
-                Rule::unique('invoices', 'invoice_number')->ignore($invoiceId),
+                $uniqueInvoiceRule,
             ],
             'reference_number' => 'nullable|string|max:100',
             'invoice_date' => 'required|date',
@@ -70,8 +78,8 @@ class UpdateInvoiceRequest extends FormRequest
                 'date',
                 'after_or_equal:invoice_date',
             ],
-            'supplier_id' => 'required|exists:suppliers,id',
-            'warehouse_id' => 'nullable|exists:warehouses,id',
+            'supplier_id' => ['required', $supplierRule],
+            'warehouse_id' => ['nullable', $warehouseRule],
             'status' => 'nullable|string|in:Belum Lunas,Lunas,unpaid,paid',
             'tax_type' => 'nullable|string|in:non_tax,ppn,ppn_11,tax',
             'tax_rate' => 'nullable|numeric|min:0',

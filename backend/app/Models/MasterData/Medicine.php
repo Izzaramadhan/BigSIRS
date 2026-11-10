@@ -2,6 +2,9 @@
 
 namespace App\Models\MasterData;
 
+use App\Models\Legacy\LegacyGenericMedicine;
+use App\Models\Legacy\LegacyMedicineCategory;
+use App\Models\Legacy\LegacyMedicineRoute;
 use App\Models\Logistics\StockMovement;
 use App\Models\Logistics\StockMutationItem;
 use App\Models\Logistics\StockOpnameItem;
@@ -42,7 +45,7 @@ class Medicine extends Model
 
     public function category()
     {
-        return $this->belongsTo(MedicineCategory::class, 'medicine_category_id');
+        return $this->belongsTo(LegacyMedicineCategory::class, 'medicine_category_id');
     }
 
     public function classification()
@@ -52,12 +55,12 @@ class Medicine extends Model
 
     public function route()
     {
-        return $this->belongsTo(MedicineRoute::class, 'medicine_route_id');
+        return $this->belongsTo(LegacyMedicineRoute::class, 'medicine_route_id');
     }
 
     public function generic()
     {
-        return $this->belongsTo(GenericMedicine::class, 'generic_medicine_id');
+        return $this->belongsTo(LegacyGenericMedicine::class, 'generic_medicine_id');
     }
 
     public function warehouseStocks()

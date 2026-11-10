@@ -117,6 +117,9 @@ const handleFormSubmit = async (payload) => {
         title: 'Berhasil Disimpan',
         message: 'Data pengeluaran barang berhasil ditambahkan.'
       });
+      if (res.data?.id) {
+        router.push({ name: 'logistics.goods-issues.detail', params: { id: res.data.id } });
+      }
     } else {
       showToast({
         type: 'error',

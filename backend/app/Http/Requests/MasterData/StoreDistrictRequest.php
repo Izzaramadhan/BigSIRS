@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -23,25 +24,40 @@ class StoreDistrictRequest extends FormRequest
 
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_kecamatan');
+
+        $regencyExistsRule = $isLegacy
+            ? Rule::exists('legacy.ref_kabupaten', 'id')->whereNull('deleted_at')
+            : Rule::exists('regencies', 'id')->whereNull('deleted_at');
+
+        $uniqueCodeRule = $isLegacy
+            ? Rule::unique('legacy.ref_kecamatan', 'kode_kecamatan')->whereNull('deleted_at')
+            : Rule::unique('districts', 'code')->whereNull('deleted_at');
+
+        $uniqueNameRule = $isLegacy
+            ? Rule::unique('legacy.ref_kecamatan', 'nama')
+                ->where('id_kabupaten', $this->regency_id)
+                ->whereNull('deleted_at')
+            : Rule::unique('districts', 'name')
+                ->where('regency_id', $this->regency_id)
+                ->whereNull('deleted_at');
+
         return [
             'regency_id' => [
                 'required',
-                'integer',
-                Rule::exists('regencies', 'id')->whereNull('deleted_at'),
+                $regencyExistsRule,
             ],
             'code' => [
                 'nullable',
                 'string',
                 'max:50',
-                Rule::unique('districts', 'code')->whereNull('deleted_at'),
+                $uniqueCodeRule,
             ],
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('districts', 'name')
-                    ->where('regency_id', $this->regency_id)
-                    ->whereNull('deleted_at'),
+                $uniqueNameRule,
             ],
             'is_active' => ['nullable', 'boolean'],
         ];

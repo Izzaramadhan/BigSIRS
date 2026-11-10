@@ -2,7 +2,8 @@
 
 namespace App\Http\Requests\MasterData;
 
-use App\Models\MasterData\GenericMedicine;
+use App\Models\Legacy\LegacyGenericMedicine;
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreGenericMedicineRequest extends FormRequest
@@ -12,7 +13,7 @@ class StoreGenericMedicineRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('create', LegacyGenericMedicine::class) ?? true;
     }
 
     /**
@@ -42,9 +43,11 @@ class StoreGenericMedicineRequest extends FormRequest
                 'max:255',
                 function ($attribute, $value, $fail) {
                     $normalized = strtolower(trim($value));
-                    $exists = GenericMedicine::whereRaw('LOWER(name) = ?', [$normalized])->exists();
-                    if ($exists) {
-                        $fail('Nama generik sudah terdaftar.');
+                    if (LegacyAccess::isAvailable('ref_generik') || app()->environment('testing')) {
+                        $exists = LegacyGenericMedicine::whereRaw('LOWER(nama_objek) = ?', [$normalized])->exists();
+                        if ($exists) {
+                            $fail('Nama generik sudah terdaftar.');
+                        }
                     }
                 },
             ],
@@ -53,13 +56,15 @@ class StoreGenericMedicineRequest extends FormRequest
     }
 
     /**
-     * Custom validation error messages.
+     * Get custom messages for validator errors.
+     *
+     * @return array<string, string>
      */
     public function messages(): array
     {
         return [
             'name.required' => 'Nama generik wajib diisi.',
-            'name.min' => 'Nama generik tidak boleh kosong.',
+            'name.string' => 'Nama generik harus berupa teks.',
             'name.max' => 'Nama generik maksimal 255 karakter.',
         ];
     }

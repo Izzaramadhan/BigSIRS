@@ -17,6 +17,8 @@ class InvoiceResource extends JsonResource
         $supplierName = $this->supplier_name ?: ($this->supplier?->name ?? 'Supplier');
         $supplierCity = $this->supplier_city ?: ($this->supplier?->address ?? '');
 
+        $formatDate = fn ($val) => $val instanceof \DateTimeInterface ? $val->format('Y-m-d') : ($val ? substr((string) $val, 0, 10) : null);
+
         return [
             'id' => $this->id,
             'legacy_id' => $this->legacy_id,
@@ -24,10 +26,10 @@ class InvoiceResource extends JsonResource
             'invoice_number' => $this->invoice_number,
             'referenceNumber' => $this->reference_number,
             'reference_number' => $this->reference_number,
-            'invoiceDate' => $this->invoice_date?->format('Y-m-d') ?? $this->invoice_date,
-            'invoice_date' => $this->invoice_date?->format('Y-m-d') ?? $this->invoice_date,
-            'dueDate' => $this->due_date?->format('Y-m-d') ?? $this->due_date,
-            'due_date' => $this->due_date?->format('Y-m-d') ?? $this->due_date,
+            'invoiceDate' => $formatDate($this->invoice_date),
+            'invoice_date' => $formatDate($this->invoice_date),
+            'dueDate' => $formatDate($this->due_date),
+            'due_date' => $formatDate($this->due_date),
             'supplierId' => $this->supplier_id,
             'supplier_id' => $this->supplier_id,
             'supplierName' => $supplierName,
@@ -48,8 +50,8 @@ class InvoiceResource extends JsonResource
             'taxRate' => (float) ($this->tax_rate ?? 0),
             'tax_rate' => (float) ($this->tax_rate ?? 0),
             'notes' => $this->notes,
-            'paidAt' => $this->paid_at?->format('Y-m-d') ?? $this->paid_at,
-            'paid_at' => $this->paid_at?->format('Y-m-d') ?? $this->paid_at,
+            'paidAt' => $formatDate($this->paid_at),
+            'paid_at' => $formatDate($this->paid_at),
             'subtotalAmount' => (float) $this->subtotal_amount,
             'subtotal_amount' => (float) $this->subtotal_amount,
             'discountAmount' => (float) $this->discount_amount,

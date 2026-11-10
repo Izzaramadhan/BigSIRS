@@ -7,7 +7,9 @@ use App\Http\Requests\Api\V1\MasterData\StoreActivityTypeRequest;
 use App\Http\Requests\Api\V1\MasterData\UpdateActivityTypeRequest;
 use App\Http\Resources\Api\V1\MasterData\ActivityTypeResource;
 use App\Models\ActivityType;
+use App\Models\Legacy\LegacyActivityType;
 use App\Services\MasterData\ActivityTypeService;
+use App\Support\LegacyAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -27,7 +29,7 @@ class ActivityTypeController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = (int) $request->input('per_page', 10);
-        $filters = $request->only(['search', 'parent_id']);
+        $filters = $request->only(['search', 'parent_id', 'is_active']);
 
         $activityTypes = $this->activityTypeService->getPaginated($filters, $perPage);
 
@@ -50,15 +52,25 @@ class ActivityTypeController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(ActivityType $activityType): ActivityTypeResource
+    public function show($activityType): ActivityTypeResource
     {
+        $id = $activityType instanceof LegacyActivityType || $activityType instanceof ActivityType ? $activityType->id : $activityType;
+        if (LegacyAccess::isAvailable('ref_jenis_kegiatan')) {
+            $legacy = LegacyActivityType::with('parent')->findOrFail($id);
+            return new ActivityTypeResource($legacy);
+        }
+
+        if (! ($activityType instanceof ActivityType)) {
+            $activityType = ActivityType::with('parent')->findOrFail($id);
+        }
+
         return new ActivityTypeResource($activityType);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateActivityTypeRequest $request, ActivityType $activityType): JsonResponse
+    public function update(UpdateActivityTypeRequest $request, $activityType): JsonResponse
     {
         $activityType = $this->activityTypeService->update($activityType, $request->validated());
 
@@ -68,12 +80,10 @@ class ActivityTypeController extends Controller
         ]);
     }
 
-
-
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(ActivityType $activityType): JsonResponse
+    public function destroy($activityType): JsonResponse
     {
         $this->activityTypeService->delete($activityType);
 
@@ -88,14 +98,17 @@ class ActivityTypeController extends Controller
     public function lookup(Request $request): JsonResponse
     {
         $excludeId = $request->input('exclude_id');
-        $query = ActivityType::query();
 
-        $all = $query->orderBy('name', 'asc')->get();
+        if (LegacyAccess::isAvailable('ref_jenis_kegiatan')) {
+            $all = LegacyActivityType::query()->orderBy('nama', 'asc')->get();
+        } else {
+            $all = ActivityType::query()->orderBy('name', 'asc')->get();
+        }
 
         $descendants = [];
         if ($excludeId) {
-            $descendants[] = $excludeId;
-            $this->getDescendantsIds($all, $excludeId, $descendants);
+            $descendants[] = (int) $excludeId;
+            $this->getDescendantsIds($all, (int) $excludeId, $descendants);
         }
 
         // Build flat tree with indentation

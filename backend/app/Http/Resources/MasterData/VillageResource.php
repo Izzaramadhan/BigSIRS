@@ -20,11 +20,11 @@ class VillageResource extends JsonResource
             'code' => $this->code,
             'name' => $this->name,
             'district_id' => $this->district_id,
-            'district_name' => $this->whenLoaded('district', fn () => $this->district->name),
-            'regency_id' => $this->whenLoaded('district', fn () => $this->district->regency_id),
+            'district_name' => $this->whenLoaded('district', fn () => $this->district?->name),
+            'regency_id' => $this->whenLoaded('district', fn () => $this->district?->regency_id),
             'regency_name' => $this->whenLoaded('district', function () {
-                if ($this->district->relationLoaded('regency')) {
-                    return $this->district->regency->name;
+                if ($this->district && $this->district->relationLoaded('regency')) {
+                    return $this->district->regency?->name;
                 }
 
                 return null;

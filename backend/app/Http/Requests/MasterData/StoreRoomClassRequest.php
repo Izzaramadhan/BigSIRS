@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyRoomClass;
 use App\Models\MasterData\RoomClass;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -47,17 +49,19 @@ class StoreRoomClassRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_kelas');
+
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                function ($attribute, $value, $fail) {
+                function ($attribute, $value, $fail) use ($isLegacy) {
                     if ($value) {
                         $normalized = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
-                        $exists = RoomClass::whereNull('deleted_at')
-                            ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
-                            ->exists();
+                        $exists = $isLegacy
+                            ? LegacyRoomClass::whereRaw('LOWER(TRIM(nama)) = ?', [$normalized])->exists()
+                            : RoomClass::whereNull('deleted_at')->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])->exists();
 
                         if ($exists) {
                             $fail('Nama kelas sudah digunakan.');
@@ -69,12 +73,12 @@ class StoreRoomClassRequest extends FormRequest
                 'required',
                 'string',
                 'max:50',
-                function ($attribute, $value, $fail) {
+                function ($attribute, $value, $fail) use ($isLegacy) {
                     if ($value) {
                         $normalized = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
-                        $exists = RoomClass::whereNull('deleted_at')
-                            ->whereRaw('LOWER(TRIM(code)) = ?', [$normalized])
-                            ->exists();
+                        $exists = $isLegacy
+                            ? LegacyRoomClass::whereRaw('LOWER(TRIM(kode)) = ?', [$normalized])->exists()
+                            : RoomClass::whereNull('deleted_at')->whereRaw('LOWER(TRIM(code)) = ?', [$normalized])->exists();
 
                         if ($exists) {
                             $fail('Kode kelas sudah digunakan.');
@@ -93,9 +97,6 @@ class StoreRoomClassRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [

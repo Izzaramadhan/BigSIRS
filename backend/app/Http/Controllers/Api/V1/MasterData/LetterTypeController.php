@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\MasterData\StoreLetterTypeRequest;
 use App\Http\Requests\Api\V1\MasterData\UpdateLetterTypeRequest;
 use App\Http\Resources\Api\V1\MasterData\LetterTypeResource;
+use App\Models\Legacy\LegacyLetterType;
 use App\Models\LetterType;
 use App\Services\MasterData\LetterTypeService;
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +28,7 @@ class LetterTypeController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', LetterType::class);
+        $this->authorize('viewAny', LegacyAccess::isAvailable('ref_jenis_surat') ? LegacyLetterType::class : LetterType::class);
         $perPage = (int) $request->input('per_page', 10);
         $filters = $request->only(['search', 'is_active', 'sort_by', 'sort_dir']);
 
@@ -45,14 +47,25 @@ class LetterTypeController extends Controller
         ], 201);
     }
 
-    public function show(LetterType $letterType): LetterTypeResource
+    public function show($letterType): LetterTypeResource
     {
+        $id = $letterType instanceof LegacyLetterType || $letterType instanceof LetterType ? $letterType->id : $letterType;
+        if (LegacyAccess::isAvailable('ref_jenis_surat')) {
+            $legacy = LegacyLetterType::findOrFail($id);
+            $this->authorize('view', $legacy);
+            return new LetterTypeResource($legacy);
+        }
+
+        if (! ($letterType instanceof LetterType)) {
+            $letterType = LetterType::findOrFail($id);
+        }
+
         $this->authorize('view', $letterType);
 
         return new LetterTypeResource($letterType);
     }
 
-    public function update(UpdateLetterTypeRequest $request, LetterType $letterType): JsonResponse
+    public function update(UpdateLetterTypeRequest $request, $letterType): JsonResponse
     {
         $letterType = $this->letterTypeService->update($letterType, $request->validated());
 
@@ -62,25 +75,31 @@ class LetterTypeController extends Controller
         ]);
     }
 
-    public function updateStatus(Request $request, LetterType $letterType): JsonResponse
+    public function updateStatus(Request $request, $letterType): JsonResponse
     {
-        $this->authorize('update', $letterType);
+        $id = $letterType instanceof LegacyLetterType || $letterType instanceof LetterType ? $letterType->id : $letterType;
+        $target = LegacyAccess::isAvailable('ref_jenis_surat') ? LegacyLetterType::findOrFail($id) : ($letterType instanceof LetterType ? $letterType : LetterType::findOrFail($id));
+
+        $this->authorize('update', $target);
         $request->validate([
             'is_active' => 'required|boolean',
         ]);
 
-        $letterType = $this->letterTypeService->updateStatus($letterType, $request->is_active);
+        $updated = $this->letterTypeService->updateStatus($target, filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
 
         return response()->json([
             'message' => 'Status surat berhasil diperbarui',
-            'data' => new LetterTypeResource($letterType),
+            'data' => new LetterTypeResource($updated),
         ]);
     }
 
-    public function destroy(LetterType $letterType): JsonResponse
+    public function destroy($letterType): JsonResponse
     {
-        $this->authorize('delete', $letterType);
-        $this->letterTypeService->delete($letterType);
+        $id = $letterType instanceof LegacyLetterType || $letterType instanceof LetterType ? $letterType->id : $letterType;
+        $target = LegacyAccess::isAvailable('ref_jenis_surat') ? LegacyLetterType::findOrFail($id) : ($letterType instanceof LetterType ? $letterType : LetterType::findOrFail($id));
+
+        $this->authorize('delete', $target);
+        $this->letterTypeService->delete($target);
 
         return response()->json([
             'message' => 'Surat berhasil dihapus',

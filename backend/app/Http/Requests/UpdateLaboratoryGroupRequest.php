@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -22,8 +23,16 @@ class UpdateLaboratoryGroupRequest extends FormRequest
      */
     public function rules(): array
     {
+        $categoryExists = LegacyAccess::isAvailable('ref_grup_lab')
+            ? 'exists:legacy.ref_kategori_lab,id'
+            : 'exists:laboratory_categories,id';
+
+        $itemExists = LegacyAccess::isAvailable('ref_grup_lab')
+            ? 'exists:legacy.ref_item_lab,id'
+            : 'exists:laboratory_items,id';
+
         return [
-            'laboratory_category_id' => ['required', 'integer', 'exists:laboratory_categories,id'],
+            'laboratory_category_id' => ['required', 'integer', $categoryExists],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'price' => ['nullable', 'numeric', 'min:0'],
@@ -34,7 +43,7 @@ class UpdateLaboratoryGroupRequest extends FormRequest
             'snomed_code' => ['nullable', 'string', 'max:100'],
             'snomed_url' => ['nullable', 'url', 'max:255'],
             'laboratory_item_ids' => ['required', 'array', 'min:1'],
-            'laboratory_item_ids.*' => ['required', 'integer', 'distinct', 'exists:laboratory_items,id'],
+            'laboratory_item_ids.*' => ['required', 'integer', 'distinct', $itemExists],
         ];
     }
 

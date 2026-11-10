@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\ActivityType;
 use App\Models\User;
 
 class ActivityTypePolicy
@@ -18,7 +17,7 @@ class ActivityTypePolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, ActivityType $activityType): bool
+    public function view(User $user, mixed $activityType = null): bool
     {
         return true;
     }
@@ -34,7 +33,7 @@ class ActivityTypePolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, ActivityType $activityType): bool
+    public function update(User $user, mixed $activityType = null): bool
     {
         return true;
     }
@@ -42,7 +41,7 @@ class ActivityTypePolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, ActivityType $activityType): bool
+    public function delete(User $user, mixed $activityType = null): bool
     {
         return true;
     }

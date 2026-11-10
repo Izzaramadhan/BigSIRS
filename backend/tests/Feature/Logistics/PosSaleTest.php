@@ -7,7 +7,6 @@ use App\Models\Logistics\PosSaleItem;
 use App\Models\Logistics\StockMovement;
 use App\Models\Logistics\WarehouseStock;
 use App\Models\MasterData\Medicine;
-use App\Models\MasterData\MedicineCategory;
 use App\Models\MasterData\MedicineUnit;
 use App\Models\MasterData\Warehouse;
 use App\Models\User;
@@ -51,13 +50,11 @@ class PosSaleTest extends TestCase
 
         $unitStrip = MedicineUnit::create(['name' => 'Strip']);
         $unitBotol = MedicineUnit::create(['name' => 'Botol']);
-        $categoryOtc = MedicineCategory::create(['name' => 'Obat Bebas']);
 
         $this->medicineA = Medicine::create([
             'code' => 'MED-OTC-001',
             'name' => 'Paracetamol 500 mg Tablet',
             'medicine_unit_id' => $unitStrip->id,
-            'medicine_category_id' => $categoryOtc->id,
             'selling_price_per_unit' => 15000,
             'is_active' => true,
         ]);
@@ -66,7 +63,6 @@ class PosSaleTest extends TestCase
             'code' => 'MED-OTC-002',
             'name' => 'Mylanta Cair 150 ml',
             'medicine_unit_id' => $unitBotol->id,
-            'medicine_category_id' => $categoryOtc->id,
             'selling_price_per_unit' => 48000,
             'is_active' => true,
         ]);

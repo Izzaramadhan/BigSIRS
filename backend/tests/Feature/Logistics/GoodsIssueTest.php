@@ -150,75 +150,80 @@ class GoodsIssueTest extends TestCase
      */
     public function test_summary_calculates_completed_transactions_correctly(): void
     {
-        Sanctum::actingAs($this->user);
+        Carbon::setTestNow(Carbon::parse('2026-10-15 12:00:00'));
+        try {
+            Sanctum::actingAs($this->user);
 
-        // Completed issue today
-        $issueToday = GoodsIssue::create([
-            'issue_number' => 'OUT-202610-0101',
-            'issue_date' => Carbon::today()->setTime(10, 0),
-            'warehouse_id' => $this->warehouseMain->id,
-            'officer_name' => 'Apt. Budi Santoso',
-            'purpose' => 'Kebutuhan Internal',
-            'purpose_code' => 'internal',
-            'status' => 'completed',
-            'total_quantity' => 20,
-            'created_by' => $this->user->id,
-        ]);
-        GoodsIssueItem::create([
-            'goods_issue_id' => $issueToday->id,
-            'warehouse_stock_id' => $this->stockA->id,
-            'medicine_id' => $this->medicineA->id,
-            'medicine_name' => $this->medicineA->name,
-            'quantity' => 20,
-            'unit' => 'Tablet',
-        ]);
+            // Completed issue today
+            $issueToday = GoodsIssue::create([
+                'issue_number' => 'OUT-202610-0101',
+                'issue_date' => Carbon::today()->setTime(10, 0),
+                'warehouse_id' => $this->warehouseMain->id,
+                'officer_name' => 'Apt. Budi Santoso',
+                'purpose' => 'Kebutuhan Internal',
+                'purpose_code' => 'internal',
+                'status' => 'completed',
+                'total_quantity' => 20,
+                'created_by' => $this->user->id,
+            ]);
+            GoodsIssueItem::create([
+                'goods_issue_id' => $issueToday->id,
+                'warehouse_stock_id' => $this->stockA->id,
+                'medicine_id' => $this->medicineA->id,
+                'medicine_name' => $this->medicineA->name,
+                'quantity' => 20,
+                'unit' => 'Tablet',
+            ]);
 
-        // Completed damaged issue this month
-        $issueDamaged = GoodsIssue::create([
-            'issue_number' => 'OUT-202610-0102',
-            'issue_date' => Carbon::now()->subDays(2),
-            'warehouse_id' => $this->warehouseMain->id,
-            'officer_name' => 'Apt. Budi Santoso',
-            'purpose' => 'Barang Rusak',
-            'purpose_code' => 'damaged',
-            'status' => 'completed',
-            'total_quantity' => 5,
-            'created_by' => $this->user->id,
-        ]);
-        GoodsIssueItem::create([
-            'goods_issue_id' => $issueDamaged->id,
-            'warehouse_stock_id' => $this->stockA->id,
-            'medicine_id' => $this->medicineA->id,
-            'medicine_name' => $this->medicineA->name,
-            'quantity' => 5,
-            'unit' => 'Tablet',
-        ]);
+            // Completed damaged issue this month
+            $issueDamaged = GoodsIssue::create([
+                'issue_number' => 'OUT-202610-0102',
+                'issue_date' => Carbon::now()->subDays(2),
+                'warehouse_id' => $this->warehouseMain->id,
+                'officer_name' => 'Apt. Budi Santoso',
+                'purpose' => 'Barang Rusak',
+                'purpose_code' => 'damaged',
+                'status' => 'completed',
+                'total_quantity' => 5,
+                'created_by' => $this->user->id,
+            ]);
+            GoodsIssueItem::create([
+                'goods_issue_id' => $issueDamaged->id,
+                'warehouse_stock_id' => $this->stockA->id,
+                'medicine_id' => $this->medicineA->id,
+                'medicine_name' => $this->medicineA->name,
+                'quantity' => 5,
+                'unit' => 'Tablet',
+            ]);
 
-        // Draft issue should NOT be counted in summary
-        $issueDraft = GoodsIssue::create([
-            'issue_number' => 'OUT-202610-0103',
-            'issue_date' => Carbon::today()->setTime(11, 0),
-            'warehouse_id' => $this->warehouseMain->id,
-            'officer_name' => 'Apt. Budi Santoso',
-            'purpose' => 'Kebutuhan Internal',
-            'status' => 'draft',
-            'total_quantity' => 50,
-            'created_by' => $this->user->id,
-        ]);
-        GoodsIssueItem::create([
-            'goods_issue_id' => $issueDraft->id,
-            'warehouse_stock_id' => $this->stockA->id,
-            'medicine_id' => $this->medicineA->id,
-            'medicine_name' => $this->medicineA->name,
-            'quantity' => 50,
-            'unit' => 'Tablet',
-        ]);
+            // Draft issue should NOT be counted in summary
+            $issueDraft = GoodsIssue::create([
+                'issue_number' => 'OUT-202610-0103',
+                'issue_date' => Carbon::today()->setTime(11, 0),
+                'warehouse_id' => $this->warehouseMain->id,
+                'officer_name' => 'Apt. Budi Santoso',
+                'purpose' => 'Kebutuhan Internal',
+                'status' => 'draft',
+                'total_quantity' => 50,
+                'created_by' => $this->user->id,
+            ]);
+            GoodsIssueItem::create([
+                'goods_issue_id' => $issueDraft->id,
+                'warehouse_stock_id' => $this->stockA->id,
+                'medicine_id' => $this->medicineA->id,
+                'medicine_name' => $this->medicineA->name,
+                'quantity' => 50,
+                'unit' => 'Tablet',
+            ]);
 
-        $response = $this->getJson('/api/v1/logistics/goods-issues/summary');
-        $response->assertStatus(200);
-        $response->assertJsonPath('data.todayIssues', '1');
-        $response->assertJsonPath('data.totalItemOut', '25');
-        $response->assertJsonPath('data.damagedItem', '5');
+            $response = $this->getJson('/api/v1/logistics/goods-issues/summary');
+            $response->assertStatus(200);
+            $response->assertJsonPath('data.todayIssues', '1');
+            $response->assertJsonPath('data.totalItemOut', '25');
+            $response->assertJsonPath('data.damagedItem', '5');
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     /**

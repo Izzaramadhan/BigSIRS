@@ -28,7 +28,7 @@ class StockMutationItemResource extends JsonResource
             'formattedUnitPrice' => 'Rp'.number_format($unitPrice, 0, ',', '.'),
             'formattedSubtotal' => 'Rp'.number_format($subtotal, 0, ',', '.'),
             'batchNumber' => $this->batch_number,
-            'expiredDate' => $this->expired_date?->format('Y-m-d') ?? $this->expired_date,
+            'expiredDate' => $this->expired_date instanceof \DateTimeInterface ? $this->expired_date->format('Y-m-d') : ($this->expired_date ? substr((string) $this->expired_date, 0, 10) : null),
         ];
     }
 }

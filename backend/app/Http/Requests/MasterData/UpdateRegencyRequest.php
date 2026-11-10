@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateRegencyRequest extends FormRequest
 {
@@ -16,11 +18,21 @@ class UpdateRegencyRequest extends FormRequest
 
     public function rules(): array
     {
+        $id = $this->route('regency')?->id ?? $this->route('regency');
+
+        $uniqueCodeRule = LegacyAccess::isAvailable('ref_kabupaten')
+            ? Rule::unique('legacy.ref_kabupaten', 'kode_kabupaten')->whereNull('deleted_at')->ignore($id)
+            : Rule::unique('regencies', 'code')->whereNull('deleted_at')->ignore($id);
+
+        $provinceExistsRule = LegacyAccess::isAvailable('ref_provinsi')
+            ? Rule::exists('legacy.ref_provinsi', 'id')->whereNull('deleted_at')
+            : Rule::exists('provinces', 'id')->whereNull('deleted_at');
+
         return [
-            'code' => ['nullable', 'string', 'max:50', 'unique:regencies,code,'.$this->route('regency')->id],
+            'code' => ['nullable', 'string', 'max:50', $uniqueCodeRule],
             'name' => ['required', 'string', 'max:255'],
-            'province_id' => ['required', 'exists:provinces,id'],
-            'is_active' => ['boolean'],
+            'province_id' => ['required', $provinceExistsRule],
+            'is_active' => ['nullable', 'boolean'],
         ];
     }
 }

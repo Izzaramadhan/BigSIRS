@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyMedicationSigna;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateMedicationSignaRequest extends FormRequest
@@ -11,7 +12,11 @@ class UpdateMedicationSignaRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        $signa = $this->route('medication_signa');
+        $id = $signa instanceof \Illuminate\Database\Eloquent\Model ? $signa->id : $signa;
+        $legacy = LegacyMedicationSigna::find($id);
+
+        return $legacy ? ($this->user()?->can('update', $legacy) ?? true) : true;
     }
 
     /**
@@ -23,6 +28,14 @@ class UpdateMedicationSignaRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => is_string($this->name) ? trim($this->name) : $this->name,
+        ]);
     }
 }

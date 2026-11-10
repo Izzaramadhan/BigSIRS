@@ -148,8 +148,8 @@ const handleReset = () => {
               class="form-select"
             >
               <option value="Semua Petugas">Semua Petugas</option>
-              <option v-for="off in officers" :key="off" :value="off">
-                {{ off }}
+              <option v-for="off in officers" :key="off.id ?? off" :value="off.name ?? off">
+                {{ off.name ?? off }}
               </option>
             </select>
           </div>

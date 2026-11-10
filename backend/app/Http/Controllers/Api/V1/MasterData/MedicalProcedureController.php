@@ -7,8 +7,10 @@ use App\Http\Requests\StoreMedicalProcedureRequest;
 use App\Http\Requests\UpdateMedicalProcedureRequest;
 use App\Http\Requests\UpdateMedicalProcedureStatusRequest;
 use App\Http\Resources\MedicalProcedureResource;
+use App\Models\Legacy\LegacyMedicalProcedure;
 use App\Models\MasterData\MedicalProcedure;
 use App\Models\TariffType;
+use App\Support\LegacyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -80,8 +82,29 @@ class MedicalProcedureController extends Controller
 
     public function index(Request $request)
     {
+        $perPage = (int) $request->input('per_page', 10);
+
+        if (LegacyAccess::isAvailable('ref_tarif_tindakan')) {
+            $query = LegacyMedicalProcedure::with('procedureCategory');
+
+            if ($request->filled('search')) {
+                $query->search($request->search);
+            }
+
+            $categoryId = $request->input('category_id') ?? $request->input('procedure_category_id');
+            if ($categoryId) {
+                $query->where('id_kategori', $categoryId);
+            }
+
+            if ($request->has('is_visible') && $request->is_visible !== '') {
+                $isVisible = filter_var($request->is_visible, FILTER_VALIDATE_BOOLEAN);
+                $query->where('status', $isVisible ? 1 : 0);
+            }
+
+            return MedicalProcedureResource::collection($query->paginate($perPage));
+        }
+
         $query = $this->buildFilteredQuery($request);
-        $perPage = $request->input('per_page', 10);
         $procedures = $query->paginate($perPage);
 
         return MedicalProcedureResource::collection($procedures);
@@ -115,29 +138,21 @@ class MedicalProcedureController extends Controller
                 '<b><style bgcolor="#E2E8F0"><top>Tindakan</b>',
                 '<b><style bgcolor="#E2E8F0"><top>Jenis Tarif</b>',
                 '<b><style bgcolor="#E2E8F0"><top><right>Harga</b>',
-                '<b><style bgcolor="#E2E8F0"><top>Poliklinik</b>',
+                '<b><style bgcolor="#E2E8F0"><top>Unit Layanan</b>',
                 '<b><style bgcolor="#E2E8F0"><top><center>Status</b>',
             ],
         ];
 
-        $tariffTypeId = $request->input('tariff_type_id');
-        $hasTariffTypeFilter = is_numeric($tariffTypeId) && (int) $tariffTypeId > 0;
-
         $rowNo = 1;
         foreach ($procedures as $procedure) {
             $categoryName = $procedure->procedureCategory?->name;
-            $codeVal = $procedure->name;
+            $codeVal = $procedure->code;
             $icdVal = $procedure->icd9Cm?->code;
-            $nameVal = $procedure->code;
-            $polyclinics = $procedure->polyclinics->pluck('name')->filter()->values();
-            $polyclinicsStr = $polyclinics->isNotEmpty() ? $polyclinics->implode(', ') : '-';
+            $nameVal = $procedure->name;
+            $polyclinicsStr = $procedure->polyclinics->pluck('name')->join(', ');
             $statusStr = $procedure->is_visible ? 'Aktif' : 'Nonaktif';
 
             $tariffs = $procedure->tariffs;
-            if ($hasTariffTypeFilter) {
-                $tariffs = $tariffs->filter(fn ($t) => (int) $t->tariff_type_id === (int) $tariffTypeId);
-            }
-
             if ($tariffs->isEmpty()) {
                 $rows[] = [
                     $rowNo++,
@@ -221,6 +236,62 @@ class MedicalProcedureController extends Controller
 
     public function store(StoreMedicalProcedureRequest $request)
     {
+        if (LegacyAccess::isAvailable('ref_tarif_tindakan')) {
+            $user = $request->user();
+            $legacyUserId = $user?->getLegacyUserId() ?? 1;
+
+            $procedure = DB::connection('legacy')->transaction(function () use ($request, $legacyUserId) {
+                $tariffsData = $request->input('tariffs', []);
+                $firstTariff = $tariffsData[0] ?? null;
+                $tariffTypeId = $firstTariff['tariff_type_id'] ?? null;
+                $totalAmount = $firstTariff ? collect($firstTariff['components'] ?? [])->sum('amount') : 0;
+
+                $procedure = LegacyMedicalProcedure::create([
+                    'kode' => $request->input('code') ?? ('TND-' . time()),
+                    'nama' => $request->input('name'),
+                    'id_kategori' => $request->input('procedure_category_id'),
+                    'id_jenis_tarif' => $tariffTypeId,
+                    'harga' => $totalAmount,
+                    'status' => $request->boolean('is_visible', true) ? '1' : '0',
+                    'id_user' => $legacyUserId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                // Polyclinic mappings
+                if (LegacyAccess::isAvailable('map_tarif_tindakan_poliklinik') && $request->has('polyclinics')) {
+                    foreach ($request->input('polyclinics', []) as $poliId) {
+                        DB::connection('legacy')->table('map_tarif_tindakan_poliklinik')->insert([
+                            'id_ref_tarif_tindakan' => $procedure->id,
+                            'id_poliklinik' => $poliId,
+                            'status' => '1',
+                            'id_user' => $legacyUserId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                // Report Group mappings
+                if (LegacyAccess::isAvailable('map_tindakan_kelompok_laporan') && $request->has('report_groups')) {
+                    foreach ($request->input('report_groups', []) as $rgId) {
+                        DB::connection('legacy')->table('map_tindakan_kelompok_laporan')->insert([
+                            'id_ref_tarif_tindakan' => $procedure->id,
+                            'id_kelompok_laporan' => $rgId,
+                            'status' => '1',
+                            'id_user' => $legacyUserId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                return $procedure->load('procedureCategory');
+            });
+
+            return (new MedicalProcedureResource($procedure))->response()->setStatusCode(201);
+        }
+
         $this->validateTariffs($request->input('tariffs'));
 
         DB::beginTransaction();
@@ -261,7 +332,7 @@ class MedicalProcedureController extends Controller
 
             DB::commit();
 
-            return new MedicalProcedureResource($this->loadRelations($procedure));
+            return (new MedicalProcedureResource($this->loadRelations($procedure)))->response()->setStatusCode(201);
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -269,13 +340,92 @@ class MedicalProcedureController extends Controller
         }
     }
 
-    public function show(MedicalProcedure $procedure)
+    public function show($procedure)
     {
+        $id = $procedure instanceof MedicalProcedure ? $procedure->id : $procedure;
+        if (LegacyAccess::isAvailable('ref_tarif_tindakan')) {
+            $legacy = LegacyMedicalProcedure::with('procedureCategory')->findOrFail($id);
+            return new MedicalProcedureResource($legacy);
+        }
+
+        if (! ($procedure instanceof MedicalProcedure)) {
+            $procedure = MedicalProcedure::findOrFail($id);
+        }
+
         return new MedicalProcedureResource($this->loadRelations($procedure));
     }
 
-    public function update(UpdateMedicalProcedureRequest $request, MedicalProcedure $procedure)
+    public function update(UpdateMedicalProcedureRequest $request, $procedure)
     {
+        $id = $procedure instanceof MedicalProcedure ? $procedure->id : $procedure;
+
+        if (LegacyAccess::isAvailable('ref_tarif_tindakan')) {
+            $user = $request->user();
+            $legacyUserId = $user?->getLegacyUserId() ?? 1;
+
+            $updated = DB::connection('legacy')->transaction(function () use ($request, $id, $legacyUserId) {
+                $legacy = LegacyMedicalProcedure::findOrFail($id);
+                $tariffsData = $request->input('tariffs', []);
+                $firstTariff = $tariffsData[0] ?? null;
+                $tariffTypeId = $firstTariff ? ($firstTariff['tariff_type_id'] ?? $legacy->id_jenis_tarif) : $legacy->id_jenis_tarif;
+                $totalAmount = $firstTariff ? collect($firstTariff['components'] ?? [])->sum('amount') : $legacy->harga;
+
+                $legacy->update([
+                    'kode' => $request->input('code') ?? $legacy->kode,
+                    'nama' => $request->input('name') ?? $legacy->nama,
+                    'id_kategori' => $request->input('procedure_category_id') ?? $legacy->id_kategori,
+                    'id_jenis_tarif' => $tariffTypeId,
+                    'harga' => $totalAmount,
+                    'status' => $request->has('is_visible') ? ($request->boolean('is_visible') ? '1' : '0') : $legacy->status,
+                    'updated_at' => now(),
+                ]);
+
+                // Sync polyclinics
+                if (LegacyAccess::isAvailable('map_tarif_tindakan_poliklinik') && $request->has('polyclinics')) {
+                    DB::connection('legacy')->table('map_tarif_tindakan_poliklinik')
+                        ->where('id_ref_tarif_tindakan', $legacy->id)
+                        ->delete();
+
+                    foreach ($request->input('polyclinics', []) as $poliId) {
+                        DB::connection('legacy')->table('map_tarif_tindakan_poliklinik')->insert([
+                            'id_ref_tarif_tindakan' => $legacy->id,
+                            'id_poliklinik' => $poliId,
+                            'status' => '1',
+                            'id_user' => $legacyUserId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                // Sync report groups
+                if (LegacyAccess::isAvailable('map_tindakan_kelompok_laporan') && $request->has('report_groups')) {
+                    DB::connection('legacy')->table('map_tindakan_kelompok_laporan')
+                        ->where('id_ref_tarif_tindakan', $legacy->id)
+                        ->delete();
+
+                    foreach ($request->input('report_groups', []) as $rgId) {
+                        DB::connection('legacy')->table('map_tindakan_kelompok_laporan')->insert([
+                            'id_ref_tarif_tindakan' => $legacy->id,
+                            'id_kelompok_laporan' => $rgId,
+                            'status' => '1',
+                            'id_user' => $legacyUserId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                return $legacy->load('procedureCategory');
+            });
+
+            return new MedicalProcedureResource($updated);
+        }
+
+        if (! ($procedure instanceof MedicalProcedure)) {
+            $procedure = MedicalProcedure::findOrFail($id);
+        }
+
         $this->validateTariffs($request->input('tariffs'));
 
         DB::beginTransaction();
@@ -318,7 +468,6 @@ class MedicalProcedureController extends Controller
                 $tariffTypeComponents = $tariffType->components->keyBy('tariff_component_id');
 
                 foreach ($tariffData['components'] as $compData) {
-                    // Retain existing snapshot if updating, otherwise fetch from tariffType
                     $snapshot = 0;
                     if (! empty($compData['id'])) {
                         $existingComp = $tariff->components()->find($compData['id']);
@@ -356,15 +505,56 @@ class MedicalProcedureController extends Controller
         }
     }
 
-    public function updateVisibility(UpdateMedicalProcedureStatusRequest $request, MedicalProcedure $procedure)
+    public function updateVisibility(UpdateMedicalProcedureStatusRequest $request, $procedure)
     {
+        $id = $procedure instanceof MedicalProcedure ? $procedure->id : $procedure;
+
+        if (LegacyAccess::isAvailable('ref_tarif_tindakan')) {
+            $legacy = LegacyMedicalProcedure::findOrFail($id);
+            $legacy->update([
+                'status' => $request->boolean('is_visible') ? '1' : '0',
+                'updated_at' => now(),
+            ]);
+            return new MedicalProcedureResource($legacy->load('procedureCategory'));
+        }
+
+        if (! ($procedure instanceof MedicalProcedure)) {
+            $procedure = MedicalProcedure::findOrFail($id);
+        }
+
         $procedure->update(['is_visible' => $request->is_visible]);
 
         return new MedicalProcedureResource($this->loadRelations($procedure));
     }
 
-    public function destroy(MedicalProcedure $procedure)
+    public function destroy($procedure)
     {
+        $id = $procedure instanceof MedicalProcedure ? $procedure->id : $procedure;
+
+        if (LegacyAccess::isAvailable('ref_tarif_tindakan')) {
+            $legacy = LegacyMedicalProcedure::findOrFail($id);
+
+            DB::connection('legacy')->transaction(function () use ($legacy) {
+                if (LegacyAccess::isAvailable('map_tarif_tindakan_poliklinik')) {
+                    DB::connection('legacy')->table('map_tarif_tindakan_poliklinik')
+                        ->where('id_ref_tarif_tindakan', $legacy->id)
+                        ->delete();
+                }
+                if (LegacyAccess::isAvailable('map_tindakan_kelompok_laporan')) {
+                    DB::connection('legacy')->table('map_tindakan_kelompok_laporan')
+                        ->where('id_ref_tarif_tindakan', $legacy->id)
+                        ->delete();
+                }
+                $legacy->delete();
+            });
+
+            return response()->noContent();
+        }
+
+        if (! ($procedure instanceof MedicalProcedure)) {
+            $procedure = MedicalProcedure::findOrFail($id);
+        }
+
         $procedure->delete();
 
         return response()->noContent();

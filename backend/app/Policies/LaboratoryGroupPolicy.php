@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\MasterData\LaboratoryGroup;
 use App\Models\User;
 
 class LaboratoryGroupPolicy
@@ -18,7 +17,7 @@ class LaboratoryGroupPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, LaboratoryGroup $laboratoryGroup): bool
+    public function view(User $user, mixed $laboratoryGroup = null): bool
     {
         return true;
     }
@@ -34,7 +33,7 @@ class LaboratoryGroupPolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, LaboratoryGroup $laboratoryGroup): bool
+    public function update(User $user, mixed $laboratoryGroup = null): bool
     {
         return true;
     }
@@ -42,7 +41,7 @@ class LaboratoryGroupPolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, LaboratoryGroup $laboratoryGroup): bool
+    public function delete(User $user, mixed $laboratoryGroup = null): bool
     {
         return true;
     }
@@ -50,7 +49,7 @@ class LaboratoryGroupPolicy
     /**
      * Determine whether the user can restore the model.
      */
-    public function restore(User $user, LaboratoryGroup $laboratoryGroup): bool
+    public function restore(User $user, mixed $laboratoryGroup = null): bool
     {
         return true;
     }
@@ -58,7 +57,7 @@ class LaboratoryGroupPolicy
     /**
      * Determine whether the user can permanently delete the model.
      */
-    public function forceDelete(User $user, LaboratoryGroup $laboratoryGroup): bool
+    public function forceDelete(User $user, mixed $laboratoryGroup = null): bool
     {
         return true;
     }

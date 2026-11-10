@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\MasterData\GenericMedicine;
 use App\Models\MasterData\Medicine;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +30,7 @@ return new class extends Migration
 
             // Nullify any medicines pointing to these equipment generics before deleting
             if (! empty($equipmentLegacyIds)) {
-                $equipmentGenericIds = GenericMedicine::withTrashed()
+                $equipmentGenericIds = DB::table('generic_medicines')
                     ->whereIn('legacy_id', $equipmentLegacyIds)
                     ->pluck('id')
                     ->toArray();
@@ -39,17 +38,16 @@ return new class extends Migration
                 if (! empty($equipmentGenericIds)) {
                     Medicine::whereIn('generic_medicine_id', $equipmentGenericIds)
                         ->update(['generic_medicine_id' => null]);
-                    GenericMedicine::whereIn('id', $equipmentGenericIds)->forceDelete();
+                    DB::table('generic_medicines')->whereIn('id', $equipmentGenericIds)->delete();
                 }
             }
 
             // Clean names in generic_medicines (trim whitespace and leading/trailing quotes/tabs)
-            GenericMedicine::chunk(500, function ($generics) {
+            DB::table('generic_medicines')->orderBy('id')->chunk(500, function ($generics) {
                 foreach ($generics as $gen) {
                     $cleaned = trim($gen->name ?? '', " \t\n\r\0\x0B\"'");
                     if ($cleaned !== $gen->name) {
-                        $gen->name = $cleaned;
-                        $gen->save();
+                        DB::table('generic_medicines')->where('id', $gen->id)->update(['name' => $cleaned]);
                     }
                 }
             });
@@ -89,11 +87,11 @@ return new class extends Migration
             }
         } else {
             // Fallback if legacy connection is not present: remove known equipment patterns
-            GenericMedicine::where('name', 'like', '"%')
+            DB::table('generic_medicines')->where('name', 'like', '"%')
                 ->orWhere('name', 'like', "	%")
                 ->orWhere('name', 'like', '%PERALATAN%')
                 ->orWhere('name', 'like', '%test system%')
-                ->forceDelete();
+                ->delete();
         }
     }
 

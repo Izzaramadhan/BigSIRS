@@ -2,8 +2,11 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyBed;
+use App\Models\Legacy\LegacyRoom;
 use App\Models\MasterData\Bed;
 use App\Models\MasterData\Room;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -30,28 +33,50 @@ class StoreBedRequest extends FormRequest
     public function rules(): array
     {
         $roomId = $this->room_id;
+        $isLegacy = LegacyAccess::isAvailable('ref_bed');
+        $roomTable = $isLegacy ? 'legacy.ref_kamar' : 'rooms';
+
+        $uniqueRule = $isLegacy
+            ? Rule::unique('legacy.ref_bed', 'nama')->where('id_kamar', $roomId)->whereNull('deleted_at')
+            : Rule::unique('beds', 'name')->where('room_id', $roomId)->whereNull('deleted_at');
 
         return [
             'room_id' => [
                 'required',
                 'integer',
-                Rule::exists('rooms', 'id')->whereNull('deleted_at'),
-                function ($attribute, $value, $fail) {
-                    $room = Room::with(['ward.floor.building', 'roomClass'])->whereNull('deleted_at')->find($value);
-                    if ($room) {
-                        if (! $room->ward || $room->ward->trashed()) {
-                            $fail('Kamar yang dipilih harus memiliki relasi Bangsal yang valid.');
-                            return;
+                Rule::exists($roomTable, 'id')->whereNull('deleted_at'),
+                function ($attribute, $value, $fail) use ($isLegacy) {
+                    if ($isLegacy) {
+                        $room = LegacyRoom::with(['ward.floor.building', 'roomClass'])->find($value);
+                        if ($room) {
+                            if (! $room->ward) {
+                                $fail('Kamar yang dipilih harus memiliki relasi Bangsal yang valid.');
+                                return;
+                            }
+                            if (! $room->ward->floor || ! $room->ward->floor->building) {
+                                $fail('Kamar yang dipilih harus memiliki relasi Lantai dan Gedung yang valid.');
+                                return;
+                            }
+                            if (! $room->roomClass) {
+                                $fail('Kamar yang dipilih harus memiliki relasi Kelas yang valid.');
+                                return;
+                            }
                         }
-
-                        if (! $room->ward->floor || $room->ward->floor->trashed() || ! $room->ward->floor->building || $room->ward->floor->building->trashed()) {
-                            $fail('Kamar yang dipilih harus memiliki relasi Lantai dan Gedung yang valid.');
-                            return;
-                        }
-
-                        if (! $room->roomClass || $room->roomClass->trashed()) {
-                            $fail('Kamar yang dipilih harus memiliki relasi Kelas yang valid.');
-                            return;
+                    } else {
+                        $room = Room::with(['ward.floor.building', 'roomClass'])->whereNull('deleted_at')->find($value);
+                        if ($room) {
+                            if (! $room->ward || $room->ward->trashed()) {
+                                $fail('Kamar yang dipilih harus memiliki relasi Bangsal yang valid.');
+                                return;
+                            }
+                            if (! $room->ward->floor || $room->ward->floor->trashed() || ! $room->ward->floor->building || $room->ward->floor->building->trashed()) {
+                                $fail('Kamar yang dipilih harus memiliki relasi Lantai dan Gedung yang valid.');
+                                return;
+                            }
+                            if (! $room->roomClass || $room->roomClass->trashed()) {
+                                $fail('Kamar yang dipilih harus memiliki relasi Kelas yang valid.');
+                                return;
+                            }
                         }
                     }
                 },
@@ -60,15 +85,13 @@ class StoreBedRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                Rule::unique('beds', 'name')
-                    ->where('room_id', $roomId)
-                    ->whereNull('deleted_at'),
-                function ($attribute, $value, $fail) use ($roomId) {
+                $uniqueRule,
+                function ($attribute, $value, $fail) use ($roomId, $isLegacy) {
                     if ($roomId && $value) {
-                        $duplicate = Bed::where('room_id', $roomId)
-                            ->whereNull('deleted_at')
-                            ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) $value))])
-                            ->exists();
+                        $normalized = mb_strtolower(trim((string) $value));
+                        $duplicate = $isLegacy
+                            ? LegacyBed::where('id_kamar', $roomId)->whereRaw('LOWER(nama) = ?', [$normalized])->exists()
+                            : Bed::where('room_id', $roomId)->whereNull('deleted_at')->whereRaw('LOWER(name) = ?', [$normalized])->exists();
 
                         if ($duplicate) {
                             $fail('Nama bed sudah digunakan pada kamar yang dipilih.');
@@ -80,21 +103,13 @@ class StoreBedRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [
-            'room_id.required' => 'Nama kamar wajib dipilih.',
-            'room_id.integer' => 'Pilihan kamar tidak valid.',
+            'room_id.required' => 'Kamar wajib dipilih.',
             'room_id.exists' => 'Kamar yang dipilih tidak valid atau sudah dihapus.',
             'name.required' => 'Nama bed wajib diisi.',
-            'name.string' => 'Nama bed harus berupa teks.',
-            'name.max' => 'Nama bed maksimal 100 karakter.',
             'name.unique' => 'Nama bed sudah digunakan pada kamar yang dipilih.',
-            'description.string' => 'Deskripsi bed harus berupa teks.',
-            'description.max' => 'Deskripsi bed maksimal 1000 karakter.',
         ];
     }
 }

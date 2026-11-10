@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,27 +27,29 @@ class StoreFloorRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_lantai');
+        $buildingTable = $isLegacy ? 'legacy.ref_gedung' : 'buildings';
+        
+        $uniqueRule = $isLegacy
+            ? Rule::unique('legacy.ref_lantai', 'nama')->where('id_gedung', $this->building_id)->whereNull('deleted_at')
+            : Rule::unique('floors', 'name')->where('building_id', $this->building_id)->whereNull('deleted_at');
+
         return [
             'building_id' => [
                 'required',
                 'integer',
-                Rule::exists('buildings', 'id')->whereNull('deleted_at'),
+                Rule::exists($buildingTable, 'id')->whereNull('deleted_at'),
             ],
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('floors', 'name')
-                    ->where('building_id', $this->building_id)
-                    ->whereNull('deleted_at'),
+                $uniqueRule,
             ],
             'description' => ['nullable', 'string'],
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [

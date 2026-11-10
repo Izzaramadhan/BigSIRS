@@ -54,8 +54,12 @@ class Room extends Model
         return $this->hasMany(Bed::class, 'room_id');
     }
 
-    public function scopeSearch(Builder $query, string $term): Builder
+    public function scopeSearch(Builder $query, ?string $term): Builder
     {
+        if (empty($term)) {
+            return $query;
+        }
+
         $term = "%{$term}%";
 
         return $query->where(function (Builder $q) use ($term) {

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyWard;
 use App\Models\MasterData\Ward;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,15 +33,32 @@ class StoreRoomRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_kamar');
+        $wardTable = $isLegacy ? 'legacy.ref_bangsal' : 'wards';
+        $classTable = $isLegacy ? 'legacy.ref_kelas' : 'room_classes';
+
+        $codeRule = $isLegacy
+            ? Rule::unique('legacy.ref_kamar', 'kode')->whereNull('deleted_at')
+            : Rule::unique('rooms', 'code')->whereNull('deleted_at');
+
+        $nameRule = $isLegacy
+            ? Rule::unique('legacy.ref_kamar', 'nama')->where('id_bangsal', $this->ward_id)->whereNull('deleted_at')
+            : Rule::unique('rooms', 'name')->where('ward_id', $this->ward_id)->whereNull('deleted_at');
+
         return [
             'ward_id' => [
                 'required',
                 'integer',
-                Rule::exists('wards', 'id')->whereNull('deleted_at'),
-                function ($attribute, $value, $fail) {
-                    $ward = Ward::with(['floor.building'])->whereNull('deleted_at')->find($value);
-                    if ($ward) {
-                        if (! $ward->floor || $ward->floor->trashed() || ! $ward->floor->building || $ward->floor->building->trashed()) {
+                Rule::exists($wardTable, 'id')->whereNull('deleted_at'),
+                function ($attribute, $value, $fail) use ($isLegacy) {
+                    if ($isLegacy) {
+                        $ward = LegacyWard::with(['floor.building'])->find($value);
+                        if ($ward && (! $ward->floor || ! $ward->floor->building)) {
+                            $fail('Bangsal yang dipilih harus memiliki relasi Lantai dan Gedung yang valid.');
+                        }
+                    } else {
+                        $ward = Ward::with(['floor.building'])->whereNull('deleted_at')->find($value);
+                        if ($ward && (! $ward->floor || $ward->floor->trashed() || ! $ward->floor->building || $ward->floor->building->trashed())) {
                             $fail('Bangsal yang dipilih harus memiliki relasi Lantai dan Gedung yang valid.');
                         }
                     }
@@ -48,34 +67,29 @@ class StoreRoomRequest extends FormRequest
             'room_class_id' => [
                 'required',
                 'integer',
-                Rule::exists('room_classes', 'id')->whereNull('deleted_at'),
+                Rule::exists($classTable, 'id')->whereNull('deleted_at'),
             ],
             'class_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('room_classes', 'id')->whereNull('deleted_at'),
+                Rule::exists($classTable, 'id')->whereNull('deleted_at'),
             ],
             'code' => [
                 'required',
                 'string',
                 'max:50',
-                Rule::unique('rooms', 'code')->whereNull('deleted_at'),
+                $codeRule,
             ],
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('rooms', 'name')
-                    ->where('ward_id', $this->ward_id)
-                    ->whereNull('deleted_at'),
+                $nameRule,
             ],
             'description' => ['nullable', 'string'],
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [

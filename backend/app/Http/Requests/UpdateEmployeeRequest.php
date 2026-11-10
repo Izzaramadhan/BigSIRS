@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,14 +15,28 @@ class UpdateEmployeeRequest extends FormRequest
 
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_pegawai');
+        $educationTable = $isLegacy ? 'legacy.ref_pendidikan' : 'educations';
+        $occupationTable = $isLegacy ? 'legacy.ref_pekerjaan' : 'occupations';
+        $positionTable = $isLegacy ? 'legacy.ref_jabatan' : 'positions';
+
+        $employee = $this->route('employee');
+        $employeeId = is_object($employee) ? $employee->id : $employee;
+
+        $nationalIdRule = ['nullable', 'string', 'max:20'];
+        if ($isLegacy) {
+            // For legacy, employee->id_mpi can be ignored if object, or let's find the id_mpi
+            $mpiId = is_object($employee) ? ($employee->id_mpi ?? null) : null;
+            if ($mpiId) {
+                $nationalIdRule[] = Rule::unique('legacy.master_person_index', 'no_ktp')->ignore($mpiId);
+            }
+        } else {
+            $nationalIdRule[] = Rule::unique('employees', 'national_id')->ignore($employeeId);
+        }
+
         return [
             'code' => ['nullable', 'string', 'max:255'],
-            'national_id' => [
-                'nullable',
-                'string',
-                'max:20',
-                Rule::unique('employees', 'national_id')->ignore($this->route('employee')),
-            ],
+            'national_id' => $nationalIdRule,
             'ihs_number' => ['nullable', 'string', 'max:255'],
             'name' => ['required', 'string', 'max:255'],
             'birth_place' => ['nullable', 'string', 'max:255'],
@@ -39,9 +54,9 @@ class UpdateEmployeeRequest extends FormRequest
             'district_id' => ['nullable', 'string', 'max:10'],
             'village_id' => ['nullable', 'string', 'max:15'],
             'phone' => ['nullable', 'string', 'max:255'],
-            'education_id' => ['nullable', 'exists:educations,id'],
-            'occupation_id' => ['nullable', 'exists:occupations,id'],
-            'position_id' => ['nullable', 'exists:positions,id'],
+            'education_id' => ['nullable', "exists:{$educationTable},id"],
+            'occupation_id' => ['nullable', "exists:{$occupationTable},id"],
+            'position_id' => ['nullable', "exists:{$positionTable},id"],
             'profession' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
             'signature' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
@@ -55,13 +70,6 @@ class UpdateEmployeeRequest extends FormRequest
             'signature.image' => 'File tanda tangan harus berupa gambar.',
             'signature.mimes' => 'Format tanda tangan harus berupa jpeg, png, atau jpg.',
             'signature.max' => 'Ukuran tanda tangan maksimal 2MB.',
-        ];
-    }
-
-    public function attributes(): array
-    {
-        return [
-            'signature' => 'tanda tangan',
         ];
     }
 }

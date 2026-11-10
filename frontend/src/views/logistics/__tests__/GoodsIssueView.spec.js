@@ -371,8 +371,10 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
 
       // Check fields
       expect(wrapper.find('input[type="date"]').exists()).toBe(true);
-      expect(wrapper.find('select.form-select').exists()).toBe(true);
+      expect(wrapper.find('input#form-input-officer').exists()).toBe(true);
+      expect(wrapper.find('input#form-input-officer').attributes('placeholder')).toBe('Ketik atau pilih nama petugas...');
       expect(wrapper.find('textarea.form-textarea').exists()).toBe(true);
+      expect(wrapper.find('textarea.form-textarea').attributes('placeholder')).toBe('Masukkan keperluan atau catatan pengeluaran...');
 
       // Does not contain items or warehouse fields
       expect(wrapper.find('input[type="number"]').exists()).toBe(false);
@@ -383,10 +385,12 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
       expect(wrapper.find('button.btn-primary').exists()).toBe(true);
 
       // Submit form
+      await wrapper.find('input#form-input-officer').setValue('Person 45655962');
       await wrapper.find('textarea.form-textarea').setValue('Baksos');
       await wrapper.find('form').trigger('submit.prevent');
       expect(wrapper.emitted('submit')).toBeTruthy();
       expect(wrapper.emitted('submit')[0][0].notes).toBe('Baksos');
+      expect(wrapper.emitted('submit')[0][0].officer_name).toBe('Person 45655962');
     });
   });
 
@@ -680,12 +684,14 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
   });
 
   describe('GoodsIssueDetailView Component', () => {
-    it('renders INFO PENGELUARAN, FORM PENGELUARAN, and DETAIL LIST DATA PENGELUARAN cards', async () => {
+    it('renders INFO, FORM DETAIL, and DETAIL LIST DATA cards matching Penjualan Bebas design', async () => {
       const wrapper = mount(GoodsIssueDetailView, {
         global: {
           stubs: {
             teleport: true,
-            RouterLink: true
+            RouterLink: {
+              template: '<a><slot /></a>'
+            }
           }
         }
       });
@@ -693,9 +699,10 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
       // Wait for data load
       await new Promise((r) => setTimeout(r, 20));
 
-      expect(wrapper.text()).toContain('INFO PENGELUARAN');
-      expect(wrapper.text()).toContain('FORM PENGELUARAN');
-      expect(wrapper.text()).toContain('DETAIL LIST DATA PENGELUARAN');
+      expect(wrapper.text()).toContain('Data Detail Pengeluaran');
+      expect(wrapper.text()).toContain('INFO');
+      expect(wrapper.text()).toContain('FORM DETAIL');
+      expect(wrapper.text()).toContain('DETAIL LIST DATA');
 
       // Info Pengeluaran fields
       expect(wrapper.text()).toContain('Tanggal');
@@ -707,10 +714,37 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
       expect(wrapper.text()).toContain('Gudang');
       expect(wrapper.text()).toContain('Jumlah');
 
-      // Detail table columns
+      // Detail table columns & totals
       expect(wrapper.text()).toContain('Amoxan Drop');
       expect(wrapper.text()).toContain('Rp 2.252');
       expect(wrapper.text()).toContain('Total :');
+      expect(wrapper.text()).toContain('Tutup');
+      expect(wrapper.text()).toContain('Print Bukti Pengeluaran');
+    });
+
+    it('toggles collapse on clicking btn-collapse in FORM DETAIL header', async () => {
+      const wrapper = mount(GoodsIssueDetailView, {
+        global: {
+          stubs: {
+            teleport: true,
+            RouterLink: {
+              template: '<a><slot /></a>'
+            }
+          }
+        }
+      });
+
+      await new Promise((r) => setTimeout(r, 20));
+
+      const collapseBtn = wrapper.find('.form-card-header .btn-collapse');
+      expect(collapseBtn.exists()).toBe(true);
+      expect(wrapper.vm.isFormCollapsed).toBe(false);
+
+      await collapseBtn.trigger('click');
+      expect(wrapper.vm.isFormCollapsed).toBe(true);
+
+      await collapseBtn.trigger('click');
+      expect(wrapper.vm.isFormCollapsed).toBe(false);
     });
 
     it('disables Jumlah field and Simpan button before medicine is selected, and validates quantity limit', async () => {
@@ -718,7 +752,9 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
         global: {
           stubs: {
             teleport: true,
-            RouterLink: true
+            RouterLink: {
+              template: '<a><slot /></a>'
+            }
           }
         }
       });
@@ -726,7 +762,7 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
       await new Promise((r) => setTimeout(r, 20));
 
       const qtyInput = wrapper.find('#detail-input-qty');
-      const saveBtn = wrapper.find('.form-actions button.btn-primary');
+      const saveBtn = wrapper.find('.form-actions-row button.btn-save-blue');
 
       // Initially no medicine is selected: Jumlah and Simpan button must be disabled
       expect(qtyInput.attributes('disabled')).toBeDefined();

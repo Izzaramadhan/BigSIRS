@@ -41,8 +41,14 @@ class StoreInvoiceRequest extends FormRequest
         $rawStatus = $this->input('status', $this->input('payment_status', 'Belum Lunas'));
         $isPaid = in_array(strtolower((string) $rawStatus), ['lunas', 'paid'], true);
 
+        $isLegacy = \App\Support\LegacyAccess::isAvailable('lgs_faktur');
+        $supplierRule = $isLegacy ? 'exists:legacy.ref_supplier,id' : 'exists:suppliers,id';
+        $warehouseRule = $isLegacy ? 'exists:legacy.ref_gudang,id' : 'exists:warehouses,id';
+        $medicineRule = $isLegacy ? 'exists:legacy.ref_obat,id' : 'exists:medicines,id';
+        $uniqueInvoiceRule = $isLegacy ? 'unique:legacy.lgs_faktur,nomor' : 'unique:invoices,invoice_number';
+
         return [
-            'invoice_number' => 'required|string|max:100|unique:invoices,invoice_number',
+            'invoice_number' => ['required', 'string', 'max:100', $uniqueInvoiceRule],
             'reference_number' => 'nullable|string|max:100',
             'invoice_date' => 'required|date',
             'due_date' => [
@@ -51,16 +57,16 @@ class StoreInvoiceRequest extends FormRequest
                 'date',
                 'after_or_equal:invoice_date',
             ],
-            'supplier_id' => 'required|exists:suppliers,id',
-            'warehouse_id' => 'nullable|exists:warehouses,id',
+            'supplier_id' => ['required', $supplierRule],
+            'warehouse_id' => ['nullable', $warehouseRule],
             'status' => 'nullable|string|in:Belum Lunas,Lunas,unpaid,paid',
             'tax_type' => 'nullable|string|in:non_tax,ppn,ppn_11,tax',
             'tax_rate' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string|max:2000',
             'items' => 'required|array|min:1',
-            'items.*.medicineId' => 'nullable|integer|exists:medicines,id',
-            'items.*.medicine_id' => 'nullable|integer|exists:medicines,id',
-            'items.*.item_id' => 'nullable|integer|exists:medicines,id',
+            'items.*.medicineId' => ['nullable', 'integer', $medicineRule],
+            'items.*.medicine_id' => ['nullable', 'integer', $medicineRule],
+            'items.*.item_id' => ['nullable', 'integer', $medicineRule],
             'items.*.medicineName' => 'nullable|string|max:255',
             'items.*.medicine_name' => 'nullable|string|max:255',
             'items.*.quantity' => 'required|numeric|gt:0',

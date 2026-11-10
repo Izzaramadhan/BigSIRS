@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateFollowUpHandlingRequest extends FormRequest
 {
@@ -21,10 +23,17 @@ class UpdateFollowUpHandlingRequest extends FormRequest
      */
     public function rules(): array
     {
+        $id = $this->route('follow_up_handling')?->id ?? $this->route('follow_up_handling');
+
+        $uniqueNameRule = LegacyAccess::isAvailable('ref_penanganan_lanjutan')
+            ? Rule::unique('legacy.ref_penanganan_lanjutan', 'nama')->ignore($id)->whereNull('deleted_at')
+            : Rule::unique('follow_up_handlings', 'name')->ignore($id)->whereNull('deleted_at');
+
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:follow_up_handlings,name,' . $this->route('follow_up_handling')->id],
+            'name' => ['required', 'string', 'max:250', $uniqueNameRule],
             'code' => ['nullable', 'string', 'max:10'],
             'is_active' => ['boolean'],
+            'inacbg_code' => ['nullable', 'integer'],
         ];
     }
 }

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyRoomClass;
 use App\Models\MasterData\RoomClass;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -48,22 +50,27 @@ class UpdateRoomClassRequest extends FormRequest
     public function rules(): array
     {
         $roomClassParam = $this->route('roomClass') ?? $this->route('room_class');
-        $roomClassId = $roomClassParam instanceof RoomClass ? $roomClassParam->id : $roomClassParam;
+        $roomClassId = is_object($roomClassParam) ? $roomClassParam->id : $roomClassParam;
+
+        $isLegacy = LegacyAccess::isAvailable('ref_kelas');
 
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                function ($attribute, $value, $fail) use ($roomClassId) {
+                function ($attribute, $value, $fail) use ($roomClassId, $isLegacy) {
                     if ($value) {
                         $normalized = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
-                        $exists = RoomClass::whereNull('deleted_at')
-                            ->where('id', '!=', $roomClassId)
-                            ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
-                            ->exists();
+                        $query = $isLegacy
+                            ? LegacyRoomClass::whereRaw('LOWER(TRIM(nama)) = ?', [$normalized])
+                            : RoomClass::whereNull('deleted_at')->whereRaw('LOWER(TRIM(name)) = ?', [$normalized]);
 
-                        if ($exists) {
+                        if ($roomClassId) {
+                            $query->where('id', '!=', $roomClassId);
+                        }
+
+                        if ($query->exists()) {
                             $fail('Nama kelas sudah digunakan.');
                         }
                     }
@@ -73,15 +80,18 @@ class UpdateRoomClassRequest extends FormRequest
                 'required',
                 'string',
                 'max:50',
-                function ($attribute, $value, $fail) use ($roomClassId) {
+                function ($attribute, $value, $fail) use ($roomClassId, $isLegacy) {
                     if ($value) {
                         $normalized = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
-                        $exists = RoomClass::whereNull('deleted_at')
-                            ->where('id', '!=', $roomClassId)
-                            ->whereRaw('LOWER(TRIM(code)) = ?', [$normalized])
-                            ->exists();
+                        $query = $isLegacy
+                            ? LegacyRoomClass::whereRaw('LOWER(TRIM(kode)) = ?', [$normalized])
+                            : RoomClass::whereNull('deleted_at')->whereRaw('LOWER(TRIM(code)) = ?', [$normalized]);
 
-                        if ($exists) {
+                        if ($roomClassId) {
+                            $query->where('id', '!=', $roomClassId);
+                        }
+
+                        if ($query->exists()) {
                             $fail('Kode kelas sudah digunakan.');
                         }
                     }
@@ -98,9 +108,6 @@ class UpdateRoomClassRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [

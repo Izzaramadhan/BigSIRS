@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\MasterData\StoreMedicinePackageRequest;
 use App\Http\Requests\MasterData\UpdateMedicinePackageRequest;
 use App\Http\Resources\MasterData\MedicinePackageResource;
-use App\Models\MasterData\MedicinePackage;
+use App\Models\Legacy\LegacyMedicinePackage;
+use App\Models\Legacy\LegacyMedicinePackageItem;
+use App\Support\LegacyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -17,19 +19,20 @@ class MedicinePackageController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        Gate::authorize('viewAny', MedicinePackage::class);
+        Gate::authorize('viewAny', LegacyMedicinePackage::class);
 
-        $query = MedicinePackage::query()->with('items.medicine');
+        $perPage = $request->input('per_page', 10);
+        $query = LegacyMedicinePackage::query()->with('items.medicine');
 
         if ($search = $request->get('search')) {
-            $query->where('name', 'like', "%{$search}%");
+            $query->search($search);
         }
 
         if ($request->has('is_active')) {
-            $query->where('is_active', $request->boolean('is_active'));
+            $isActive = $request->boolean('is_active');
+            $query->where('status', $isActive ? '1' : '0');
         }
 
-        $perPage = $request->input('per_page', 10);
         $sortBy = $request->input('sort', $request->input('sortBy', 'name'));
         if ($request->has('direction')) {
             $sortDesc = strtolower($request->input('direction')) === 'desc';
@@ -37,113 +40,183 @@ class MedicinePackageController extends Controller
             $sortDesc = filter_var($request->input('sortDesc', false), FILTER_VALIDATE_BOOLEAN);
         }
 
-        $allowedSorts = ['id', 'name', 'price', 'quantity', 'created_at', 'updated_at'];
-        if (in_array($sortBy, $allowedSorts)) {
-            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
-        } else {
-            $query->orderBy('name', 'asc');
-        }
+        $columnMap = [
+            'id' => 'id',
+            'name' => 'nama',
+            'price' => 'harga',
+            'quantity' => 'jumlah',
+            'created_at' => 'created_at',
+            'updated_at' => 'updated_at',
+        ];
+        $sortCol = $columnMap[$sortBy] ?? 'nama';
+        $query->orderBy($sortCol, $sortDesc ? 'desc' : 'asc');
 
         if ($perPage === '-1' || $perPage === 'all') {
             return MedicinePackageResource::collection($query->get());
         }
 
-        return MedicinePackageResource::collection(
-            $query->paginate((int) $perPage)
-        );
+        return MedicinePackageResource::collection($query->paginate((int) $perPage));
     }
 
-    public function store(StoreMedicinePackageRequest $request): MedicinePackageResource
+    public function store(StoreMedicinePackageRequest $request)
     {
-        Gate::authorize('create', MedicinePackage::class);
+        Gate::authorize('create', LegacyMedicinePackage::class);
 
-        $medicinePackage = DB::transaction(function () use ($request) {
-            $items = $request->validated('items');
-            $calculatedItemsTotal = 0;
+        $data = $request->validated();
+        $user = $request->user();
+        $legacyUserId = $user?->getLegacyUserId();
 
-            $processedItems = array_map(function ($item) use (&$calculatedItemsTotal) {
-                $qty = (int) $item['quantity'];
-                $unitPrice = (float) $item['unit_price'];
-                $subtotal = round($qty * $unitPrice, 2);
-                $calculatedItemsTotal += $subtotal;
+        if (LegacyAccess::isAvailable('tbl_user') && ! $legacyUserId) {
+            return response()->json([
+                'message' => 'Identitas pengguna tidak terdaftar atau tidak dapat dipetakan ke database SIMRS.',
+            ], 403);
+        }
 
-                return [
-                    'medicine_id' => $item['medicine_id'],
-                    'quantity' => $qty,
-                    'unit_price' => $unitPrice,
-                    'subtotal' => $subtotal,
-                ];
-            }, $items);
-
-            $packageData = $request->safe()->except('items');
-            if (!isset($packageData['price']) || $packageData['price'] <= 0) {
-                $packageData['price'] = $calculatedItemsTotal;
+        $medicinePackage = DB::connection('legacy')->transaction(function () use ($data, $legacyUserId) {
+            $items = $data['items'];
+            $calculatedTotal = 0;
+            foreach ($items as $item) {
+                $calculatedTotal += round(((int) $item['quantity']) * ((float) $item['unit_price']), 2);
             }
 
-            $package = MedicinePackage::create($packageData);
+            $package = new LegacyMedicinePackage();
+            $package->name = $data['name'];
+            $package->price = (! empty($data['price']) && $data['price'] > 0) ? $data['price'] : $calculatedTotal;
+            if (array_key_exists('quantity', $data)) {
+                $package->quantity = $data['quantity'];
+            }
+            if (array_key_exists('description', $data)) {
+                $package->description = $data['description'];
+            }
+            if (isset($data['is_active'])) {
+                $package->is_active = $data['is_active'];
+            } else {
+                $package->is_active = true;
+            }
+            if ($legacyUserId) {
+                $package->id_user = (string) $legacyUserId;
+            }
+            $package->save();
 
-            foreach ($processedItems as $item) {
-                $package->items()->create($item);
+            foreach ($items as $item) {
+                $subtotal = round(((int) $item['quantity']) * ((float) $item['unit_price']), 2);
+                $packageItem = new LegacyMedicinePackageItem();
+                $packageItem->medicine_package_id = $package->id;
+                $packageItem->medicine_id = $item['medicine_id'];
+                $packageItem->quantity = (int) $item['quantity'];
+                $packageItem->subtotal = $subtotal;
+                $packageItem->status = '1';
+                if ($legacyUserId) {
+                    $packageItem->id_user = (string) $legacyUserId;
+                }
+                $packageItem->save();
             }
 
             return $package->load('items.medicine');
         });
 
-        return new MedicinePackageResource($medicinePackage);
+        return (new MedicinePackageResource($medicinePackage))->response()->setStatusCode(201);
     }
 
-    public function show(MedicinePackage $medicinePackage): MedicinePackageResource
+    public function show($medicinePackage)
     {
-        Gate::authorize('view', $medicinePackage);
+        $id = $medicinePackage instanceof \Illuminate\Database\Eloquent\Model ? $medicinePackage->id : $medicinePackage;
 
-        return new MedicinePackageResource($medicinePackage->load('items.medicine'));
+        $legacy = LegacyMedicinePackage::with('items.medicine')->findOrFail($id);
+        Gate::authorize('view', $legacy);
+
+        return new MedicinePackageResource($legacy);
     }
 
-    public function update(UpdateMedicinePackageRequest $request, MedicinePackage $medicinePackage): MedicinePackageResource
+    public function update(UpdateMedicinePackageRequest $request, $medicinePackage)
     {
-        Gate::authorize('update', $medicinePackage);
+        $id = $medicinePackage instanceof \Illuminate\Database\Eloquent\Model ? $medicinePackage->id : $medicinePackage;
 
-        $medicinePackage = DB::transaction(function () use ($request, $medicinePackage) {
-            $items = $request->validated('items');
-            $calculatedItemsTotal = 0;
+        $legacy = LegacyMedicinePackage::findOrFail($id);
+        Gate::authorize('update', $legacy);
 
-            $processedItems = array_map(function ($item) use (&$calculatedItemsTotal) {
-                $qty = (int) $item['quantity'];
-                $unitPrice = (float) $item['unit_price'];
-                $subtotal = round($qty * $unitPrice, 2);
-                $calculatedItemsTotal += $subtotal;
+        $user = $request->user();
+        $legacyUserId = $user?->getLegacyUserId();
 
-                return [
-                    'medicine_id' => $item['medicine_id'],
-                    'quantity' => $qty,
-                    'unit_price' => $unitPrice,
-                    'subtotal' => $subtotal,
-                ];
-            }, $items);
+        if (LegacyAccess::isAvailable('tbl_user') && ! $legacyUserId) {
+            return response()->json([
+                'message' => 'Identitas pengguna tidak terdaftar atau tidak dapat dipetakan ke database SIMRS.',
+            ], 403);
+        }
 
-            $packageData = $request->safe()->except('items');
-            if (!isset($packageData['price']) || $packageData['price'] <= 0) {
-                $packageData['price'] = $calculatedItemsTotal;
+        $data = $request->validated();
+
+        $updated = DB::connection('legacy')->transaction(function () use ($legacy, $data, $legacyUserId) {
+            $items = $data['items'];
+            $calculatedTotal = 0;
+            foreach ($items as $item) {
+                $calculatedTotal += round(((int) $item['quantity']) * ((float) $item['unit_price']), 2);
             }
 
-            $medicinePackage->update($packageData);
+            $legacy->name = $data['name'];
+            $legacy->price = (! empty($data['price']) && $data['price'] > 0) ? $data['price'] : $calculatedTotal;
+            if (array_key_exists('quantity', $data)) {
+                $legacy->quantity = $data['quantity'];
+            }
+            if (array_key_exists('description', $data)) {
+                $legacy->description = $data['description'];
+            }
+            if (isset($data['is_active'])) {
+                $legacy->is_active = $data['is_active'];
+            }
+            if ($legacyUserId) {
+                $legacy->id_user = (string) $legacyUserId;
+            }
+            $legacy->save();
 
-            $medicinePackage->items()->delete();
-            foreach ($processedItems as $item) {
-                $medicinePackage->items()->create($item);
+            // Delete old items and recreate
+            $legacy->items()->delete();
+
+            foreach ($items as $item) {
+                $subtotal = round(((int) $item['quantity']) * ((float) $item['unit_price']), 2);
+                $packageItem = new LegacyMedicinePackageItem();
+                $packageItem->medicine_package_id = $legacy->id;
+                $packageItem->medicine_id = $item['medicine_id'];
+                $packageItem->quantity = (int) $item['quantity'];
+                $packageItem->subtotal = $subtotal;
+                $packageItem->status = '1';
+                if ($legacyUserId) {
+                    $packageItem->id_user = (string) $legacyUserId;
+                }
+                $packageItem->save();
             }
 
-            return $medicinePackage->load('items.medicine');
+            return $legacy->load('items.medicine');
         });
 
-        return new MedicinePackageResource($medicinePackage);
+        return new MedicinePackageResource($updated);
     }
 
-    public function destroy(MedicinePackage $medicinePackage): Response
+    public function destroy($medicinePackage)
     {
-        Gate::authorize('delete', $medicinePackage);
-        
-        $medicinePackage->delete();
+        $id = $medicinePackage instanceof \Illuminate\Database\Eloquent\Model ? $medicinePackage->id : $medicinePackage;
+
+        $legacy = LegacyMedicinePackage::findOrFail($id);
+        Gate::authorize('delete', $legacy);
+
+        $user = request()->user();
+        $legacyUserId = $user?->getLegacyUserId();
+
+        if (LegacyAccess::isAvailable('tbl_user') && ! $legacyUserId) {
+            return response()->json([
+                'message' => 'Identitas pengguna tidak terdaftar atau tidak dapat dipetakan ke database SIMRS.',
+            ], 403);
+        }
+
+        if ($legacy->isReferencedInTransactions()) {
+            return response()->json([
+                'message' => 'Paket obat tidak dapat dihapus karena masih digunakan pada data transaksi.',
+            ], 409);
+        }
+
+        DB::connection('legacy')->transaction(function () use ($legacy, $legacyUserId) {
+            $legacy->performSoftDelete($legacyUserId);
+        });
 
         return response()->noContent();
     }

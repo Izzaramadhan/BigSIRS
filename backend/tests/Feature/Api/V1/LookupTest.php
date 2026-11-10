@@ -4,7 +4,10 @@ namespace Tests\Feature\Api\V1;
 
 use App\Models\MasterData\Specialization;
 use App\Models\User;
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class LookupTest extends TestCase
@@ -14,6 +17,28 @@ class LookupTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Config::set('database.connections.legacy', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+        ]);
+
+        LegacyAccess::clearCache();
+
+        DB::connection('legacy')->statement('
+            CREATE TABLE IF NOT EXISTS ref_generik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_hlp INTEGER NULL,
+                nama_objek VARCHAR(255) NOT NULL,
+                sediaan VARCHAR(255) NULL,
+                status INTEGER DEFAULT 1,
+                created_at DATETIME,
+                updated_at DATETIME,
+                deleted_at DATETIME,
+                id_user INTEGER NULL
+            )
+        ');
     }
 
     public function test_specializations_lookup_requires_authentication()
@@ -45,9 +70,12 @@ class LookupTest extends TestCase
     public function test_generic_medicines_lookup_returns_options_with_filters_and_search()
     {
         $user = User::factory()->create();
-        \App\Models\MasterData\GenericMedicine::create(['name' => 'Amoxicillin 500mg', 'is_active' => true]);
-        $gen2 = \App\Models\MasterData\GenericMedicine::create(['name' => 'Paracetamol 500mg', 'is_active' => true]);
-        $gen3 = \App\Models\MasterData\GenericMedicine::create(['name' => 'Paracetamol 250mg', 'is_active' => false]);
+
+        DB::connection('legacy')->table('ref_generik')->insert([
+            ['id' => 1, 'nama_objek' => 'Amoxicillin 500mg', 'status' => 1, 'created_at' => now()],
+            ['id' => 2, 'nama_objek' => 'Paracetamol 500mg', 'status' => 1, 'created_at' => now()],
+            ['id' => 3, 'nama_objek' => 'Paracetamol 250mg', 'status' => 0, 'created_at' => now()],
+        ]);
 
         // Default active only
         $response = $this->actingAs($user)->getJson('/api/v1/lookups/generic-medicines');
@@ -67,7 +95,7 @@ class LookupTest extends TestCase
         $this->assertEquals('Paracetamol 250mg', $response->json('0.name'));
 
         // With ids included
-        $response = $this->actingAs($user)->getJson('/api/v1/lookups/generic-medicines?search=Amoxicillin&ids='.$gen3->id);
+        $response = $this->actingAs($user)->getJson('/api/v1/lookups/generic-medicines?search=Amoxicillin&ids=3');
         $response->assertOk();
         $names = collect($response->json())->pluck('name')->toArray();
         $this->assertContains('Amoxicillin 500mg', $names);

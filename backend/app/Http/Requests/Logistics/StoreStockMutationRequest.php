@@ -58,18 +58,22 @@ class StoreStockMutationRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isLegacy = \App\Support\LegacyAccess::isAvailable('lgs_mutasi');
+        $warehouseRule = $isLegacy ? 'exists:legacy.ref_gudang,id' : 'exists:warehouses,id';
+        $medicineRule = $isLegacy ? 'exists:legacy.ref_obat,id' : 'exists:medicines,id';
+
         return [
-            'source_warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
+            'source_warehouse_id' => ['required', 'integer', $warehouseRule],
             'target_warehouse_id' => [
                 'required',
                 'integer',
-                'exists:warehouses,id',
+                $warehouseRule,
                 'different:source_warehouse_id',
             ],
             'mutation_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
+            'items.*.medicine_id' => ['required', 'integer', $medicineRule],
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
             'items.*.batch_number' => ['nullable', 'string', 'max:100'],
         ];

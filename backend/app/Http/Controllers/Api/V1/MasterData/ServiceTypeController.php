@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\V1\MasterData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\MasterData\ServiceTypeRequest;
 use App\Http\Resources\Api\V1\MasterData\ServiceTypeResource;
+use App\Models\Legacy\LegacyServiceType;
 use App\Models\ServiceType;
 use App\Services\MasterData\ServiceTypeService;
+use App\Support\LegacyAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -25,7 +27,7 @@ class ServiceTypeController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $filters = $request->only(['search']);
+        $filters = $request->only(['search', 'is_active']);
         $perPage = $request->integer('per_page', 10);
         $sort = $request->string('sort', 'name')->toString();
         $order = $request->string('order', 'asc')->toString();
@@ -51,15 +53,25 @@ class ServiceTypeController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(ServiceType $serviceType): ServiceTypeResource
+    public function show($serviceType): ServiceTypeResource
     {
+        $id = $serviceType instanceof LegacyServiceType || $serviceType instanceof ServiceType ? $serviceType->id : $serviceType;
+        if (LegacyAccess::isAvailable('ref_jenis_layanan')) {
+            $legacy = LegacyServiceType::findOrFail($id);
+            return new ServiceTypeResource($legacy);
+        }
+
+        if (! ($serviceType instanceof ServiceType)) {
+            $serviceType = ServiceType::findOrFail($id);
+        }
+
         return new ServiceTypeResource($serviceType);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(ServiceTypeRequest $request, ServiceType $serviceType): JsonResponse
+    public function update(ServiceTypeRequest $request, $serviceType): JsonResponse
     {
         $serviceType = $this->service->update($serviceType, $request->validated());
 
@@ -72,12 +84,10 @@ class ServiceTypeController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(ServiceType $serviceType): JsonResponse
+    public function destroy($serviceType): JsonResponse
     {
         $this->service->delete($serviceType);
 
         return response()->json(null, 204);
     }
-
-
 }

@@ -9,8 +9,13 @@ class DoctorLookupResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $name = $this->employee ? $this->employee->name : 'Unknown';
-        $specializationName = $this->specialization ? $this->specialization->name : '';
+        $name = $this->employee?->name 
+            ?? $this->employee?->person?->nama 
+            ?? $this->person?->nama 
+            ?? $this->name 
+            ?? 'Unknown';
+
+        $specializationName = $this->specialization?->nama ?? $this->specialization?->name ?? '';
 
         $label = $specializationName ? "{$name} — {$specializationName}" : $name;
 

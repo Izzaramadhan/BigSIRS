@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -23,12 +24,16 @@ class StoreRadiologyTypeRequest extends FormRequest
      */
     public function rules(): array
     {
+        $uniqueRule = LegacyAccess::isAvailable('ref_tipe_rad')
+            ? Rule::unique('legacy.ref_tipe_rad', 'nama')->whereNull('deleted_at')
+            : Rule::unique('radiology_types', 'name')->whereNull('deleted_at');
+
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('radiology_types', 'name')->whereNull('deleted_at'),
+                $uniqueRule,
             ],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],

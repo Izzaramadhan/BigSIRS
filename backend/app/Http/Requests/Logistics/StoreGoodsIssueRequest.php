@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Logistics;
 
 use App\Models\MasterData\Warehouse;
+use App\Support\LegacyAccess;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -22,10 +23,18 @@ class StoreGoodsIssueRequest extends FormRequest
         if (is_numeric($rawWarehouse)) {
             $merge['warehouse_id'] = (int) $rawWarehouse;
         } elseif (is_string($rawWarehouse) && ! empty($rawWarehouse)) {
-            $wh = Warehouse::where('name', $rawWarehouse)->first();
+            if (LegacyAccess::isAvailable('ref_gudang')) {
+                $wh = \App\Models\Legacy\LegacyWarehouse::where('nama', $rawWarehouse)->first();
+            } else {
+                $wh = Warehouse::where('name', $rawWarehouse)->first();
+            }
             $merge['warehouse_id'] = $wh?->id;
         } else {
-            $merge['warehouse_id'] = Warehouse::first()?->id ?? 1;
+            if (LegacyAccess::isAvailable('ref_gudang')) {
+                $merge['warehouse_id'] = \App\Models\Legacy\LegacyWarehouse::first()?->id ?? 1;
+            } else {
+                $merge['warehouse_id'] = Warehouse::first()?->id ?? 1;
+            }
         }
 
         // Issue Date & Time
@@ -43,18 +52,34 @@ class StoreGoodsIssueRequest extends FormRequest
 
         // Officer
         $officerId = $this->input('officer_id') ?? $this->input('officerId');
+        $officerName = $this->input('officer_name') ?? $this->input('officerName');
+
         if ($officerId) {
             $merge['officer_id'] = (int) $officerId;
-            if (! $this->has('officer_name') && ! $this->has('officerName')) {
-                $employee = \App\Models\Employee::find($officerId);
+            if (empty($officerName)) {
+                if (LegacyAccess::isAvailable('ref_pegawai')) {
+                    $employee = \App\Models\Legacy\LegacyEmployee::find($officerId);
+                } else {
+                    $employee = \App\Models\Employee::find($officerId);
+                }
                 if ($employee) {
                     $merge['officer_name'] = $employee->name;
                     $merge['officer_role'] = $employee->position?->name ?? 'Petugas Logistik Farmasi';
                 }
             }
+        } elseif (! empty($officerName)) {
+            if (LegacyAccess::isAvailable('ref_pegawai') && LegacyAccess::isAvailable('master_person_index')) {
+                $emp = \App\Models\Legacy\LegacyEmployee::join('master_person_index', 'ref_pegawai.id_mpi', '=', 'master_person_index.id')
+                    ->where('master_person_index.nama', $officerName)
+                    ->select('ref_pegawai.id')
+                    ->first();
+                if ($emp) {
+                    $merge['officer_id'] = $emp->id;
+                }
+            }
         }
-        if ($this->has('officerName') && ! $this->has('officer_name')) {
-            $merge['officer_name'] = $this->input('officerName');
+        if (! empty($officerName)) {
+            $merge['officer_name'] = $officerName;
         }
         if ($this->has('officerRole') && ! $this->has('officer_role')) {
             $merge['officer_role'] = $this->input('officerRole');
@@ -106,20 +131,26 @@ class StoreGoodsIssueRequest extends FormRequest
 
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('lgs_pengeluaran');
+        $warehouseTable = $isLegacy ? 'legacy.ref_gudang' : 'warehouses';
+        $employeeTable = $isLegacy ? 'legacy.ref_pegawai' : 'employees';
+        $stockTable = $isLegacy ? 'legacy.lgs_log_stok' : 'warehouse_stocks';
+        $medicineTable = $isLegacy ? 'legacy.ref_obat' : 'medicines';
+
         return [
-            'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
+            'warehouse_id' => ['nullable', 'integer', "exists:{$warehouseTable},id"],
             'issue_date' => ['required', 'date'],
             'location_detail' => ['nullable', 'string', 'max:255'],
             'officer_name' => ['required', 'string', 'max:255'],
-            'officer_id' => ['nullable', 'integer', 'exists:employees,id'],
+            'officer_id' => ['nullable', 'integer', "exists:{$employeeTable},id"],
             'officer_role' => ['nullable', 'string', 'max:255'],
             'purpose' => ['nullable', 'string', 'max:100'],
             'reference_number' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'is_draft' => ['nullable', 'boolean'],
             'items' => ['nullable', 'array'],
-            'items.*.warehouse_stock_id' => ['nullable', 'integer', 'exists:warehouse_stocks,id'],
-            'items.*.medicine_id' => ['required_with:items', 'integer', 'exists:medicines,id'],
+            'items.*.warehouse_stock_id' => ['nullable', 'integer', "exists:{$stockTable},id"],
+            'items.*.medicine_id' => ['required_with:items', 'integer', "exists:{$medicineTable},id"],
             'items.*.batch_number' => ['nullable', 'string', 'max:100'],
             'items.*.expired_date' => ['nullable', 'date'],
             'items.*.quantity' => ['required_with:items', 'numeric', 'gt:0'],

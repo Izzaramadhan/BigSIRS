@@ -10,16 +10,23 @@ use App\Http\Resources\Logistics\GoodsIssueItemResource;
 use App\Http\Resources\Logistics\GoodsIssueResource;
 use App\Http\Resources\Logistics\WarehouseStockResource;
 use App\Models\Employee;
+use App\Models\Legacy\LegacyEmployee;
+use App\Models\Legacy\LegacyGoodsIssue;
+use App\Models\Legacy\LegacyGoodsIssueItem;
+use App\Models\Legacy\LegacyStockLog;
+use App\Models\Legacy\LegacyWarehouse;
 use App\Models\Logistics\GoodsIssue;
 use App\Models\Logistics\GoodsIssueItem;
 use App\Models\Logistics\PosSale;
 use App\Models\Logistics\WarehouseStock;
 use App\Models\MasterData\Warehouse;
 use App\Services\Logistics\GoodsIssueService;
+use App\Support\LegacyAccess;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -35,6 +42,41 @@ class GoodsIssueController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         Gate::authorize('viewAny', GoodsIssue::class);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $query = LegacyGoodsIssue::pengeluaran()->with([
+                'employee',
+                'items.stockLog.warehouse',
+                'items.stockLog.fakturDetail.medicine.unit',
+            ]);
+
+            $search = $request->get('search') ?? $request->get('issueNumber') ?? $request->get('q');
+            if (! empty($search)) {
+                $query->search($search);
+            }
+
+            if ($startDate = ($request->get('startDate') ?? $request->get('start_date'))) {
+                $query->whereDate('tanggal', '>=', $startDate);
+            }
+            if ($endDate = ($request->get('endDate') ?? $request->get('end_date'))) {
+                $query->whereDate('tanggal', '<=', $endDate);
+            }
+
+            $officer = $request->get('officer') ?? $request->get('officerName') ?? $request->get('officer_name');
+            if (! empty($officer) && $officer !== 'Semua Petugas') {
+                $query->whereHas('employee.person', fn ($eq) => $eq->where('nama', 'like', "%{$officer}%"));
+            }
+
+            $purpose = $request->get('purpose');
+            if (! empty($purpose) && $purpose !== 'Semua Keperluan') {
+                $query->where('keperluan', 'like', "%{$purpose}%");
+            }
+
+            $perPage = (int) ($request->get('per_page') ?? $request->get('perPage') ?? 10);
+            $paginator = $query->orderByDesc('tanggal')->orderByDesc('id')->paginate($perPage);
+
+            return GoodsIssueResource::collection($paginator);
+        }
 
         $query = GoodsIssue::with([
             'warehouse',
@@ -134,6 +176,28 @@ class GoodsIssueController extends Controller
     {
         Gate::authorize('viewAny', GoodsIssue::class);
 
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $summary = [
+                'total_completed_issues' => LegacyGoodsIssue::pengeluaran()->where('status', 1)->count(),
+                'total_completed_value' => (float) DB::connection('legacy')->table('lgs_pengeluaran_detail as d')
+                    ->join('lgs_pengeluaran as p', 'd.id_lgs_pengeluaran', '=', 'p.id')
+                    ->join('lgs_log_stok as s', 'd.id_lgs_log_stok', '=', 's.id')
+                    ->where(fn ($q) => $q->where('p.flag', 'pengeluaran')->orWhereNull('p.flag'))
+                    ->where('p.status', 1)
+                    ->whereNull('p.deleted_at')
+                    ->sum(DB::raw('d.jumlah * s.harga_jual')),
+                'total_draft_issues' => 0,
+                'total_cancelled_issues' => LegacyGoodsIssue::pengeluaran()->where('status', 0)->count(),
+                'damaged_goods_count' => LegacyGoodsIssue::pengeluaran()->where('keperluan', 'like', '%rusak%')->count(),
+                'expired_goods_count' => LegacyGoodsIssue::pengeluaran()->where(fn ($q) => $q->where('keperluan', 'like', '%kedaluwarsa%')->orWhere('keperluan', 'like', '%pemusnahan%'))->count(),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $summary,
+            ]);
+        }
+
         $summary = $this->service->getSummary($request->all());
 
         return response()->json([
@@ -148,6 +212,63 @@ class GoodsIssueController extends Controller
     public function formOptions(Request $request): JsonResponse
     {
         Gate::authorize('viewAny', GoodsIssue::class);
+
+        if (LegacyAccess::isAvailable('ref_gudang') || LegacyAccess::isAvailable('ref_pegawai')) {
+            $warehouses = LegacyAccess::isAvailable('ref_gudang')
+                ? LegacyWarehouse::orderBy('nama')->get(['id', 'nama', 'kode'])
+                    ->map(fn ($w) => [
+                        'id' => $w->id,
+                        'name' => $w->name,
+                        'code' => $w->code,
+                    ])
+                    ->values()
+                : Warehouse::orderBy('name')->get(['id', 'name', 'code']);
+
+            if (LegacyAccess::isAvailable('ref_pegawai') && LegacyAccess::isAvailable('master_person_index')) {
+                $officers = LegacyEmployee::with('person')
+                    ->where('ref_pegawai.status', '1')
+                    ->get()
+                    ->filter(fn ($emp) => ! empty($emp->person?->nama))
+                    ->sortBy(fn ($emp) => strtolower($emp->person->nama))
+                    ->map(fn ($emp) => [
+                        'id' => $emp->id,
+                        'name' => $emp->person->nama,
+                        'nip' => $emp->nip,
+                    ])
+                    ->values();
+            } elseif (LegacyAccess::isAvailable('ref_pegawai')) {
+                $officers = LegacyEmployee::all()->map(fn ($emp) => ['id' => $emp->id, 'name' => $emp->name]);
+            } else {
+                $officers = Employee::orderBy('name')->get(['id', 'name']);
+            }
+
+            if ($officers->isEmpty()) {
+                $officers = collect([
+                    ['id' => 1, 'name' => 'Apt. Budi Santoso, S.Farm'],
+                    ['id' => 2, 'name' => 'Siti Rahmawati, A.Md.Farm'],
+                    ['id' => 3, 'name' => 'dr. Hendra Kusuma, Sp.PD'],
+                ]);
+            }
+
+            $purposes = [
+                'Kebutuhan Internal',
+                'Barang Rusak',
+                'Kegiatan Sosial',
+                'Kedaluwarsa/Pemusnahan',
+                'Buffer Ruangan',
+                'Penelitian/Uji Mutu',
+                'Lainnya',
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'warehouses' => $warehouses,
+                    'officers' => $officers,
+                    'purposes' => $purposes,
+                ],
+            ]);
+        }
 
         $warehouses = Warehouse::orderBy('name')->get(['id', 'name', 'code']);
         $officers = Employee::orderBy('name')->get(['id', 'name']);
@@ -183,11 +304,23 @@ class GoodsIssueController extends Controller
     /**
      * Display a specific goods issue document.
      */
-    public function show(GoodsIssue $goodsIssue): GoodsIssueResource
+    public function show($goodsIssue): GoodsIssueResource
     {
-        Gate::authorize('view', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
 
-        $goodsIssue->load([
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacy = LegacyGoodsIssue::pengeluaran()->with([
+                'employee',
+                'items.stockLog.warehouse',
+                'items.stockLog.fakturDetail.medicine.unit',
+            ])->find($id);
+
+            if ($legacy) {
+                return new GoodsIssueResource($legacy);
+            }
+        }
+
+        $local = GoodsIssue::with([
             'warehouse',
             'officer',
             'creator',
@@ -195,9 +328,14 @@ class GoodsIssueController extends Controller
             'canceller',
             'items.medicine.unit',
             'items.warehouseStock',
-        ]);
+        ])->find($id);
 
-        return new GoodsIssueResource($goodsIssue);
+        if ($local) {
+            Gate::authorize('view', $local);
+            return new GoodsIssueResource($local);
+        }
+
+        abort(404, 'Goods issue not found.');
     }
 
     /**
@@ -206,6 +344,71 @@ class GoodsIssueController extends Controller
     public function store(StoreGoodsIssueRequest $request): JsonResponse
     {
         Gate::authorize('create', GoodsIssue::class);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $validated = $request->validated();
+            $legacyUserId = $request->user()?->getLegacyUserId() ?? 1;
+
+            $issue = DB::connection('legacy')->transaction(function () use ($validated, $legacyUserId, $request) {
+                $isDraft = $request->boolean('is_draft', false);
+                $issueDate = $validated['issue_date'] ?? date('Y-m-d');
+                $officerId = $validated['officer_id'] ?? $validated['officerId'] ?? null;
+                $officerName = $validated['officer_name'] ?? $validated['officerName'] ?? null;
+
+                if (! $officerId && ! empty($officerName)) {
+                    if (LegacyAccess::isAvailable('ref_pegawai') && LegacyAccess::isAvailable('master_person_index')) {
+                        $emp = LegacyEmployee::join('master_person_index', 'ref_pegawai.id_mpi', '=', 'master_person_index.id')
+                            ->where('master_person_index.nama', $officerName)
+                            ->select('ref_pegawai.id')
+                            ->first();
+                        if ($emp) {
+                            $officerId = $emp->id;
+                        }
+                    }
+                }
+
+                $purpose = $validated['purpose'] ?? 'Kebutuhan Internal';
+                $notes = $validated['notes'] ?? null;
+                $keperluan = $notes ?: $purpose;
+
+                $goodsIssue = LegacyGoodsIssue::create([
+                    'tanggal' => $issueDate,
+                    'id_pegawai' => $officerId ?: 0,
+                    'keperluan' => $keperluan,
+                    'flag' => 'pengeluaran',
+                    'id_user' => $legacyUserId,
+                    'status' => $isDraft ? 0 : 1,
+                    'kode_billing' => $validated['reference_number'] ?? null,
+                ]);
+
+                foreach ($validated['items'] ?? [] as $item) {
+                    $stockId = (int) ($item['warehouse_stock_id'] ?? $item['warehouseStockId'] ?? $item['stock_id'] ?? 0);
+                    $qty = (float) ($item['quantity'] ?? 0);
+
+                    LegacyGoodsIssueItem::create([
+                        'id_lgs_pengeluaran' => $goodsIssue->id,
+                        'id_lgs_log_stok' => $stockId,
+                        'jumlah' => $qty,
+                        'id_user' => $legacyUserId,
+                        'status' => 1,
+                    ]);
+
+                    if (! $isDraft && $stockId) {
+                        $stock = LegacyStockLog::lockForUpdate()->find($stockId);
+                        if ($stock) {
+                            $stock->qty = max(0, $stock->qty - $qty);
+                            $stock->save();
+                        }
+                    }
+                }
+
+                return $goodsIssue;
+            });
+
+            return (new GoodsIssueResource($issue->load(['employee', 'items.stockLog.warehouse', 'items.stockLog.fakturDetail.medicine.unit'])))
+                ->response()
+                ->setStatusCode(201);
+        }
 
         $isDraft = $request->boolean('is_draft', false);
         $issue = $this->service->createIssue(
@@ -222,13 +425,53 @@ class GoodsIssueController extends Controller
     /**
      * Update an existing draft goods issue document.
      */
-    public function update(UpdateGoodsIssueRequest $request, GoodsIssue $goodsIssue): GoodsIssueResource
+    public function update(UpdateGoodsIssueRequest $request, $goodsIssue): GoodsIssueResource
     {
-        Gate::authorize('update', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacy = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            $validated = $request->validated();
+            $legacyUserId = $request->user()?->getLegacyUserId() ?? 1;
+
+            $updated = DB::connection('legacy')->transaction(function () use ($legacy, $validated, $legacyUserId) {
+                $officerId = $validated['officer_id'] ?? $validated['officerId'] ?? null;
+                $officerName = $validated['officer_name'] ?? $validated['officerName'] ?? null;
+                if (! $officerId && ! empty($officerName)) {
+                    if (LegacyAccess::isAvailable('ref_pegawai') && LegacyAccess::isAvailable('master_person_index')) {
+                        $emp = LegacyEmployee::join('master_person_index', 'ref_pegawai.id_mpi', '=', 'master_person_index.id')
+                            ->where('master_person_index.nama', $officerName)
+                            ->select('ref_pegawai.id')
+                            ->first();
+                        if ($emp) {
+                            $officerId = $emp->id;
+                        }
+                    }
+                }
+
+                $purpose = $validated['purpose'] ?? $legacy->keperluan;
+                $notes = $validated['notes'] ?? null;
+                $keperluan = $notes ?: ($purpose ?: $legacy->keperluan);
+
+                $legacy->update([
+                    'tanggal' => $validated['issue_date'] ?? $legacy->tanggal,
+                    'id_pegawai' => $officerId ?? $legacy->id_pegawai,
+                    'keperluan' => $keperluan,
+                    'id_user' => $legacyUserId,
+                ]);
+
+                return $legacy;
+            });
+
+            return new GoodsIssueResource($updated->load(['employee', 'items.stockLog.warehouse', 'items.stockLog.fakturDetail.medicine.unit']));
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        Gate::authorize('update', $local);
 
         $isDraft = $request->boolean('is_draft', true);
         $issue = $this->service->updateDraft(
-            $goodsIssue,
+            $local,
             $request->validated(),
             (int) $request->user()->id,
             ! $isDraft
@@ -240,11 +483,32 @@ class GoodsIssueController extends Controller
     /**
      * Finalize a draft goods issue document.
      */
-    public function finalize(Request $request, GoodsIssue $goodsIssue): GoodsIssueResource
+    public function finalize(Request $request, $goodsIssue): GoodsIssueResource
     {
-        Gate::authorize('finalize', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
 
-        $issue = $this->service->finalize($goodsIssue, (int) $request->user()->id);
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacy = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            DB::connection('legacy')->transaction(function () use ($legacy) {
+                $legacy->update(['status' => 1]);
+                foreach ($legacy->items as $item) {
+                    if ($item->id_lgs_log_stok) {
+                        $stock = LegacyStockLog::lockForUpdate()->find($item->id_lgs_log_stok);
+                        if ($stock) {
+                            $stock->qty = max(0, $stock->qty - (float) $item->jumlah);
+                            $stock->save();
+                        }
+                    }
+                }
+            });
+
+            return new GoodsIssueResource($legacy->load(['employee', 'items.stockLog.warehouse', 'items.stockLog.fakturDetail.medicine.unit']));
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        Gate::authorize('finalize', $local);
+
+        $issue = $this->service->finalize($local, (int) $request->user()->id);
 
         return new GoodsIssueResource($issue);
     }
@@ -252,12 +516,33 @@ class GoodsIssueController extends Controller
     /**
      * Cancel a goods issue document.
      */
-    public function cancel(CancelGoodsIssueRequest $request, GoodsIssue $goodsIssue): GoodsIssueResource
+    public function cancel(CancelGoodsIssueRequest $request, $goodsIssue): GoodsIssueResource
     {
-        Gate::authorize('cancel', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacy = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            DB::connection('legacy')->transaction(function () use ($legacy) {
+                $legacy->update(['status' => 0]);
+                foreach ($legacy->items as $item) {
+                    if ($item->id_lgs_log_stok) {
+                        $stock = LegacyStockLog::lockForUpdate()->find($item->id_lgs_log_stok);
+                        if ($stock) {
+                            $stock->qty += (float) $item->jumlah;
+                            $stock->save();
+                        }
+                    }
+                }
+            });
+
+            return new GoodsIssueResource($legacy->load(['employee', 'items.stockLog.warehouse', 'items.stockLog.fakturDetail.medicine.unit']));
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        Gate::authorize('cancel', $local);
 
         $reason = $request->validated('reason');
-        $issue = $this->service->cancel($goodsIssue, $reason, (int) $request->user()->id);
+        $issue = $this->service->cancel($local, $reason, (int) $request->user()->id);
 
         return new GoodsIssueResource($issue);
     }
@@ -265,11 +550,27 @@ class GoodsIssueController extends Controller
     /**
      * Delete a draft goods issue document.
      */
-    public function destroy(GoodsIssue $goodsIssue): JsonResponse
+    public function destroy($goodsIssue): JsonResponse
     {
-        Gate::authorize('delete', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
 
-        $this->service->deleteDraft($goodsIssue);
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacy = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            DB::connection('legacy')->transaction(function () use ($legacy) {
+                $legacy->items()->delete();
+                $legacy->delete();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Draft pengeluaran barang berhasil dihapus.',
+            ]);
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        Gate::authorize('delete', $local);
+
+        $this->service->deleteDraft($local);
 
         return response()->json([
             'success' => true,
@@ -292,7 +593,39 @@ class GoodsIssueController extends Controller
 
         $warehouseId = is_numeric($warehouse)
             ? (int) $warehouse
-            : Warehouse::where('name', $warehouse)->value('id');
+            : (Warehouse::where('name', $warehouse)->value('id') ?? 1);
+
+        if (LegacyAccess::isAvailable('lgs_log_stok')) {
+            $query = LegacyStockLog::with(['warehouse', 'fakturDetail.medicine.unit'])
+                ->where('id_gudang', $warehouseId)
+                ->where('qty', '>', 0);
+
+            $refDate = $request->input('issue_date') ?? $request->input('date') ?? Carbon::today()->toDateString();
+            try {
+                $refDate = Carbon::parse($refDate)->toDateString();
+            } catch (\Throwable) {
+                $refDate = Carbon::today()->toDateString();
+            }
+
+            $query->whereHas('fakturDetail', function ($q) use ($refDate) {
+                $q->whereNull('ed')
+                    ->orWhere('ed', '>=', $refDate);
+            });
+
+            if ($search = trim((string) $request->input('search', ''))) {
+                $query->search($search);
+            }
+
+            if ($request->has('all') || $request->input('all') == 1) {
+                $stocks = $query->get();
+                return WarehouseStockResource::collection($stocks);
+            }
+
+            $perPage = (int) ($request->input('per_page') ?? $request->input('perPage') ?? 20);
+            $stocks = $query->paginate($perPage);
+
+            return WarehouseStockResource::collection($stocks);
+        }
 
         if (! $warehouseId) {
             return response()->json([
@@ -345,9 +678,54 @@ class GoodsIssueController extends Controller
     /**
      * Add single item to goods issue.
      */
-    public function addItem(Request $request, GoodsIssue $goodsIssue): JsonResponse
+    public function addItem(Request $request, $goodsIssue): JsonResponse
     {
-        Gate::authorize('view', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacyIssue = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            $request->validate([
+                'medicine_id' => ['required', 'integer'],
+                'quantity' => ['required', 'numeric', 'gt:0'],
+                'stock_id' => ['nullable', 'integer'],
+                'warehouse_stock_id' => ['nullable', 'integer'],
+            ], [
+                'medicine_id.required' => 'Sediaan obat wajib dipilih.',
+                'quantity.required' => 'Jumlah sediaan wajib diisi.',
+                'quantity.gt' => 'Jumlah sediaan harus lebih besar dari 0.',
+            ]);
+
+            $legacyUserId = $request->user()?->getLegacyUserId() ?? 1;
+            $stockId = (int) ($request->input('warehouse_stock_id') ?? $request->input('stock_id'));
+            $qty = (float) $request->input('quantity');
+
+            $item = DB::connection('legacy')->transaction(function () use ($id, $stockId, $qty, $legacyUserId, $legacyIssue) {
+                $detail = LegacyGoodsIssueItem::create([
+                    'id_lgs_pengeluaran' => $id,
+                    'id_lgs_log_stok' => $stockId,
+                    'jumlah' => $qty,
+                    'id_user' => $legacyUserId,
+                    'status' => 1,
+                ]);
+
+                if ($legacyIssue->status == 1 && $stockId) {
+                    $stock = LegacyStockLog::lockForUpdate()->find($stockId);
+                    if ($stock) {
+                        $stock->qty = max(0, $stock->qty - $qty);
+                        $stock->save();
+                    }
+                }
+
+                return $detail;
+            });
+
+            return (new GoodsIssueItemResource($item->load(['stockLog.warehouse', 'stockLog.fakturDetail.medicine.unit'])))
+                ->response()
+                ->setStatusCode(201);
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        Gate::authorize('view', $local);
 
         $request->validate([
             'medicine_id' => ['required', 'integer', 'exists:medicines,id'],
@@ -365,7 +743,7 @@ class GoodsIssueController extends Controller
             'quantity.gt' => 'Jumlah sediaan harus lebih besar dari 0.',
         ]);
 
-        $item = $this->service->addItem($goodsIssue, $request->all(), (int) $request->user()->id);
+        $item = $this->service->addItem($local, $request->all(), (int) $request->user()->id);
 
         return (new GoodsIssueItemResource($item))
             ->response()
@@ -375,9 +753,47 @@ class GoodsIssueController extends Controller
     /**
      * Update an item in goods issue.
      */
-    public function updateItem(Request $request, GoodsIssue $goodsIssue, GoodsIssueItem $item): JsonResponse
+    public function updateItem(Request $request, $goodsIssue, $item): JsonResponse
     {
-        Gate::authorize('view', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
+        $itemId = $item instanceof GoodsIssueItem ? $item->id : ($item instanceof LegacyGoodsIssueItem ? $item->id : $item);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacyIssue = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            $legacyItem = LegacyGoodsIssueItem::where('id_lgs_pengeluaran', $id)->findOrFail($itemId);
+
+            $request->validate([
+                'quantity' => ['required', 'numeric', 'gt:0'],
+            ], [
+                'quantity.required' => 'Jumlah sediaan wajib diisi.',
+                'quantity.gt' => 'Jumlah sediaan harus lebih besar dari 0.',
+            ]);
+
+            $newQty = (float) $request->input('quantity');
+            $diff = $newQty - (float) $legacyItem->jumlah;
+
+            $updated = DB::connection('legacy')->transaction(function () use ($legacyIssue, $legacyItem, $newQty, $diff) {
+                $legacyItem->update(['jumlah' => $newQty]);
+
+                if ($legacyIssue->status == 1 && $legacyItem->id_lgs_log_stok) {
+                    $stock = LegacyStockLog::lockForUpdate()->find($legacyItem->id_lgs_log_stok);
+                    if ($stock) {
+                        $stock->qty = max(0, $stock->qty - $diff);
+                        $stock->save();
+                    }
+                }
+
+                return $legacyItem;
+            });
+
+            return (new GoodsIssueItemResource($updated->load(['stockLog.warehouse', 'stockLog.fakturDetail.medicine.unit'])))
+                ->response()
+                ->setStatusCode(200);
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        $localItem = GoodsIssueItem::where('goods_issue_id', $id)->findOrFail($itemId);
+        Gate::authorize('view', $local);
 
         $request->validate([
             'quantity' => ['required', 'numeric', 'gt:0'],
@@ -386,7 +802,7 @@ class GoodsIssueController extends Controller
             'quantity.gt' => 'Jumlah sediaan harus lebih besar dari 0.',
         ]);
 
-        $updatedItem = $this->service->updateItem($goodsIssue, $item, $request->all(), (int) $request->user()->id);
+        $updatedItem = $this->service->updateItem($local, $localItem, $request->all(), (int) $request->user()->id);
 
         return (new GoodsIssueItemResource($updatedItem))
             ->response()
@@ -396,11 +812,37 @@ class GoodsIssueController extends Controller
     /**
      * Delete an item from goods issue.
      */
-    public function deleteItem(GoodsIssue $goodsIssue, GoodsIssueItem $item): JsonResponse
+    public function deleteItem($goodsIssue, $item): JsonResponse
     {
-        Gate::authorize('view', $goodsIssue);
+        $id = $goodsIssue instanceof GoodsIssue ? $goodsIssue->id : ($goodsIssue instanceof LegacyGoodsIssue ? $goodsIssue->id : $goodsIssue);
+        $itemId = $item instanceof GoodsIssueItem ? $item->id : ($item instanceof LegacyGoodsIssueItem ? $item->id : $item);
 
-        $this->service->deleteItem($goodsIssue, $item, (int) auth()->id());
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $legacyIssue = LegacyGoodsIssue::pengeluaran()->findOrFail($id);
+            $legacyItem = LegacyGoodsIssueItem::where('id_lgs_pengeluaran', $id)->findOrFail($itemId);
+
+            DB::connection('legacy')->transaction(function () use ($legacyIssue, $legacyItem) {
+                if ($legacyIssue->status == 1 && $legacyItem->id_lgs_log_stok) {
+                    $stock = LegacyStockLog::lockForUpdate()->find($legacyItem->id_lgs_log_stok);
+                    if ($stock) {
+                        $stock->qty = $stock->qty + (float) $legacyItem->jumlah;
+                        $stock->save();
+                    }
+                }
+                $legacyItem->delete();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Item detail pengeluaran berhasil dihapus.',
+            ]);
+        }
+
+        $local = GoodsIssue::findOrFail($id);
+        $localItem = GoodsIssueItem::where('goods_issue_id', $id)->findOrFail($itemId);
+        Gate::authorize('view', $local);
+
+        $this->service->deleteItem($local, $localItem, (int) auth()->id());
 
         return response()->json([
             'success' => true,
@@ -414,6 +856,57 @@ class GoodsIssueController extends Controller
     public function export(Request $request): StreamedResponse
     {
         Gate::authorize('viewAny', GoodsIssue::class);
+
+        if (LegacyAccess::isAvailable('lgs_pengeluaran')) {
+            $query = LegacyGoodsIssue::pengeluaran()->with([
+                'employee',
+                'items.stockLog.warehouse',
+                'items.stockLog.fakturDetail.medicine.unit',
+            ]);
+
+            $issues = $query->orderByDesc('tanggal')->get();
+
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="Daftar_Pengeluaran_Barang_'.date('Ymd_His').'.csv"',
+            ];
+
+            return response()->stream(function () use ($issues) {
+                $handle = fopen('php://output', 'w');
+                fputcsv($handle, [
+                    'No',
+                    'Nomor Pengeluaran',
+                    'Referensi/BAP',
+                    'Tanggal Waktu',
+                    'Gudang Asal',
+                    'Petugas Otorisasi',
+                    'Keperluan',
+                    'Total Jenis',
+                    'Total Kuantitas',
+                    'Status',
+                    'Catatan',
+                ]);
+
+                foreach ($issues as $idx => $it) {
+                    $date = $it->tanggal ? Carbon::parse($it->tanggal)->format('d M Y H:i').' WIB' : '-';
+                    fputcsv($handle, [
+                        $idx + 1,
+                        $it->issue_number,
+                        $it->reference_number ?? '-',
+                        $date,
+                        $it->warehouse_name ?? 'Gudang Utama',
+                        $it->officer_name,
+                        $it->purpose,
+                        $it->items->count(),
+                        (float) $it->items->sum('jumlah'),
+                        ucfirst($it->status),
+                        $it->notes ?? '-',
+                    ]);
+                }
+
+                fclose($handle);
+            }, 200, $headers);
+        }
 
         $query = GoodsIssue::with([
             'warehouse',

@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreOccupationRequest extends FormRequest
 {
@@ -22,8 +24,20 @@ class StoreOccupationRequest extends FormRequest
      */
     public function rules(): array
     {
+        $uniqueRule = LegacyAccess::isAvailable('ref_pekerjaan')
+            ? Rule::unique('legacy.ref_pekerjaan', 'pekerjaan')->whereNull('deleted_at')
+            : Rule::unique('occupations', 'name')->whereNull('deleted_at');
+
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:occupations,name'],
+            'name' => ['required', 'string', 'max:50', $uniqueRule],
+            'is_active' => ['nullable', 'boolean'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'name.unique' => 'Nama Pekerjaan sudah digunakan.',
         ];
     }
 

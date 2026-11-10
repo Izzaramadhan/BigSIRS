@@ -16,14 +16,14 @@ class DoctorScheduleResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'legacy_id' => $this->legacy_id,
+            'legacy_id' => $this->legacy_id ?? $this->id,
             'doctor_id' => $this->doctor_id,
             'doctor' => [
                 'id' => $this->whenLoaded('doctor', function () {
                     return $this->doctor->id;
                 }),
                 'name' => $this->whenLoaded('doctor', function () {
-                    return $this->doctor->employee->name ?? '';
+                    return $this->doctor->name ?? $this->doctor->employee->name ?? '';
                 }),
                 'specialization' => $this->whenLoaded('doctor', function () {
                     return $this->doctor->specialization->name ?? '';
@@ -35,14 +35,14 @@ class DoctorScheduleResource extends JsonResource
                     return $this->polyclinic->id;
                 }),
                 'name' => $this->whenLoaded('polyclinic', function () {
-                    return $this->polyclinic->name;
+                    return $this->polyclinic->name ?? '';
                 }),
             ],
             'day_of_week' => $this->day_of_week,
             'start_time' => $this->start_time ? substr($this->start_time, 0, 5) : null,
             'end_time' => $this->end_time ? substr($this->end_time, 0, 5) : null,
             'is_holiday' => (bool) $this->is_holiday,
-            'online_quota' => $this->online_quota,
+            'online_quota' => (int) $this->online_quota,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

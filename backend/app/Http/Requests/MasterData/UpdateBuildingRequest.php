@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,26 +27,25 @@ class UpdateBuildingRequest extends FormRequest
      */
     public function rules(): array
     {
-        $buildingId = $this->route('building')?->id ?? $this->route('building');
+        $buildingParam = $this->route('building');
+        $buildingId = is_object($buildingParam) ? $buildingParam->id : $buildingParam;
+
+        $isLegacy = LegacyAccess::isAvailable('ref_gedung');
+        $uniqueRule = $isLegacy
+            ? Rule::unique('legacy.ref_gedung', 'nama')->ignore($buildingId)->whereNull('deleted_at')
+            : Rule::unique('buildings', 'name')->ignore($buildingId)->whereNull('deleted_at');
 
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('buildings', 'name')
-                    ->ignore($buildingId)
-                    ->whereNull('deleted_at'),
+                $uniqueRule,
             ],
             'description' => ['nullable', 'string'],
         ];
     }
 
-    /**
-     * Get the error messages for the defined validation rules.
-     *
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [

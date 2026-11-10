@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacySupplier;
 use App\Models\MasterData\Supplier;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -13,7 +15,19 @@ class UpdateSupplierRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('update', $this->route('supplier') ?? Supplier::class);
+        $supplier = $this->route('supplier');
+        if (LegacyAccess::isAvailable('ref_supplier')) {
+            $id = $supplier instanceof \Illuminate\Database\Eloquent\Model ? $supplier->id : $supplier;
+            $legacy = LegacySupplier::find($id);
+
+            return $legacy ? ($this->user()?->can('update', $legacy) ?? true) : true;
+        }
+
+        if (is_numeric($supplier)) {
+            $supplier = Supplier::find($supplier);
+        }
+
+        return $this->user()?->can('update', $supplier ?? Supplier::class) ?? true;
     }
 
     /**
@@ -24,10 +38,19 @@ class UpdateSupplierRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:150'],
-            'phone' => ['nullable', 'string', 'max:50'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'is_active' => ['boolean'],
+            'name' => ['required', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:15'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['sometimes', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => is_string($this->name) ? trim($this->name) : $this->name,
+            'phone' => is_string($this->phone) ? trim($this->phone) : $this->phone,
+            'address' => is_string($this->address) ? trim($this->address) : $this->address,
+        ]);
     }
 }

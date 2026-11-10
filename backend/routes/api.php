@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\V1\MasterData\PositionController;
 use App\Http\Controllers\Api\V1\MasterData\ProcedureCategoryController;
 use App\Http\Controllers\Api\V1\MasterData\ProcedurePackageController;
 use App\Http\Controllers\Api\V1\MasterData\ProcedureUserMappingController;
+use App\Http\Controllers\Api\V1\MasterData\ProvinceController;
 use App\Http\Controllers\Api\V1\MasterData\RadiologyCategoryController;
 use App\Http\Controllers\Api\V1\MasterData\RadiologyGroupController;
 use App\Http\Controllers\Api\V1\MasterData\RadiologyItemController;
@@ -114,6 +115,7 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('occupations', OccupationController::class);
 
+            Route::apiResource('provinces', ProvinceController::class);
             Route::apiResource('regencies', RegencyController::class);
 
             Route::apiResource('districts', DistrictController::class);

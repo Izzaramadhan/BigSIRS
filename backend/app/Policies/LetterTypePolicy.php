@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\LetterType;
 use App\Models\User;
 
 class LetterTypePolicy
@@ -12,22 +11,22 @@ class LetterTypePolicy
         return true;
     }
 
-    public function view(User $user, LetterType $letterType): bool
+    public function view(User $user, mixed $letterType = null): bool
     {
         return true;
     }
 
     public function create(User $user): bool
     {
-        return true; // Simplified for this project
+        return true;
     }
 
-    public function update(User $user, LetterType $letterType): bool
+    public function update(User $user, mixed $letterType = null): bool
     {
         return true;
     }
 
-    public function delete(User $user, LetterType $letterType): bool
+    public function delete(User $user, mixed $letterType = null): bool
     {
         return true;
     }

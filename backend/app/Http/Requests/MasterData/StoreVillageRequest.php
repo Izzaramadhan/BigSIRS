@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,16 +15,24 @@ class StoreVillageRequest extends FormRequest
 
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_kelurahan');
+
+        $districtExistsRule = $isLegacy
+            ? Rule::exists('legacy.ref_kecamatan', 'id')->where(fn ($q) => $q->whereNull('deleted_at'))
+            : Rule::exists('districts', 'id')->where(fn ($q) => $q->whereNull('deleted_at'));
+
+        $uniqueCodeRule = $isLegacy
+            ? Rule::unique('legacy.ref_kelurahan', 'kode_kelurahan')
+            : Rule::unique('villages', 'code');
+
         return [
             'district_id' => [
                 'required',
-                'integer',
-                Rule::exists('districts', 'id')->where(function ($query) {
-                    $query->whereNull('deleted_at');
-                }),
+                $districtExistsRule,
             ],
-            'code' => ['nullable', 'string', 'max:50', 'unique:villages,code'],
+            'code' => ['nullable', 'string', 'max:50', $uniqueCodeRule],
             'name' => ['required', 'string', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
         ];
     }
 

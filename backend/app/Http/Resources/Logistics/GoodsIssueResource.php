@@ -101,12 +101,12 @@ class GoodsIssueResource extends JsonResource
             'notes' => $this->notes,
             'createdBy' => $this->creator?->name,
             'finalizedBy' => $this->finalizer?->name,
-            'finalizedAt' => $this->finalized_at?->toIso8601String(),
+            'finalizedAt' => $this->finalized_at instanceof \DateTimeInterface ? $this->finalized_at->toIso8601String() : ($this->finalized_at ? Carbon::parse($this->finalized_at)->toIso8601String() : null),
             'cancelledBy' => $this->canceller?->name,
-            'cancelledAt' => $this->cancelled_at?->toIso8601String(),
+            'cancelledAt' => $this->cancelled_at instanceof \DateTimeInterface ? $this->cancelled_at->toIso8601String() : ($this->cancelled_at ? Carbon::parse($this->cancelled_at)->toIso8601String() : null),
             'items' => GoodsIssueItemResource::collection($this->whenLoaded('items')),
-            'createdAt' => $this->created_at?->toIso8601String(),
-            'updatedAt' => $this->updated_at?->toIso8601String(),
+            'createdAt' => $this->created_at instanceof \DateTimeInterface ? $this->created_at->toIso8601String() : ($this->created_at ? Carbon::parse($this->created_at)->toIso8601String() : null),
+            'updatedAt' => $this->updated_at instanceof \DateTimeInterface ? $this->updated_at->toIso8601String() : ($this->updated_at ? Carbon::parse($this->updated_at)->toIso8601String() : null),
         ];
     }
 }

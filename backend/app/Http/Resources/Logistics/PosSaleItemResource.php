@@ -35,7 +35,7 @@ class PosSaleItemResource extends JsonResource
             'warehouseName' => $warehouseName,
             'warehouseId' => $this->warehouseStock?->warehouse_id ?? $this->posSale?->warehouse_id,
             'batchNumber' => $this->batch_number,
-            'expiredDate' => $this->expired_date ? $this->expired_date->format('Y-m-d') : null,
+            'expiredDate' => $this->expired_date ? ($this->expired_date instanceof \DateTimeInterface ? $this->expired_date->format('Y-m-d') : substr((string) $this->expired_date, 0, 10)) : null,
             'notes' => $this->notes,
         ];
     }

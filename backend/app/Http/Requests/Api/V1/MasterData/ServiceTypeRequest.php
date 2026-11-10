@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -23,15 +24,20 @@ class ServiceTypeRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route('service_type') ? $this->route('service_type')->id : null;
+        $id = $this->route('service_type')?->id ?? $this->route('service_type');
+
+        $uniqueRule = LegacyAccess::isAvailable('ref_jenis_layanan')
+            ? Rule::unique('legacy.ref_jenis_layanan', 'nama')->ignore($id)->whereNull('deleted_at')
+            : Rule::unique('service_types', 'name')->ignore($id)->whereNull('deleted_at');
 
         return [
             'name' => [
                 'required',
                 'string',
-                'max:255',
-                Rule::unique('service_types', 'name')->ignore($id)->whereNull('deleted_at'),
+                'max:45',
+                $uniqueRule,
             ],
+            'is_active' => ['nullable', 'boolean'],
         ];
     }
 

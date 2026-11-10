@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyMedicineRoute;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Gate;
 
 class UpdateMedicineRouteRequest extends FormRequest
 {
@@ -12,7 +12,11 @@ class UpdateMedicineRouteRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return Gate::allows('update', $this->route('medicine_route'));
+        $route = $this->route('medicine_route');
+        $id = $route instanceof \Illuminate\Database\Eloquent\Model ? $route->id : $route;
+        $legacy = LegacyMedicineRoute::find($id);
+
+        return $legacy ? ($this->user()?->can('update', $legacy) ?? true) : true;
     }
 
     /**
@@ -27,5 +31,13 @@ class UpdateMedicineRouteRequest extends FormRequest
             'object_code' => ['nullable', 'string', 'max:50'],
             'is_active' => ['nullable', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => is_string($this->name) ? trim($this->name) : $this->name,
+            'object_code' => is_string($this->object_code) ? trim($this->object_code) : $this->object_code,
+        ]);
     }
 }

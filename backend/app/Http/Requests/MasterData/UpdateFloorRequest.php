@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
-use App\Models\MasterData\Floor;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -28,31 +28,31 @@ class UpdateFloorRequest extends FormRequest
     public function rules(): array
     {
         $floorParam = $this->route('floor');
-        $floorId = $floorParam instanceof Floor ? $floorParam->id : $floorParam;
-        $buildingId = $this->building_id ?? ($floorParam instanceof Floor ? $floorParam->building_id : null);
+        $floorId = is_object($floorParam) ? $floorParam->id : $floorParam;
+
+        $isLegacy = LegacyAccess::isAvailable('ref_lantai');
+        $buildingTable = $isLegacy ? 'legacy.ref_gedung' : 'buildings';
+
+        $uniqueRule = $isLegacy
+            ? Rule::unique('legacy.ref_lantai', 'nama')->where('id_gedung', $this->building_id)->ignore($floorId)->whereNull('deleted_at')
+            : Rule::unique('floors', 'name')->where('building_id', $this->building_id)->ignore($floorId)->whereNull('deleted_at');
 
         return [
             'building_id' => [
                 'required',
                 'integer',
-                Rule::exists('buildings', 'id')->whereNull('deleted_at'),
+                Rule::exists($buildingTable, 'id')->whereNull('deleted_at'),
             ],
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('floors', 'name')
-                    ->where('building_id', $buildingId)
-                    ->whereNull('deleted_at')
-                    ->ignore($floorId),
+                $uniqueRule,
             ],
             'description' => ['nullable', 'string'],
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [

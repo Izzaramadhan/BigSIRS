@@ -2,7 +2,6 @@
 
 namespace App\Policies\MasterData;
 
-use App\Models\MasterData\MedicineUnit;
 use App\Models\User;
 
 class MedicineUnitPolicy
@@ -18,7 +17,7 @@ class MedicineUnitPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, MedicineUnit $MedicineUnit): bool
+    public function view(User $user, mixed $medicineUnit = null): bool
     {
         return true;
     }
@@ -34,7 +33,7 @@ class MedicineUnitPolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, MedicineUnit $MedicineUnit): bool
+    public function update(User $user, mixed $medicineUnit = null): bool
     {
         return true;
     }
@@ -42,7 +41,7 @@ class MedicineUnitPolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, MedicineUnit $MedicineUnit): bool
+    public function delete(User $user, mixed $medicineUnit = null): bool
     {
         return true;
     }
@@ -50,7 +49,7 @@ class MedicineUnitPolicy
     /**
      * Determine whether the user can restore the model.
      */
-    public function restore(User $user, MedicineUnit $MedicineUnit): bool
+    public function restore(User $user, mixed $medicineUnit = null): bool
     {
         return true;
     }
@@ -58,7 +57,7 @@ class MedicineUnitPolicy
     /**
      * Determine whether the user can permanently delete the model.
      */
-    public function forceDelete(User $user, MedicineUnit $MedicineUnit): bool
+    public function forceDelete(User $user, mixed $medicineUnit = null): bool
     {
         return true;
     }

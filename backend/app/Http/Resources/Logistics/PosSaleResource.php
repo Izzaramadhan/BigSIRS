@@ -28,6 +28,9 @@ class PosSaleResource extends JsonResource
         if (! $date) {
             return '-';
         }
+        if (is_string($date)) {
+            $date = \Carbon\Carbon::parse($date);
+        }
         $months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
         $m = (int) $date->format('n');
         $mStr = $months[$m] ?? $date->format('M');
@@ -40,7 +43,7 @@ class PosSaleResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $dt = $this->transaction_date;
+        $dt = $this->transaction_date ? ($this->transaction_date instanceof \DateTimeInterface ? $this->transaction_date : \Carbon\Carbon::parse($this->transaction_date)) : null;
         $dateDisplay = $dt ? $this->formatDateIndo($dt) : '-';
         $timeDisplay = $dt ? $dt->format('H:i') . ' WIB' : '-';
         $dateTime = $dt ? $dt->format('Y-m-d H:i') : null;
@@ -92,8 +95,12 @@ class PosSaleResource extends JsonResource
             'dateTime' => $dateTime,
             'customerId' => $this->customer_id,
             'customerName' => $customerDisplayName,
+            'customer_name' => $customerDisplayName,
             'pembeli' => $customerDisplayName,
             'customerType' => $this->customer_type ?? 'Umum',
+            'customer_type' => $this->customer_type ?? 'Umum',
+            'customerPhone' => '-',
+            'customer_phone' => '-',
             'itemCount' => $itemsCount,
             'itemCountText' => "{$itemsCount} Jenis",
             'totalQty' => $totalQty,
@@ -110,10 +117,10 @@ class PosSaleResource extends JsonResource
             'warehouseId' => $this->warehouse_id,
             'notes' => $this->notes,
             'voidReason' => $this->cancellation_reason ?? '',
-            'completedAt' => $this->completed_at ? $this->completed_at->format('Y-m-d H:i:s') : null,
-            'cancelledAt' => $this->cancelled_at ? $this->cancelled_at->format('Y-m-d H:i:s') : null,
+            'completedAt' => $this->completed_at ? ($this->completed_at instanceof \DateTimeInterface ? $this->completed_at->format('Y-m-d H:i:s') : (string) $this->completed_at) : null,
+            'cancelledAt' => $this->cancelled_at ? ($this->cancelled_at instanceof \DateTimeInterface ? $this->cancelled_at->format('Y-m-d H:i:s') : (string) $this->cancelled_at) : null,
             'items' => PosSaleItemResource::collection($this->whenLoaded('items')),
-            'createdAt' => $this->created_at ? $this->created_at->format('Y-m-d H:i:s') : null,
+            'createdAt' => $this->created_at ? ($this->created_at instanceof \DateTimeInterface ? $this->created_at->format('Y-m-d H:i:s') : (string) $this->created_at) : null,
         ];
     }
 }

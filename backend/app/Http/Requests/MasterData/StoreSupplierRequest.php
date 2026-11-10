@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacySupplier;
 use App\Models\MasterData\Supplier;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -13,7 +15,9 @@ class StoreSupplierRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('create', Supplier::class);
+        $authModel = LegacyAccess::isAvailable('ref_supplier') ? LegacySupplier::class : Supplier::class;
+
+        return $this->user()?->can('create', $authModel) ?? true;
     }
 
     /**
@@ -24,10 +28,19 @@ class StoreSupplierRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:150'],
-            'phone' => ['nullable', 'string', 'max:50'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'is_active' => ['boolean'],
+            'name' => ['required', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:15'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['sometimes', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => is_string($this->name) ? trim($this->name) : $this->name,
+            'phone' => is_string($this->phone) ? trim($this->phone) : $this->phone,
+            'address' => is_string($this->address) ? trim($this->address) : $this->address,
+        ]);
     }
 }

@@ -35,8 +35,12 @@ class Guarantor extends Model
         return $query->where('is_active', true);
     }
 
-    public function scopeSearch(Builder $query, string $term): Builder
+    public function scopeSearch(Builder $query, ?string $term): Builder
     {
+        if (empty($term)) {
+            return $query;
+        }
+
         $term = "%{$term}%";
 
         return $query->where(function ($query) use ($term) {

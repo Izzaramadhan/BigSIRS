@@ -46,8 +46,8 @@ class StockOpnameItemResource extends JsonResource
             'unit' => $this->unit,
             'batch_number' => $this->batch_number,
             'batchNumber' => $this->batch_number,
-            'expired_date' => $this->expired_date?->format('Y-m-d'),
-            'expiredDate' => $this->expired_date?->format('Y-m-d'),
+            'expired_date' => $this->expired_date instanceof \DateTimeInterface ? $this->expired_date->format('Y-m-d') : ($this->expired_date ? substr((string) $this->expired_date, 0, 10) : null),
+            'expiredDate' => $this->expired_date instanceof \DateTimeInterface ? $this->expired_date->format('Y-m-d') : ($this->expired_date ? substr((string) $this->expired_date, 0, 10) : null),
             'system_stock' => $systemStock,
             'systemStock' => $systemStock,
             'physical_stock' => $physicalStock,
@@ -64,7 +64,9 @@ class StockOpnameItemResource extends JsonResource
             'difference_status_label' => $diffStatusLabel,
             'notes' => $this->notes,
             'counted_by' => $this->counted_by,
-            'counted_at' => $this->counted_at?->toIso8601String(),
+            'counted_at' => $this->counted_at instanceof \DateTimeInterface
+                ? $this->counted_at->toIso8601String()
+                : ($this->counted_at && !str_starts_with((string) $this->counted_at, '0000') ? Carbon::parse($this->counted_at)->toIso8601String() : null),
         ];
     }
 }

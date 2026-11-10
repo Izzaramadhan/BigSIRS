@@ -7,7 +7,9 @@ use App\Http\Requests\Api\V1\MasterData\StoreDietTypeRequest;
 use App\Http\Requests\Api\V1\MasterData\UpdateDietTypeRequest;
 use App\Http\Resources\Api\V1\MasterData\DietTypeResource;
 use App\Models\DietType;
+use App\Models\Legacy\LegacyDietType;
 use App\Services\MasterData\DietTypeService;
+use App\Support\LegacyAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -27,7 +29,7 @@ class DietTypeController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = (int) $request->input('per_page', 10);
-        $filters = $request->only(['search']);
+        $filters = $request->only(['search', 'is_active']);
 
         $dietTypes = $this->dietTypeService->getPaginated($filters, $perPage);
 
@@ -50,15 +52,25 @@ class DietTypeController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(DietType $dietType): DietTypeResource
+    public function show($dietType): DietTypeResource
     {
+        $id = $dietType instanceof LegacyDietType || $dietType instanceof DietType ? $dietType->id : $dietType;
+        if (LegacyAccess::isAvailable('ref_jenis_diet')) {
+            $legacy = LegacyDietType::findOrFail($id);
+            return new DietTypeResource($legacy);
+        }
+
+        if (! ($dietType instanceof DietType)) {
+            $dietType = DietType::findOrFail($id);
+        }
+
         return new DietTypeResource($dietType);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateDietTypeRequest $request, DietType $dietType): JsonResponse
+    public function update(UpdateDietTypeRequest $request, $dietType): JsonResponse
     {
         $dietType = $this->dietTypeService->update($dietType, $request->validated());
 
@@ -68,12 +80,10 @@ class DietTypeController extends Controller
         ]);
     }
 
-
-
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(DietType $dietType): JsonResponse
+    public function destroy($dietType): JsonResponse
     {
         $this->dietTypeService->delete($dietType);
 

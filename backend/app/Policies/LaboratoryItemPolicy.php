@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\MasterData\LaboratoryItem;
 use App\Models\User;
 
 class LaboratoryItemPolicy
@@ -12,7 +11,7 @@ class LaboratoryItemPolicy
         return true;
     }
 
-    public function view(User $user, LaboratoryItem $laboratoryItem): bool
+    public function view(User $user, mixed $laboratoryItem = null): bool
     {
         return true;
     }
@@ -22,12 +21,12 @@ class LaboratoryItemPolicy
         return true;
     }
 
-    public function update(User $user, LaboratoryItem $laboratoryItem): bool
+    public function update(User $user, mixed $laboratoryItem = null): bool
     {
         return true;
     }
 
-    public function delete(User $user, LaboratoryItem $laboratoryItem): bool
+    public function delete(User $user, mixed $laboratoryItem = null): bool
     {
         return true;
     }

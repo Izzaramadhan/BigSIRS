@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\ServiceType;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -33,19 +34,40 @@ class StorePolyclinicRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isLegacy = LegacyAccess::isAvailable('ref_poliklinik');
+
+        $uniqueRule = $isLegacy
+            ? Rule::unique('legacy.ref_poliklinik', 'kode')->where(function ($q) {
+                $q->whereNull('deleted_at')
+                    ->orWhere('deleted_at', '0000-00-00 00:00:00')
+                    ->orWhere('deleted_at', '0000-00-00');
+            })
+            : Rule::unique('polyclinics', 'code')->whereNull('deleted_at');
+
+        $warehouseRule = LegacyAccess::isAvailable('ref_gudang')
+            ? Rule::exists('legacy.ref_gudang', 'id')->where(function ($q) {
+                $q->whereNull('deleted_at')
+                    ->orWhere('deleted_at', '0000-00-00 00:00:00')
+                    ->orWhere('deleted_at', '0000-00-00');
+            })
+            : Rule::exists('warehouses', 'id')->whereNull('deleted_at');
+
+        $maxCode = $isLegacy ? 11 : 30;
+        $maxName = $isLegacy ? 50 : 150;
+        $maxDesc = $isLegacy ? 100 : 255;
+
         return [
-            'code' => ['required', 'string', 'max:30', 'unique:polyclinics,code'],
-            'name' => ['required', 'string', 'max:150'],
+            'code' => ['required', 'string', 'max:'.$maxCode, $uniqueRule],
+            'name' => ['required', 'string', 'max:'.$maxName],
             'service_type' => ['required', Rule::enum(ServiceType::class)],
-            'description' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:'.$maxDesc],
             'is_visible' => ['boolean'],
             'is_online_visible' => ['boolean'],
             'quota' => ['integer', 'min:0'],
             'jkn_quota' => ['integer', 'min:0'],
             'bpjs_code' => ['nullable', 'string', 'max:50'],
-            'warehouse_id' => ['nullable', 'integer', Rule::exists('warehouses', 'id')->whereNull('deleted_at')],
+            'warehouse_id' => ['nullable', 'integer', $warehouseRule],
             'is_active' => ['boolean'],
-            // parent_id and satusehat_code not accepted from user form
         ];
     }
 }

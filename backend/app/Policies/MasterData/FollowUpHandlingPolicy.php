@@ -2,7 +2,6 @@
 
 namespace App\Policies\MasterData;
 
-use App\Models\MasterData\FollowUpHandling;
 use App\Models\User;
 
 class FollowUpHandlingPolicy
@@ -18,7 +17,7 @@ class FollowUpHandlingPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, FollowUpHandling $model): bool
+    public function view(User $user, mixed $model = null): bool
     {
         return true;
     }
@@ -34,7 +33,7 @@ class FollowUpHandlingPolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, FollowUpHandling $model): bool
+    public function update(User $user, mixed $model = null): bool
     {
         return true;
     }
@@ -42,7 +41,7 @@ class FollowUpHandlingPolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, FollowUpHandling $model): bool
+    public function delete(User $user, mixed $model = null): bool
     {
         return true;
     }
@@ -50,7 +49,7 @@ class FollowUpHandlingPolicy
     /**
      * Determine whether the user can restore the model.
      */
-    public function restore(User $user, FollowUpHandling $model): bool
+    public function restore(User $user, mixed $model = null): bool
     {
         return true;
     }
@@ -58,7 +57,7 @@ class FollowUpHandlingPolicy
     /**
      * Determine whether the user can permanently delete the model.
      */
-    public function forceDelete(User $user, FollowUpHandling $model): bool
+    public function forceDelete(User $user, mixed $model = null): bool
     {
         return true;
     }

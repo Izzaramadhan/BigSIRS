@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreLaboratoryCategoryRequest extends FormRequest
 {
@@ -22,8 +24,12 @@ class StoreLaboratoryCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
+        $uniqueRule = LegacyAccess::isAvailable('ref_kategori_lab')
+            ? Rule::unique('legacy.ref_kategori_lab', 'nama')->whereNull('deleted_at')
+            : 'unique:laboratory_categories,name';
+
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:laboratory_categories,name'],
+            'name' => ['required', 'string', 'max:255', $uniqueRule],
             'description' => ['nullable', 'string', 'max:1000'],
             'type' => ['nullable', 'string', 'in:lab klinik,lab gigi,lab mikrobakteri'],
             'loinc_code' => ['nullable', 'string', 'max:255'],

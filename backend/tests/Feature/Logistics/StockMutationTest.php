@@ -33,6 +33,9 @@ class StockMutationTest extends TestCase
     {
         parent::setUp();
 
+        \Illuminate\Support\Facades\Config::set('database.use_direct_legacy', false);
+        \App\Support\LegacyAccess::clearCache();
+
         $this->user = User::factory()->create([
             'name' => 'Apt. Novita Anggraini',
         ]);

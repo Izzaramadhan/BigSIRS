@@ -10,7 +10,6 @@ const router = useRouter();
 
 const {
   warehouses,
-  catalogMedicines,
   fetchFormOptions,
   fetchAvailableStocks,
   getGoodsIssue,
@@ -24,11 +23,12 @@ const {
 const issue = ref(null);
 const loading = ref(true);
 const submitting = ref(false);
+const isFormCollapsed = ref(false);
 
 // Form Detail state
 const formDetail = reactive({
-  warehouseId: '',
-  warehouseName: '',
+  warehouseId: 1,
+  warehouseName: 'Gudang Utama',
   stockId: '',
   medicineId: '',
   quantity: 1,
@@ -37,6 +37,11 @@ const formDetail = reactive({
 
 const selectedMedicine = ref(null);
 const formErrors = ref({});
+
+// Table controls
+const recordsPerPage = ref(10);
+const tableSearch = ref('');
+const currentPage = ref(1);
 
 // Edit Item Modal state
 const isEditItemModalOpen = ref(false);
@@ -66,9 +71,19 @@ const closeToast = () => {
 
 // Normalized warehouses
 const normalizedWarehouses = computed(() => {
+  if (!warehouses.value || warehouses.value.length === 0) {
+    return [
+      { id: 1, name: 'Gudang Utama' },
+      { id: 2, name: 'Apotek Rawat Jalan' },
+      { id: 3, name: 'Apotek IGD' }
+    ];
+  }
   return warehouses.value.map((w, index) => {
     if (typeof w === 'object' && w !== null) {
-      return { id: w.id || index + 1, name: w.name };
+      return {
+        id: w.id || index + 1,
+        name: w.name || w.nama || w.warehouseName || w.warehouse_name || `Gudang ${w.id || index + 1}`
+      };
     }
     return { id: index + 1, name: String(w) };
   });
@@ -84,7 +99,7 @@ const loadIssueDetail = async () => {
     showToast({
       type: 'error',
       title: 'Gagal Memuat Data',
-      message: res.message || 'Dokumen pengeluaran tidak ditemukan.'
+      message: res.message || 'Dokumen pengeluaran barang tidak ditemukan.'
     });
   }
   loading.value = false;
@@ -92,9 +107,16 @@ const loadIssueDetail = async () => {
 
 onMounted(async () => {
   await Promise.all([fetchFormOptions(), loadIssueDetail()]);
-  if (normalizedWarehouses.value.length > 0 && !formDetail.warehouseId) {
-    formDetail.warehouseId = normalizedWarehouses.value[0].id;
-    formDetail.warehouseName = normalizedWarehouses.value[0].name;
+  if (normalizedWarehouses.value.length > 0) {
+    const match = normalizedWarehouses.value.find((w) => String(w.id) === String(formDetail.warehouseId));
+    if (match) {
+      formDetail.warehouseName = match.name;
+    } else {
+      formDetail.warehouseId = normalizedWarehouses.value[0].id;
+      formDetail.warehouseName = normalizedWarehouses.value[0].name;
+    }
+  }
+  if (formDetail.warehouseId) {
     await fetchAvailableStocks(formDetail.warehouseId);
   }
 });
@@ -118,93 +140,105 @@ watch(
   }
 );
 
-// Watch medicine stock selection from searchable select
-const handleStockSelected = (stock) => {
-  selectedMedicine.value = stock;
-  formDetail.stockId = stock.stock_id ?? stock.id;
-  formDetail.medicineId = stock.item_id ?? stock.medicine_id ?? stock.medicineId;
+// Stock Selected Handler
+const handleStockSelected = (stockItem) => {
+  selectedMedicine.value = stockItem;
+  formDetail.stockId = stockItem.stock_id || stockItem.id;
+  formDetail.medicineId = stockItem.item_id || stockItem.medicine_id || stockItem.medicineId;
   formDetail.quantity = 1;
-  formErrors.value.medicineId = '';
+  formErrors.value = {};
 };
 
+// Stock Cleared Handler
 const handleStockCleared = () => {
   selectedMedicine.value = null;
   formDetail.stockId = '';
   formDetail.medicineId = '';
+  formDetail.quantity = 1;
 };
 
-// Subtotal preview for new item
-const previewSubtotal = computed(() => {
-  if (!selectedMedicine.value) return 0;
-  const qty = Number(formDetail.quantity) || 0;
-  const price = Number(selectedMedicine.value.selling_price ?? selectedMedicine.value.price ?? selectedMedicine.value.unitPrice ?? 0);
-  return qty * price;
-});
-
-// Maximum stock of currently selected medicine batch
+// Max available stock
 const maxAvailableStock = computed(() => {
-  return Number(selectedMedicine.value?.available_stock ?? selectedMedicine.value?.availableStock ?? 0);
+  if (!selectedMedicine.value) return 0;
+  return Number(selectedMedicine.value.available_stock ?? selectedMedicine.value.availableStock ?? 0);
 });
 
-// Reactive check if quantity exceeds available stock
+// Quantity exceeds validation
 const isQuantityExceeded = computed(() => {
   if (!selectedMedicine.value) return false;
-  const qty = Number(formDetail.quantity);
-  return qty > maxAvailableStock.value;
+  return Number(formDetail.quantity) > maxAvailableStock.value;
 });
 
-// Reactive form validity: all conditions must be met for Simpan button
+// Preview Subtotal in form
+const previewSubtotal = computed(() => {
+  if (!selectedMedicine.value) return 0;
+  const price = Number(
+    selectedMedicine.value.selling_price ??
+    selectedMedicine.value.price ??
+    selectedMedicine.value.unitPrice ??
+    0
+  );
+  return price * (Number(formDetail.quantity) || 0);
+});
+
+// Is Form Valid
 const isFormValid = computed(() => {
-  if (!formDetail.warehouseId) return false;
-  if (!formDetail.stockId || !selectedMedicine.value) return false;
-  const qty = Number(formDetail.quantity);
-  if (!qty || qty <= 0) return false;
-  if (qty > maxAvailableStock.value) return false;
-  if (submitting.value) return false;
-  return true;
+  return (
+    formDetail.warehouseId &&
+    formDetail.medicineId &&
+    Number(formDetail.quantity) > 0 &&
+    !isQuantityExceeded.value
+  );
 });
 
 // Reset Detail Form
 const resetDetailForm = () => {
+  selectedMedicine.value = null;
   formDetail.stockId = '';
   formDetail.medicineId = '';
   formDetail.quantity = 1;
   formDetail.notes = '';
-  selectedMedicine.value = null;
   formErrors.value = {};
 };
 
-// Validate Form Detail
-const validateFormDetail = () => {
-  const errs = {};
-  if (!formDetail.warehouseId) {
-    errs.warehouseId = 'Gudang wajib dipilih.';
-  }
-  if (!formDetail.stockId || !selectedMedicine.value) {
-    errs.medicineId = 'Nama sediaan wajib dipilih dari daftar pencarian.';
-  }
-  const maxStock = maxAvailableStock.value;
-  if (!formDetail.quantity || Number(formDetail.quantity) <= 0) {
-    errs.quantity = 'Jumlah sediaan harus lebih besar dari 0.';
-  } else if (selectedMedicine.value && Number(formDetail.quantity) > maxStock) {
-    const unitName = selectedMedicine.value.unit_name || selectedMedicine.value.unit || 'Unit';
-    errs.quantity = `Jumlah melebihi stok yang tersedia (${maxStock} ${unitName}).`;
-  }
-  formErrors.value = errs;
-  return Object.keys(errs).length === 0;
-};
-
-// Submit Add Item
+// Add Detail Item
 const handleAddItem = async () => {
-  if (!validateFormDetail() || submitting.value) return;
+  formErrors.value = {};
+  if (!formDetail.warehouseId) {
+    formErrors.value.warehouseId = 'Gudang wajib dipilih.';
+    return;
+  }
+  if (!formDetail.medicineId) {
+    formErrors.value.medicineId = 'Nama sediaan obat wajib dipilih.';
+    return;
+  }
+  if (!formDetail.quantity || Number(formDetail.quantity) <= 0) {
+    formErrors.value.quantity = 'Jumlah sediaan harus lebih besar dari 0.';
+    return;
+  }
+  if (isQuantityExceeded.value) {
+    formErrors.value.quantity = `Jumlah melebihi stok yang tersedia (Maks. ${maxAvailableStock.value}).`;
+    return;
+  }
 
   submitting.value = true;
+  const unitPrice = Number(
+    selectedMedicine.value?.selling_price ??
+    selectedMedicine.value?.price ??
+    selectedMedicine.value?.unitPrice ??
+    0
+  );
+
   const payload = {
-    medicine_id: Number(formDetail.medicineId),
-    stock_id: Number(formDetail.stockId),
-    warehouse_stock_id: Number(formDetail.stockId),
     warehouse_id: Number(formDetail.warehouseId),
+    warehouse_stock_id: Number(formDetail.stockId),
+    medicine_id: Number(formDetail.medicineId),
     quantity: Number(formDetail.quantity),
+    price: unitPrice,
+    unit_price: unitPrice,
+    unit: selectedMedicine.value?.unit_name || selectedMedicine.value?.unit || 'Unit',
+    batch_number: selectedMedicine.value?.batch_number || null,
+    expired_date: selectedMedicine.value?.expiry_date || selectedMedicine.value?.expired_date || null,
     notes: formDetail.notes ? formDetail.notes.trim() : null
   };
 
@@ -213,10 +247,10 @@ const handleAddItem = async () => {
     showToast({
       type: 'success',
       title: 'Sediaan Ditambahkan',
-      message: 'Detail sediaan berhasil disimpan ke dokumen pengeluaran.'
+      message: 'Detail sediaan berhasil ditambahkan ke dokumen pengeluaran.'
     });
     resetDetailForm();
-    await loadIssueDetail();
+    await Promise.all([loadIssueDetail(), fetchAvailableStocks(formDetail.warehouseId)]);
   } else {
     showToast({
       type: 'error',
@@ -254,7 +288,7 @@ const handleSaveEditItem = async () => {
       title: 'Perubahan Disimpan',
       message: 'Jumlah sediaan berhasil diperbarui.'
     });
-    await Promise.all([loadIssueDetail(), fetchAvailableStocks(formDetail.warehouseName)]);
+    await Promise.all([loadIssueDetail(), fetchAvailableStocks(formDetail.warehouseId)]);
   } else {
     editErrors.value = res.message || 'Gagal memperbarui jumlah sediaan.';
   }
@@ -279,10 +313,10 @@ const handleConfirmDeleteItem = async () => {
     showToast({
       type: 'success',
       title: 'Item Dihapus',
-      message: 'Sediaan berhasil dihapus dari daftar pengeluaran.'
+      message: 'Sediaan berhasil dihapus dan stok telah dikembalikan ke gudang.'
     });
     itemToDelete.value = null;
-    await Promise.all([loadIssueDetail(), fetchAvailableStocks(formDetail.warehouseName)]);
+    await Promise.all([loadIssueDetail(), fetchAvailableStocks(formDetail.warehouseId)]);
   } else {
     showToast({
       type: 'error',
@@ -293,6 +327,27 @@ const handleConfirmDeleteItem = async () => {
   submitting.value = false;
 };
 
+// Filtered and paginated detail items
+const filteredDetailItems = computed(() => {
+  if (!issue.value?.items) return [];
+  const q = tableSearch.value.trim().toLowerCase();
+  if (!q) return issue.value.items;
+  return issue.value.items.filter((it) => {
+    const name = (it.medicineName || it.medicine_name || it.name || '').toLowerCase();
+    const wh = (it.warehouseName || it.warehouse_name || '').toLowerCase();
+    return name.includes(q) || wh.includes(q);
+  });
+});
+
+const paginatedDetailItems = computed(() => {
+  const start = (currentPage.value - 1) * recordsPerPage.value;
+  return filteredDetailItems.value.slice(start, start + recordsPerPage.value);
+});
+
+const totalDetailPages = computed(() => {
+  return Math.ceil(filteredDetailItems.value.length / recordsPerPage.value) || 1;
+});
+
 // Total calculation
 const calculatedTotal = computed(() => {
   if (!issue.value?.items || issue.value.items.length === 0) return 0;
@@ -301,6 +356,15 @@ const calculatedTotal = computed(() => {
 
 const goBack = () => {
   router.push('/logistics/goods-issues');
+};
+
+const handlePrintBukti = () => {
+  showToast({
+    type: 'info',
+    title: 'Cetak Bukti Pengeluaran',
+    message: 'Mempersiapkan cetak bukti pengeluaran barang...'
+  });
+  window.print();
 };
 </script>
 
@@ -315,8 +379,8 @@ const goBack = () => {
       @close="closeToast"
     />
 
-    <!-- Header Halaman -->
-    <div class="page-header">
+    <!-- Header Halaman Standar BigSIRS -->
+    <div class="page-header no-print">
       <div class="header-content">
         <div class="breadcrumbs">
           <router-link to="/logistics/goods-issues" class="crumb-link">Logistik</router-link>
@@ -348,25 +412,25 @@ const goBack = () => {
     </div>
 
     <!-- Loading Skeleton -->
-    <div v-if="loading" class="detail-loading-box">
+    <div v-if="loading" class="detail-loading-box no-print">
       <div class="skeleton-card"></div>
       <div class="skeleton-card"></div>
     </div>
 
     <div v-else-if="issue" class="page-content">
-      <!-- 1. Card Informasi Pengeluaran -->
+      <!-- 1. Card INFO (Header Data) -->
       <div class="card info-card">
         <div class="card-header">
           <h3 class="card-title">
             <span class="header-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
               </svg>
             </span>
-            INFO PENGELUARAN
+            INFO
           </h3>
         </div>
         <div class="card-body">
@@ -375,43 +439,79 @@ const goBack = () => {
               <span class="info-label">Tanggal</span>
               <span class="info-separator">:</span>
               <span class="info-value font-semibold text-navy">
-                {{ issue.formattedDate || issue.dateDisplay || formatDateIndo(issue.issue_date || issue.issueDate) }}
+                {{ issue.formattedDate || formatDateIndo(issue.tanggal || issue.issue_date || issue.date) }}
               </span>
             </div>
             <div class="info-item">
               <span class="info-label">Petugas</span>
               <span class="info-separator">:</span>
               <span class="info-value font-semibold text-navy">
-                {{ issue.officerName || issue.officer_name || '-' }}
+                {{ issue.officer_name || issue.officerName || '-' }}
               </span>
             </div>
             <div class="info-item">
               <span class="info-label">Keperluan</span>
               <span class="info-separator">:</span>
-              <span class="info-value text-navy">
-                {{ issue.notes || (issue.purpose !== 'Kebutuhan Internal' ? issue.purpose : '-') }}
+              <span class="info-value font-semibold text-navy">
+                {{ issue.keperluan || issue.notes || (issue.purpose !== 'Kebutuhan Internal' ? issue.purpose : '-') || '-' }}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 2. Card Form Pengeluaran (Tambah Detail) -->
-      <div class="card form-card">
-        <div class="card-header">
-          <h3 class="card-title">
+      <!-- 2. Card FORM DETAIL (Tambah Item) -->
+      <div class="card form-card no-print">
+        <div class="card-header form-card-header">
+          <div class="card-header-left">
             <span class="header-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
             </span>
-            FORM PENGELUARAN
-          </h3>
+            <h3 class="card-title">FORM DETAIL</h3>
+          </div>
+          <button
+            type="button"
+            class="btn-collapse"
+            :aria-expanded="!isFormCollapsed"
+            :title="isFormCollapsed ? 'Buka Form Detail' : 'Tutup Form Detail'"
+            @click="isFormCollapsed = !isFormCollapsed"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              class="collapse-icon"
+              :class="{ 'rotate-180': isFormCollapsed }"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
         </div>
-        <div class="card-body">
+        <div v-show="!isFormCollapsed" class="card-body">
           <form @submit.prevent="handleAddItem">
             <div class="form-grid">
+              <!-- Nama Sediaan (Searchable Select) -->
+              <div class="form-col form-col-wide">
+                <label for="detail-input-medicine" class="field-label">
+                  Nama Sediaan <span class="text-danger">*</span>
+                </label>
+                <GoodsIssueStockSelect
+                  id="detail-input-medicine"
+                  v-model="formDetail.stockId"
+                  :warehouse-id="formDetail.warehouseId"
+                  :warehouse-name="formDetail.warehouseName"
+                  :issue-date="issue?.tanggal || issue?.issue_date || issue?.date"
+                  :error="formErrors.medicineId"
+                  @select="handleStockSelected"
+                  @clear="handleStockCleared"
+                />
+                <span v-if="formErrors.medicineId" class="error-msg">{{ formErrors.medicineId }}</span>
+              </div>
+
               <!-- Gudang -->
               <div class="form-col">
                 <label for="detail-input-warehouse" class="field-label">
@@ -433,24 +533,6 @@ const goBack = () => {
                   </option>
                 </select>
                 <span v-if="formErrors.warehouseId" class="error-msg">{{ formErrors.warehouseId }}</span>
-              </div>
-
-              <!-- Nama Sediaan (Searchable Select) -->
-              <div class="form-col form-col-wide">
-                <label for="detail-input-medicine" class="field-label">
-                  Nama Sediaan <span class="text-danger">*</span>
-                </label>
-                <GoodsIssueStockSelect
-                  id="detail-input-medicine"
-                  v-model="formDetail.stockId"
-                  :warehouse-id="formDetail.warehouseId"
-                  :warehouse-name="formDetail.warehouseName"
-                  :issue-date="issue?.issue_date || issue?.date"
-                  :error="formErrors.medicineId"
-                  @select="handleStockSelected"
-                  @clear="handleStockCleared"
-                />
-                <span v-if="formErrors.medicineId" class="error-msg">{{ formErrors.medicineId }}</span>
               </div>
 
               <!-- Jumlah -->
@@ -504,11 +586,12 @@ const goBack = () => {
               </span>
             </div>
 
-            <!-- Form Buttons -->
-            <div class="form-actions">
+            <!-- Form Action Buttons -->
+            <div class="form-actions-divider"></div>
+            <div class="form-actions-row">
               <button
                 type="submit"
-                class="btn-primary"
+                class="btn-save-blue"
                 :disabled="!isFormValid || submitting"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -518,9 +601,10 @@ const goBack = () => {
                 </svg>
                 <span>{{ submitting ? 'Menyimpan...' : 'Simpan' }}</span>
               </button>
+
               <button
                 type="button"
-                class="btn-outline"
+                class="btn-reset-white"
                 :disabled="submitting"
                 @click="resetDetailForm"
               >
@@ -535,7 +619,7 @@ const goBack = () => {
         </div>
       </div>
 
-      <!-- 3. Card Detail List Data Pengeluaran -->
+      <!-- 3. Card DETAIL LIST DATA -->
       <div class="card table-card">
         <div class="card-header">
           <h3 class="card-title">
@@ -549,8 +633,40 @@ const goBack = () => {
                 <line x1="3" y1="18" x2="3.01" y2="18"></line>
               </svg>
             </span>
-            DETAIL LIST DATA PENGELUARAN
+            DETAIL LIST DATA
           </h3>
+        </div>
+
+        <!-- Table Toolbar (records & search) -->
+        <div class="detail-table-toolbar no-print">
+          <div class="toolbar-left">
+            <label for="detail-records-select" class="per-page-label">
+              <select
+                id="detail-records-select"
+                v-model.number="recordsPerPage"
+                class="records-select"
+              >
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+              </select>
+              <span class="records-text">records</span>
+            </label>
+          </div>
+
+          <div class="toolbar-right">
+            <div class="search-input-wrapper">
+              <label for="detail-search-input" class="search-label">Search:</label>
+              <input
+                id="detail-search-input"
+                v-model="tableSearch"
+                type="text"
+                class="search-input"
+                placeholder="Cari sediaan..."
+              />
+            </div>
+          </div>
         </div>
 
         <div class="table-responsive">
@@ -563,26 +679,26 @@ const goBack = () => {
                 <th class="col-qty text-center">Jumlah</th>
                 <th class="col-subtotal text-right">Sub Total</th>
                 <th class="col-wh">Gudang</th>
-                <th class="col-actions text-center">Aksi</th>
+                <th class="col-actions text-center no-print">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!issue.items || issue.items.length === 0">
+              <tr v-if="paginatedDetailItems.length === 0">
                 <td colspan="7" class="empty-detail-cell text-muted text-center">
                   Belum ada detail sediaan yang ditambahkan pada dokumen pengeluaran ini.
                 </td>
               </tr>
               <tr
-                v-for="(item, idx) in issue.items"
+                v-for="(item, idx) in paginatedDetailItems"
                 :key="item.id || idx"
                 class="detail-row"
               >
                 <!-- 1. No -->
                 <td class="col-no text-center text-muted font-medium">
-                  {{ idx + 1 }}
+                  {{ (currentPage - 1) * recordsPerPage + idx + 1 }}
                 </td>
 
-                <!-- 2. Nama Sediaan -->
+                <!-- 2. Nama Sediaan + Satuan underneath -->
                 <td class="col-med">
                   <div class="med-name font-semibold text-navy">
                     {{ item.medicineName || item.medicine_name || item.name }}
@@ -594,7 +710,7 @@ const goBack = () => {
 
                 <!-- 3. Harga Jual -->
                 <td class="col-price text-right font-medium text-navy">
-                  {{ item.formattedPrice || formatRupiah(item.unitPrice || item.unit_price) }}
+                  {{ item.formattedPrice || formatRupiah(item.unitPrice || item.price || item.unit_price) }}
                 </td>
 
                 <!-- 4. Jumlah -->
@@ -603,17 +719,17 @@ const goBack = () => {
                 </td>
 
                 <!-- 5. Sub Total -->
-                <td class="col-subtotal text-right font-bold text-primary">
+                <td class="col-subtotal text-right font-bold text-navy">
                   {{ item.formattedSubtotal || formatRupiah(item.subtotal) }}
                 </td>
 
                 <!-- 6. Gudang -->
                 <td class="col-wh text-navy">
-                  {{ item.warehouseName || item.warehouse_name || issue.warehouse || 'Gudang Utama' }}
+                  {{ item.warehouseName || item.warehouse_name || 'Gudang Utama Farmasi' }}
                 </td>
 
                 <!-- 7. Aksi (Edit, Hapus) -->
-                <td class="col-actions text-center">
+                <td class="col-actions text-center no-print">
                   <div class="action-buttons-group">
                     <button
                       type="button"
@@ -644,22 +760,68 @@ const goBack = () => {
           </table>
         </div>
 
-        <!-- Total Bar -->
+        <!-- Total Summary Bar -->
         <div class="total-summary-bar">
           <span class="total-label font-bold text-navy">Total :</span>
-          <span class="total-amount font-bold text-primary">
+          <span class="total-amount font-bold text-navy">
             {{ formatRupiah(calculatedTotal) }}
           </span>
         </div>
 
-        <!-- Card Footer -->
-        <div class="card-footer-bar">
-          <button type="button" class="btn-cancel" @click="goBack">
+        <!-- Table Pagination Info -->
+        <div class="detail-pagination-bar no-print">
+          <div class="pagination-info text-muted">
+            Showing {{ filteredDetailItems.length > 0 ? (currentPage - 1) * recordsPerPage + 1 : 0 }} to
+            {{ Math.min(currentPage * recordsPerPage, filteredDetailItems.length) }} of
+            {{ filteredDetailItems.length }} entries
+          </div>
+          <div v-if="totalDetailPages > 1" class="page-buttons">
+            <button
+              type="button"
+              class="page-btn"
+              :disabled="currentPage === 1"
+              @click="currentPage--"
+            >
+              &lt;
+            </button>
+            <button
+              v-for="p in totalDetailPages"
+              :key="p"
+              type="button"
+              class="page-btn"
+              :class="{ active: p === currentPage }"
+              @click="currentPage = p"
+            >
+              {{ p }}
+            </button>
+            <button
+              type="button"
+              class="page-btn"
+              :disabled="currentPage === totalDetailPages"
+              @click="currentPage++"
+            >
+              &gt;
+            </button>
+          </div>
+        </div>
+
+        <!-- Card Footer with Tutup and Print Bukti -->
+        <div class="card-footer-split no-print">
+          <button type="button" class="btn-cancel-footer" @click="goBack">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
             Tutup
+          </button>
+
+          <button type="button" class="btn-print-nota" @click="handlePrintBukti">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 6 2 18 2 18 9"></polyline>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+              <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+            Print Bukti Pengeluaran
           </button>
         </div>
       </div>
@@ -681,11 +843,11 @@ const goBack = () => {
           <div class="modal-body">
             <div class="form-group mb-2">
               <label class="form-label text-muted">Nama Sediaan</label>
-              <div class="font-semibold text-navy">{{ itemToEdit.medicineName || itemToEdit.name }}</div>
+              <div class="font-semibold text-navy">{{ itemToEdit.medicineName || itemToEdit.medicine_name || itemToEdit.name }}</div>
             </div>
             <div class="form-group mb-2">
               <label class="form-label text-muted">Harga Jual</label>
-              <div class="font-semibold text-navy">{{ formatRupiah(itemToEdit.unitPrice || itemToEdit.unit_price) }}</div>
+              <div class="font-semibold text-navy">{{ formatRupiah(itemToEdit.unitPrice || itemToEdit.price || itemToEdit.unit_price) }}</div>
             </div>
             <div class="form-group">
               <label for="edit-item-quantity" class="form-label">Jumlah <span class="text-danger">*</span></label>
@@ -701,7 +863,7 @@ const goBack = () => {
             </div>
             <div class="preview-box mt-2">
               <span class="text-muted">Sub Total Baru: </span>
-              <strong class="text-primary">{{ formatRupiah(editQuantity * (itemToEdit.unitPrice || itemToEdit.unit_price || 0)) }}</strong>
+              <strong class="text-navy">{{ formatRupiah(editQuantity * (itemToEdit.unitPrice || itemToEdit.price || itemToEdit.unit_price || 0)) }}</strong>
             </div>
           </div>
           <div class="modal-footer">
@@ -718,24 +880,29 @@ const goBack = () => {
     <Teleport to="body">
       <div v-if="isDeleteItemDialogOpen && itemToDelete" class="modal-overlay" @click.self="isDeleteItemDialogOpen = false">
         <div class="modal-content modal-sm">
-          <div class="modal-header modal-header-danger">
-            <h3 class="modal-title text-danger">Konfirmasi Hapus Sediaan</h3>
-            <button type="button" class="btn-close" @click="isDeleteItemDialogOpen = false">
+          <div class="modal-header">
+            <div class="delete-icon-box">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
-            </button>
+            </div>
+            <div>
+              <h3 class="modal-title font-bold text-navy">Hapus Detail Sediaan</h3>
+              <p class="modal-subtitle text-xs text-muted">Stok sediaan akan dikembalikan ke gudang.</p>
+            </div>
           </div>
           <div class="modal-body">
-            <p class="confirmation-message">
-              Apakah Anda yakin ingin menghapus sediaan
-              <strong>{{ itemToDelete.medicineName || itemToDelete.name }}</strong> (Jumlah: {{ itemToDelete.quantity }} {{ itemToDelete.unit }}) dari dokumen pengeluaran ini?
+            <p class="text-sm text-navy">
+              Apakah Anda yakin ingin menghapus <strong>{{ itemToDelete.medicineName || itemToDelete.medicine_name || itemToDelete.name }}</strong>
+              sejumlah <strong>{{ itemToDelete.quantity }} {{ itemToDelete.unit || 'Unit' }}</strong> dari dokumen pengeluaran ini?
             </p>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn-cancel" @click="isDeleteItemDialogOpen = false">Batal</button>
-            <button type="button" class="btn-danger" :disabled="submitting" @click="handleConfirmDeleteItem">
+            <button type="button" class="btn-cancel" :disabled="submitting" @click="isDeleteItemDialogOpen = false">
+              Batal
+            </button>
+            <button type="button" class="btn-danger-confirm" :disabled="submitting" @click="handleConfirmDeleteItem">
               <span>{{ submitting ? 'Menghapus...' : 'Ya, Hapus' }}</span>
             </button>
           </div>
@@ -746,13 +913,11 @@ const goBack = () => {
 </template>
 
 <style scoped>
-.goods-issue-detail-page {
-  animation: fadeIn 0.25s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+.page-container {
+  padding: 1.5rem 2rem 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 /* Page Header */
@@ -760,41 +925,37 @@ const goBack = () => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1.5rem;
   flex-wrap: wrap;
-  margin-bottom: 1.5rem;
-}
-
-.header-content {
-  flex: 1 1 500px;
-  min-width: 0;
+  gap: 1.25rem;
+  border-bottom: 1px solid var(--color-border-soft, #e2e8f0);
+  padding-bottom: 1.25rem;
 }
 
 .breadcrumbs {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: #64748b;
-  margin-bottom: 0.35rem;
+  font-size: 0.825rem;
+  color: var(--color-text-muted, #64748b);
+  margin-bottom: 0.4rem;
 }
 
 .crumb-link {
-  color: #64748b;
+  color: var(--color-text-muted, #64748b);
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
 .crumb-link:hover {
-  color: var(--color-primary, #087f78);
+  color: var(--color-primary, #008779);
 }
 
-.separator {
-  color: #94a3b8;
-  font-weight: 500;
+.breadcrumbs .separator {
+  color: #cbd5e1;
 }
 
-.current {
-  color: var(--color-primary, #087f78);
+.breadcrumbs .current {
+  color: var(--color-primary, #008779);
   font-weight: 600;
 }
 
@@ -803,121 +964,157 @@ const goBack = () => {
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.35rem;
-  flex-wrap: wrap;
 }
 
 .page-title {
-  margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.55rem;
   font-weight: 700;
   color: var(--color-text-navy, #17243d);
+  margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .module-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  background-color: var(--color-primary-light, #e0f2f1);
+  color: var(--color-primary, #008779);
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 0.25rem 0.65rem;
-  border-radius: 9999px;
-  background: var(--color-primary-light, #dff7f4);
-  color: var(--color-primary, #087f78);
+  letter-spacing: 0.04em;
 }
 
 .bullet-dot {
   font-size: 0.9rem;
+  line-height: 1;
 }
 
 .page-subtitle {
-  margin: 0;
+  color: var(--color-text-muted, #64748b);
   font-size: 0.875rem;
-  color: var(--color-text-secondary, #64748b);
+  margin: 0;
+  line-height: 1.45;
 }
 
-.header-actions .btn-back {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-outline {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  height: 40px;
-  padding: 0 1.15rem;
+  background-color: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 0.55rem 1rem;
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
-  background: #ffffff;
-  color: var(--color-primary, #087f78);
-  border: 1px solid var(--color-primary, #087f78);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
-.header-actions .btn-back:hover {
-  background: var(--color-primary-light, #dff7f4);
+.btn-outline:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
 }
 
-.header-actions .btn-back svg {
+.btn-outline svg {
   width: 16px;
   height: 16px;
 }
 
-/* Page Content Layout */
+/* Page Content */
 .page-content {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
 }
 
-/* Cards */
+/* Card Styling */
 .card {
   background: #ffffff;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   overflow: hidden;
 }
 
-.form-card {
-  overflow: visible !important;
-  position: relative;
-  z-index: 20;
-}
-
-.form-card .card-body {
-  overflow: visible !important;
-  position: relative;
-}
-
-.table-card {
-  position: relative;
-  z-index: 10;
+.card.form-card {
+  overflow: visible;
 }
 
 .card-header {
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 0.85rem 1.25rem;
   background: #f8fafc;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.form-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .card-title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   font-weight: 700;
-  color: var(--color-text-navy, #17243d);
+  letter-spacing: 0.05em;
+  color: #334155;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  letter-spacing: 0.02em;
 }
 
-.card-body {
-  padding: 1.25rem;
+.btn-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-collapse:hover {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
+.collapse-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.collapse-icon.rotate-180 {
+  transform: rotate(180deg);
 }
 
 .header-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--color-primary, #087f78);
+  color: #0d9488;
 }
 
 .header-icon svg {
@@ -925,65 +1122,79 @@ const goBack = () => {
   height: 16px;
 }
 
-/* 1. Info Grid */
+.card-body {
+  padding: 1.25rem 1.5rem;
+}
+
+/* Info Grid */
 .info-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  font-size: 0.875rem;
+  gap: 0.65rem;
 }
 
 .info-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  font-size: 0.875rem;
 }
 
 .info-label {
-  width: 120px;
-  font-weight: 600;
-  color: #475569;
+  width: 140px;
+  color: #334155;
+  font-weight: 500;
 }
 
 .info-separator {
   width: 20px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .info-value {
-  flex: 1;
+  color: #0f172a;
 }
 
-/* 2. Form Grid */
+/* Form Grid */
 .form-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 280px) minmax(320px, 1fr) minmax(130px, 150px);
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 1.25rem;
   align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 }
 
 .form-col {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 
 .field-label {
-  font-size: 0.85rem;
+  display: block;
+  font-size: 0.825rem;
   font-weight: 600;
   color: #334155;
+  margin-bottom: 0.4rem;
+  min-height: 1.25rem;
+  line-height: 1.25rem;
 }
 
 .field-select,
 .field-input {
   width: 100%;
-  height: 44px;
-  min-height: 44px;
-  padding: 0 0.85rem;
+  padding: 0.6rem 0.85rem;
   font-size: 0.875rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background-color: #ffffff;
   color: #1e293b;
+  min-height: 42px;
+  height: 42px;
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -991,188 +1202,390 @@ const goBack = () => {
 .field-select:focus,
 .field-input:focus {
   outline: none;
-  border-color: var(--color-primary, #087f78);
-  box-shadow: 0 0 0 2px rgba(8, 127, 120, 0.15);
+  border-color: #008779;
+  box-shadow: 0 0 0 3px rgba(0, 135, 121, 0.15);
 }
 
-.field-input:disabled {
-  background-color: #f8fafc;
-  border-color: #e2e8f0;
-  cursor: not-allowed;
-  color: #94a3b8;
+.is-invalid {
+  border-color: #ef4444 !important;
+}
+
+.error-msg {
+  font-size: 0.75rem;
+  color: #ef4444;
+  margin-top: 0.25rem;
+  display: block;
 }
 
 .qty-info-caption {
-  font-size: 0.78rem;
-  margin-top: 0.2rem;
-  line-height: 1.25;
+  margin-top: 0.25rem;
 }
 
+/* Badges Bar */
 .stock-info-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem;
   margin-top: 1.25rem;
   padding: 0.75rem 1rem;
   background: #f8fafc;
-  border: 1px dashed #cbd5e1;
   border-radius: 8px;
-  font-size: 0.825rem;
+  border: 1px dashed #cbd5e1;
 }
 
 .info-badge {
-  color: #475569;
+  font-size: 0.8rem;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
 }
 
 .info-badge-primary {
-  color: var(--color-primary, #087f78);
-  font-size: 0.875rem;
+  background: #e0f2f1;
+  border-color: #80cbc4;
+  color: #008779;
 }
 
-.form-actions {
+/* Form Action Buttons */
+.form-actions-divider {
+  height: 1px;
+  background-color: #edf2f7;
+  margin: 1.75rem 0 1.25rem 0;
+}
+
+.form-actions-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.75rem;
-  margin-top: 1.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #f1f5f9;
-  justify-content: flex-start;
 }
 
-/* Buttons */
-.btn-primary,
-.btn-outline,
-.btn-cancel,
-.btn-danger {
+.btn-save-blue {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  background-color: #3b82f6;
+  color: #ffffff;
+  min-height: 40px;
   height: 40px;
-  padding: 0 1.25rem;
-  border-radius: 8px;
+  padding: 0 1.5rem;
+  border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 600;
+  border: 1px solid transparent;
   cursor: pointer;
+  box-sizing: border-box;
   transition: all 0.15s ease;
 }
 
-.btn-primary {
-  background: var(--color-primary, #087f78);
-  border: 1px solid var(--color-primary, #087f78);
-  color: #ffffff;
+.btn-save-blue:hover:not(:disabled) {
+  background-color: #2563eb;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: #076d67;
-}
-
-.btn-primary:disabled {
-  background: #94a3b8;
-  border-color: #94a3b8;
+.btn-save-blue:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
-  opacity: 0.65;
 }
 
-.btn-outline {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-}
-
-.btn-outline:hover:not(:disabled) {
-  background: #f1f5f9;
-}
-
-.btn-cancel {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-}
-
-.btn-cancel:hover {
-  background: #f1f5f9;
-}
-
-.btn-danger {
-  background: #ef4444;
-  border: 1px solid #ef4444;
-  color: #ffffff;
-}
-
-.btn-danger:hover {
-  background: #dc2626;
-}
-
-.btn-primary svg,
-.btn-outline svg,
-.btn-cancel svg {
+.btn-save-blue svg {
   width: 15px;
   height: 15px;
 }
 
-/* 3. Table */
-.table-responsive {
-  width: 100%;
-  overflow-x: auto;
+.btn-reset-white {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  background-color: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 1.5rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
 }
 
+.btn-reset-white:hover:not(:disabled) {
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
+.btn-reset-white svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Detail Table Toolbar */
+.detail-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.per-page-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.records-select {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #fff;
+  cursor: pointer;
+}
+
+.records-text {
+  font-weight: 500;
+}
+
+.search-input-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.search-input {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  width: 180px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #008779;
+}
+
+/* Detail Table */
 .detail-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
-  text-align: left;
+  font-size: 0.875rem;
 }
 
-.detail-table th {
+.detail-table thead th {
   background-color: #f8fafc;
   color: #475569;
-  font-weight: 700;
-  padding: 0.75rem 1rem;
-  border-bottom: 2px solid #e2e8f0;
-  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.detail-table td {
-  padding: 0.75rem 1rem;
+.detail-table tbody td {
+  padding: 0.9rem 1.25rem;
   border-bottom: 1px solid #f1f5f9;
+  color: #334155;
   vertical-align: middle;
 }
 
-.col-no { width: 50px; }
-.col-price { width: 140px; }
-.col-qty { width: 90px; }
-.col-subtotal { width: 150px; }
-.col-wh { width: 160px; }
-.col-actions { width: 100px; }
-
-.empty-detail-cell {
-  padding: 2rem 1rem;
+.detail-row:hover td {
+  background-color: #f8fbfb;
 }
 
+.med-name {
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+
+.med-unit {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.empty-detail-cell {
+  padding: 2.5rem 1rem !important;
+}
+
+/* Total Summary Bar */
 .total-summary-bar {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  background: #fafafa;
-  border-top: 2px solid #e2e8f0;
-  font-size: 1.1rem;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background-color: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  font-size: 1.15rem;
+}
+
+.total-label {
+  color: #0f172a;
 }
 
 .total-amount {
-  font-size: 1.25rem;
+  color: #0f172a;
 }
 
-.card-footer-bar {
+/* Detail Pagination Bar */
+.detail-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.page-buttons {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.page-btn {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.85rem;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.page-btn.active {
+  background-color: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
+/* Card Footer with Split Buttons */
+.card-footer-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 1rem 1.25rem;
   border-top: 1px solid #f1f5f9;
-  display: flex;
-  justify-content: flex-start;
+  background: #f8fafc;
 }
 
-/* Modals */
+.btn-cancel-footer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.15rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-cancel-footer:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.btn-cancel-footer svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-print-nota {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.35rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: #06b6d4;
+  color: #ffffff;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-print-nota:hover {
+  background-color: #0891b2;
+}
+
+.btn-print-nota svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Action Buttons */
+.action-buttons-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-action-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-action-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-action-icon.btn-edit:hover {
+  background-color: #f0fdf4;
+  border-color: #86efac;
+  color: #16a34a;
+}
+
+.btn-action-icon.btn-delete:hover {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+/* Modal and Dialogs */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1181,15 +1594,15 @@ const goBack = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1070;
-  padding: 1rem;
+  z-index: 9999;
+  padding: 1.25rem;
 }
 
 .modal-content {
   background: #ffffff;
   border-radius: 12px;
   width: 100%;
-  max-width: 460px;
+  max-width: 480px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
@@ -1198,14 +1611,9 @@ const goBack = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
+  padding: 1.15rem 1.5rem;
   border-bottom: 1px solid #f1f5f9;
   background: #f8fafc;
-}
-
-.modal-header-danger {
-  background: #fef2f2;
-  border-bottom-color: #fee2e2;
 }
 
 .modal-title {
@@ -1218,90 +1626,175 @@ const goBack = () => {
   border: none;
   color: #94a3b8;
   cursor: pointer;
+  padding: 0.35rem;
+  display: flex;
+}
+
+.btn-close:hover {
+  color: #1e293b;
+}
+
+.btn-close svg {
+  width: 18px;
+  height: 18px;
 }
 
 .modal-body {
-  padding: 1.25rem;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .modal-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1.5rem;
   border-top: 1px solid #f1f5f9;
   background: #f8fafc;
 }
 
-.action-buttons-group {
-  display: inline-flex;
-  gap: 0.35rem;
+.btn-cancel {
+  padding: 0.55rem 1.15rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  cursor: pointer;
 }
 
-.btn-action-icon {
-  display: inline-flex;
+.btn-cancel:hover {
+  background: #f1f5f9;
+}
+
+.btn-primary {
+  padding: 0.55rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: #008779;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #007366;
+}
+
+.btn-danger-confirm {
+  padding: 0.55rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: #ef4444;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-danger-confirm:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.delete-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: #fee2e2;
+  color: #dc2626;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  cursor: pointer;
-  color: #475569;
+  margin-right: 0.75rem;
 }
 
-.btn-action-icon svg { width: 14px; height: 14px; }
-.btn-edit:hover { background: #fefce8; border-color: #fde047; color: #ca8a04; }
-.btn-delete:hover { background: #fef2f2; border-color: #fca5a5; color: #ef4444; }
+.delete-icon-box svg {
+  width: 20px;
+  height: 20px;
+}
 
-.error-msg,
-.invalid-feedback {
-  font-size: 0.75rem;
+.text-navy {
+  color: #0f172a;
+}
+
+.text-muted {
+  color: #64748b;
+}
+
+.font-medium {
+  font-weight: 500;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-danger {
   color: #ef4444;
 }
 
-.is-invalid {
-  border-color: #ef4444 !important;
+/* Skeletons */
+.detail-loading-box {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.preview-box {
-  padding: 0.5rem 0.75rem;
-  background: #f8fafc;
-  border-radius: 6px;
-  font-size: 0.85rem;
+.skeleton-card {
+  height: 200px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 
-.text-center { text-align: center; }
-.text-right { text-align: right; }
-.text-primary { color: var(--color-primary, #087f78); }
-.text-navy { color: var(--color-text-navy, #17243d); }
-.text-muted { color: #64748b; }
-.text-danger { color: #ef4444; }
-.font-semibold { font-weight: 600; }
-.font-bold { font-weight: 700; }
-.font-medium { font-weight: 500; }
-
-@media (max-width: 900px) {
-  .form-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .form-col-wide {
-    grid-column: 1 / -1;
-  }
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
+/* Print styling */
+@media print {
+  .no-print {
+    display: none !important;
   }
-  .form-actions {
-    flex-direction: column;
-    width: 100%;
+
+  .page-container {
+    padding: 0 !important;
   }
-  .form-actions button {
-    width: 100%;
+
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .card-header {
+    background: transparent !important;
+    border-bottom: 2px solid #000 !important;
+  }
+
+  .detail-table thead th {
+    border-bottom: 2px solid #000 !important;
+    color: #000 !important;
+  }
+
+  .detail-table tbody td {
+    border-bottom: 1px solid #ddd !important;
+    color: #000 !important;
+  }
+
+  .total-summary-bar {
+    font-size: 1.25rem !important;
+    border-top: 2px solid #000 !important;
   }
 }
 </style>
-

@@ -53,6 +53,20 @@ class StockOpnameResource extends JsonResource
         $expDateString = $expDateObj ? $expDateObj->format('Y-m-d') : null;
         $expDateDisplay = $expDateObj ? $expDateObj->format('d/m/Y') : '-';
 
+        $formatDate = function ($date) {
+            if ($date instanceof \DateTimeInterface) {
+                return $date->toIso8601String();
+            }
+            if (is_string($date) && $date !== '' && !str_starts_with($date, '0000-00-00')) {
+                try {
+                    return Carbon::parse($date)->toIso8601String();
+                } catch (\Throwable) {
+                    return $date;
+                }
+            }
+            return null;
+        };
+
         return [
             'id' => $this->id,
             'warehouse_id' => $this->warehouse_id,
@@ -97,8 +111,8 @@ class StockOpnameResource extends JsonResource
             'is_expiring_soon' => $isExpiringSoon,
             'isExpiringSoon' => $isExpiringSoon,
             'days_until_expiration' => $daysUntilExpiration,
-            'created_at' => $this->created_at?->toIso8601String(),
-            'updated_at' => $this->updated_at?->toIso8601String(),
+            'created_at' => $formatDate($this->created_at),
+            'updated_at' => $formatDate($this->updated_at),
         ];
     }
 }

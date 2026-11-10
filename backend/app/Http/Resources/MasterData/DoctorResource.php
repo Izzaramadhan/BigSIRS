@@ -14,8 +14,8 @@ class DoctorResource extends JsonResource
 
         $data = [
             'id' => $this->id,
-            'name' => $this->employee ? $this->employee->name : null,
-            'full_name' => $this->employee ? $this->employee->name : null,
+            'name' => $this->employee ? $this->employee->name : ($this->name ?? null),
+            'full_name' => $this->employee ? $this->employee->name : ($this->full_name ?? $this->name ?? null),
             'specialization' => $this->specialization ? [
                 'id' => $this->specialization->id,
                 'name' => $this->specialization->name,

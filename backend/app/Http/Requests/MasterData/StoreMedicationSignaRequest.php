@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyMedicationSigna;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreMedicationSignaRequest extends FormRequest
@@ -11,7 +12,7 @@ class StoreMedicationSignaRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('create', LegacyMedicationSigna::class) ?? true;
     }
 
     /**
@@ -23,6 +24,14 @@ class StoreMedicationSignaRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => is_string($this->name) ? trim($this->name) : $this->name,
+        ]);
     }
 }

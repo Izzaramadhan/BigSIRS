@@ -3,8 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Enums\GuarantorType;
+use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 
 class StoreGuarantorRequest extends FormRequest
@@ -51,10 +53,14 @@ class StoreGuarantorRequest extends FormRequest
      */
     public function rules(): array
     {
+        $uniqueCodeRule = LegacyAccess::isAvailable('ref_jenis_asuransi')
+            ? Rule::unique('legacy.ref_jenis_asuransi', 'kode')->whereNull('deleted_at')
+            : Rule::unique('guarantors', 'code')->whereNull('deleted_at');
+
         return [
-            'code' => ['required', 'string', 'max:30', 'unique:guarantors,code'],
+            'code' => ['required', 'string', 'max:50', $uniqueCodeRule],
             'name' => ['required', 'string', 'max:150'],
-            'legacy_id' => ['nullable', 'integer', 'unique:guarantors,legacy_id'],
+            'legacy_id' => ['nullable', 'integer'],
             'type' => ['required', new Enum(GuarantorType::class)],
             'is_active' => ['boolean'],
             'is_government' => ['required', 'boolean'],
