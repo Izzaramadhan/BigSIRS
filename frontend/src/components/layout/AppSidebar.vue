@@ -235,7 +235,7 @@ watch(() => route.path, () => {
               v-if="!item.disabled && !item.submenu"
               :to="item.path"
               class="nav-link"
-              :class="{ 'nav-link--active': route.path === item.path }"
+              :class="{ 'nav-link--active': route.path === item.path || (item.path !== '/dashboard' && route.path.startsWith(item.path + '/')) }"
               :aria-current="route.path === item.path ? 'page' : undefined"
             >
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

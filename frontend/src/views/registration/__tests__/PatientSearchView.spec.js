@@ -1,8 +1,167 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import PatientSearchView from '../PatientSearchView.vue';
+import RegistrationPatientSearchCard from '../components/RegistrationPatientSearchCard.vue';
+import RegistrationQueueCard from '../components/RegistrationQueueCard.vue';
+import RegistrationPatientListCard from '../components/RegistrationPatientListCard.vue';
 import PatientSearchTable from '../components/PatientSearchTable.vue';
 import PatientSearchFilters from '../components/PatientSearchFilters.vue';
 import { mockPatients } from '@/mocks/patients';
+
+const mockPush = vi.fn();
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: mockPush
+  })
+}));
+
+describe('PatientSearchView (Halaman Awal Pendaftaran Terbaru)', () => {
+  it('renders FORM PENCARIAN PASIEN, NO. ANTRIAN, and DAFTAR PASIEN with 10 columns', () => {
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain('Pendaftaran Pasien');
+    expect(wrapper.text()).toContain('Home');
+    expect(wrapper.text()).toContain('Data Pasien');
+    expect(wrapper.text()).toContain('FORM PENCARIAN PASIEN');
+    expect(wrapper.text()).toContain('NO. ANTRIAN');
+    expect(wrapper.text()).toContain('DAFTAR PASIEN');
+
+    expect(wrapper.find('input#reg-patient-query').exists()).toBe(true);
+    expect(wrapper.find('input#reg-patient-birthdate').exists()).toBe(true);
+    expect(wrapper.find('button.btn-cari-pasien').text()).toContain('Cari');
+    expect(wrapper.find('button.btn-register-patient').text()).toContain('Registrasi Pasien Baru');
+    expect(wrapper.find('button.btn-satusehat-kyc').text()).toContain('SatuSehat KYC');
+
+    expect(wrapper.find('.queue-number-display').text()).toBe('P001');
+    expect(wrapper.find('.btn-call-queue').text()).toContain('Panggil');
+    expect(wrapper.find('.btn-prev-queue').text()).toContain('Prev');
+    expect(wrapper.find('.btn-next-queue').text()).toContain('Next');
+
+    expect(wrapper.find('select#reg-guarantor-filter').exists()).toBe(true);
+    expect(wrapper.find('select#reg-records-perpage').exists()).toBe(true);
+    expect(wrapper.find('input#reg-table-search').exists()).toBe(true);
+
+    const headers = wrapper
+      .find('.registration-list-card')
+      .findAll('thead th')
+      .map((th) => th.text().trim());
+
+    expect(headers).toEqual([
+      'No.',
+      'No. Antrian',
+      'Waktu Admisi',
+      'Nama',
+      'No. HP',
+      'Alamat',
+      'Admisi ke',
+      'Jenis Asuransi',
+      'General Consent',
+      'Aksi'
+    ]);
+
+    expect(wrapper.find('.btn-tools').text()).toContain('Tools');
+  });
+
+  it('controls NO. ANTRIAN Prev/Next queue numbers cleanly', async () => {
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    expect(wrapper.find('.queue-number-display').text()).toBe('P001');
+    await wrapper.find('.btn-next-queue').trigger('click');
+    expect(wrapper.find('.queue-number-display').text()).toBe('P002');
+    await wrapper.find('.btn-prev-queue').trigger('click');
+    expect(wrapper.find('.queue-number-display').text()).toBe('P001');
+  });
+
+  it('searches registered patients, navigates to /pendaftaran/baru, and opens SatuSehat KYC modal', async () => {
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('input#reg-patient-query').setValue('Bambang');
+    await wrapper.find('form.patient-search-form').trigger('submit.prevent');
+
+    expect(wrapper.find('.search-results-panel').exists()).toBe(true);
+    expect(wrapper.find('.search-results-panel').text()).toContain('Bambang Setyadi');
+
+    await wrapper.find('button.btn-register-patient').trigger('click');
+    expect(mockPush).toHaveBeenCalledWith('/pendaftaran/baru');
+
+    await wrapper.find('button.btn-satusehat-kyc').trigger('click');
+    expect(wrapper.text()).toContain('Verifikasi SatuSehat KYC');
+  });
+
+  it('filters DAFTAR PASIEN by Jenis Asuransi dropdown and table Search input', async () => {
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('select#reg-guarantor-filter').setValue('UMUM');
+    const badges = wrapper.findAll('.insurance-badge').map((b) => b.text().trim());
+    expect(badges.length).toBeGreaterThan(0);
+    expect(badges.every((b) => b === 'UMUM')).toBe(true);
+
+    await wrapper.find('select#reg-guarantor-filter').setValue('all');
+    await wrapper.find('input#reg-table-search').setValue('RM-000245');
+    expect(wrapper.find('.registration-list-card tbody').text()).toContain('RM-000245');
+  });
+
+  it('keeps component emit contracts on RegistrationPatientSearchCard, RegistrationQueueCard & RegistrationPatientListCard', async () => {
+    const qWrapper = mount(RegistrationQueueCard, {
+      props: { queueNumber: 'P005', canPrev: true }
+    });
+    await qWrapper.find('.btn-call-queue').trigger('click');
+    expect(qWrapper.emitted('call')).toBeTruthy();
+
+    const sWrapper = mount(RegistrationPatientSearchCard, {
+      props: { keyword: 'Siti', birthDate: '', results: [], hasSearched: false }
+    });
+    await sWrapper.find('button.btn-satusehat-kyc').trigger('click');
+    expect(sWrapper.emitted('open-kyc')).toBeTruthy();
+
+    const lWrapper = mount(RegistrationPatientListCard, {
+      props: {
+        admissions: [],
+        totalCount: 0,
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 10,
+        from: 0,
+        to: 0
+      },
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+    await lWrapper.find('th.col-queue').trigger('click');
+    expect(lWrapper.emitted('sort')[0]).toEqual(['antrian']);
+  });
+});
 
 describe('Registration Patient Components', () => {
   describe('PatientSearchTable', () => {

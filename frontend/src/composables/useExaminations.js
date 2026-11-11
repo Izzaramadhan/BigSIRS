@@ -3,11 +3,32 @@ import {
   generateMockExaminations,
   mockPolyclinics,
   mockDoctors,
+  mockMidwives,
+  mockBidanPhysicalHistory,
   mockGuarantorOptions,
   mockPeriodOptions,
   mockStatusOptions,
+  mockIcd10Catalog,
+  mockIcd9Catalog,
+  mockClinicalProcedures,
+  mockProcedurePackages,
+  mockParamedics,
+  mockMedicinesCatalog,
+  mockPrescriptionPackages,
+  mockPrescriptionHistory,
+  mockLaboratoryCatalog,
+  mockLabDpjpDoctors,
+  mockLabClinicalStaff,
+  mockLabHistory,
+  mockRadiologyCatalog,
+  mockRadiologyHistory,
+  mockVkSurgeryOptions,
+  mockIbsSurgeryOptions,
   calculateAge
 } from '@/mocks/examinations';
+
+// Frontend-only session clinical state for patient examination views
+const sessionExaminationData = reactive({});
 
 export function useExaminations() {
   // All examination records in local state
@@ -16,15 +37,23 @@ export function useExaminations() {
   // Search input query
   const searchQuery = ref('');
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   // Current applied filters
   const filters = reactive({
     period: 'today',
-    customStartDate: '',
-    customEndDate: '',
+    customStartDate: todayStr,
+    customEndDate: todayStr,
     polyclinic: 'Semua Poliklinik',
     doctor: 'Semua Dokter Pemeriksa',
     status: 'Semua Status',
     guarantor: 'Semua Penjamin'
+  });
+
+  // Sort state
+  const sort = reactive({
+    key: '',
+    direction: 'asc'
   });
 
   // Pagination state
@@ -94,6 +123,14 @@ export function useExaminations() {
       });
     }
 
+    // 1.5. Periode Tanggal Admisi (Start - End)
+    if (filters.customStartDate) {
+      result = result.filter((item) => !item.admission_date || item.admission_date >= filters.customStartDate);
+    }
+    if (filters.customEndDate) {
+      result = result.filter((item) => !item.admission_date || item.admission_date <= filters.customEndDate);
+    }
+
     // 2. Polyclinic Filter
     if (filters.polyclinic && filters.polyclinic !== 'Semua Poliklinik') {
       result = result.filter((item) => item.polyclinic === filters.polyclinic);
@@ -123,8 +160,50 @@ export function useExaminations() {
       });
     }
 
+    if (sort.key) {
+      const dir = sort.direction === 'asc' ? 1 : -1;
+      result.sort((a, b) => {
+        let valA = '';
+        let valB = '';
+        if (sort.key === 'antrian') {
+          valA = (a.queue_number || '').toLowerCase();
+          valB = (b.queue_number || '').toLowerCase();
+        } else if (sort.key === 'waktu') {
+          valA = `${a.admission_date || ''} ${a.admission_time || ''}`;
+          valB = `${b.admission_date || ''} ${b.admission_time || ''}`;
+        } else if (sort.key === 'nama') {
+          valA = (a.patient_name || '').toLowerCase();
+          valB = (b.patient_name || '').toLowerCase();
+        } else if (sort.key === 'klinik') {
+          valA = (a.polyclinic || '').toLowerCase();
+          valB = (b.polyclinic || '').toLowerCase();
+        } else if (sort.key === 'dokter') {
+          valA = (a.doctor || '').toLowerCase();
+          valB = (b.doctor || '').toLowerCase();
+        }
+        if (valA < valB) return -1 * dir;
+        if (valA > valB) return 1 * dir;
+        return 0;
+      });
+    }
+
     return result;
   });
+
+  const setSort = (key) => {
+    if (sort.key === key) {
+      if (sort.direction === 'asc') {
+        sort.direction = 'desc';
+      } else {
+        sort.key = '';
+        sort.direction = 'asc';
+      }
+    } else {
+      sort.key = key;
+      sort.direction = 'asc';
+    }
+    pagination.currentPage = 1;
+  };
 
   // Paginated records
   const paginatedExaminations = computed(() => {
@@ -166,8 +245,8 @@ export function useExaminations() {
   const resetFilters = () => {
     searchQuery.value = '';
     filters.period = 'today';
-    filters.customStartDate = '';
-    filters.customEndDate = '';
+    filters.customStartDate = todayStr;
+    filters.customEndDate = todayStr;
     filters.polyclinic = 'Semua Poliklinik';
     filters.doctor = 'Semua Dokter Pemeriksa';
     filters.status = 'Semua Status';
@@ -267,6 +346,45 @@ export function useExaminations() {
     };
   };
 
+  // Get single examination record merged with frontend session state
+  const getExaminationById = (patientId) => {
+    const base = examinations.value.find((p) => String(p.id) === String(patientId)) || examinations.value[0];
+    if (!base) return null;
+    const override = sessionExaminationData[base.id];
+    return override ? { ...base, ...override } : base;
+  };
+
+  // Save clinical examination workspace data in local session state (FE-only)
+  const saveSessionExaminationData = (patientId, payload) => {
+    const targetId = String(patientId);
+    const existing = sessionExaminationData[targetId] || {};
+    sessionExaminationData[targetId] = {
+      ...existing,
+      ...payload
+    };
+
+    const item = examinations.value.find((p) => String(p.id) === targetId);
+    if (item && payload) {
+      Object.assign(item, payload);
+    }
+
+    return {
+      success: true,
+      data: getExaminationById(targetId)
+    };
+  };
+
+  // Mark examination as Selesai in local session state
+  const completeExamination = (patientId) => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    return saveSessionExaminationData(patientId, {
+      status: 'Selesai',
+      completed_time: `${hh}:${mm}`
+    });
+  };
+
   return {
     examinations,
     searchQuery,
@@ -275,18 +393,41 @@ export function useExaminations() {
     loading,
     error,
     lastCalledPatient,
+    sort,
     statistics,
     filteredExaminations,
     paginatedExaminations,
     paginationInfo,
     mockPolyclinics,
     mockDoctors,
+    mockMidwives,
+    mockBidanPhysicalHistory,
     mockGuarantorOptions,
     mockPeriodOptions,
     mockStatusOptions,
+    mockIcd10Catalog,
+    mockIcd9Catalog,
+    mockClinicalProcedures,
+    mockProcedurePackages,
+    mockParamedics,
+    mockMedicinesCatalog,
+    mockPrescriptionPackages,
+    mockPrescriptionHistory,
+    mockLaboratoryCatalog,
+    mockLabDpjpDoctors,
+    mockLabClinicalStaff,
+    mockLabHistory,
+    mockRadiologyCatalog,
+    mockRadiologyHistory,
+    mockVkSurgeryOptions,
+    mockIbsSurgeryOptions,
     calculateAge,
+    getExaminationById,
+    saveSessionExaminationData,
+    completeExamination,
     applyFilters,
     resetFilters,
+    setSort,
     setPage,
     setPerPage,
     refreshData,

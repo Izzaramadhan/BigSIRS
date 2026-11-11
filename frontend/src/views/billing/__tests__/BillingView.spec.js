@@ -1,11 +1,132 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import BillingView from '../BillingView.vue';
+import BillingOrderView from '../BillingOrderView.vue';
+import BillingDailyListCard from '../components/BillingDailyListCard.vue';
 import BillingTable from '../components/BillingTable.vue';
 import BillingStatsCards from '../components/BillingStatsCards.vue';
 import BillingQuickFilters from '../components/BillingQuickFilters.vue';
 import BillingClosingShiftPanel from '../components/BillingClosingShiftPanel.vue';
 import BillingPagination from '../components/BillingPagination.vue';
 import { generateMockBillingRecords, mockCashierShift } from '@/mocks/billing';
+
+const mockPush = vi.fn();
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    params: { id: 'BILL-0001' }
+  }),
+  useRouter: () => ({
+    push: mockPush
+  })
+}));
+
+beforeEach(() => {
+  mockPush.mockClear();
+});
+
+describe('BillingView (Halaman Awal Billing Terbaru)', () => {
+  it('renders Billing Pasien header, 2-col filter form, and 9 standardized columns', () => {
+    const wrapper = mount(BillingView, {
+      global: {
+        stubs: {
+          AppToast: true
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain('Billing Pasien');
+    expect(wrapper.text()).toContain('Home');
+    expect(wrapper.text()).toContain('DAFTAR PASIEN');
+
+    expect(wrapper.find('input#billing-search-input').exists()).toBe(true);
+    expect(wrapper.find('input#billing-start-date').exists()).toBe(true);
+    expect(wrapper.find('input#billing-end-date').exists()).toBe(true);
+    expect(wrapper.find('select#billing-payment-status-filter').exists()).toBe(true);
+    expect(wrapper.find('select#billing-polyclinic-filter').exists()).toBe(true);
+    expect(wrapper.find('select#billing-guarantor-filter').exists()).toBe(true);
+    expect(wrapper.find('button.btn-search-billing').text()).toContain('Cari Data Pasien');
+    expect(wrapper.find('button.btn-reset-billing').text()).toContain('Reset Filter');
+    expect(wrapper.find('select#billing-records-perpage').exists()).toBe(true);
+
+    const headers = wrapper
+      .find('.billing-daily-card')
+      .findAll('thead th')
+      .map((th) => th.text().trim());
+
+    expect(headers).toEqual([
+      'No',
+      'No. Antrian',
+      'Waktu',
+      'Nama',
+      'Klinik',
+      'Status Pemeriksaan',
+      'Status Farmasi',
+      'Status Bayar',
+      'Aksi'
+    ]);
+
+    expect(wrapper.find('.btn-action-bill').exists()).toBe(true);
+    expect(wrapper.find('.btn-action-call').exists()).toBe(true);
+  });
+
+  it('filters billing list by patient keyword and payment status and resets cleanly', async () => {
+    const wrapper = mount(BillingView, {
+      global: {
+        stubs: {
+          AppToast: true
+        }
+      }
+    });
+
+    await wrapper.find('input#billing-search-input').setValue('Ahmad Pratama');
+    expect(wrapper.find('.billing-daily-card tbody').text()).toContain('Ahmad Pratama');
+
+    await wrapper.find('input#billing-search-input').setValue('');
+    await wrapper.find('select#billing-payment-status-filter').setValue('Belum Bayar');
+    const paymentLabels = wrapper
+      .findAll('.billing-daily-card tbody tr td:nth-child(8) .status-pill')
+      .map((el) => el.text().trim());
+    expect(paymentLabels.length).toBeGreaterThan(0);
+    expect(paymentLabels.every((lbl) => lbl === 'Belum Bayar')).toBe(true);
+
+    await wrapper.find('button.btn-reset-billing').trigger('click');
+    expect(wrapper.find('input#billing-search-input').element.value).toBe('');
+    expect(wrapper.find('select#billing-payment-status-filter').element.value).toBe('Semua');
+  });
+
+  it('handles sorting and action emits on BillingDailyListCard', async () => {
+    const sample = generateMockBillingRecords().slice(0, 3);
+    const listWrapper = mount(BillingDailyListCard, {
+      props: {
+        records: sample,
+        totalCount: 3,
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 10,
+        from: 1,
+        to: 3,
+        searchQuery: '',
+        filters: {
+          customStartDate: '2026-11-10',
+          customEndDate: '2026-11-10',
+          status: 'Semua',
+          polyclinic: 'Semua Poliklinik',
+          guarantor: 'Semua Jenis Penjamin'
+        },
+        polyclinics: ['Poli Penyakit Dalam']
+      }
+    });
+
+    await listWrapper.find('th.col-clinic').trigger('click');
+    expect(listWrapper.emitted('sort')[0]).toEqual(['klinik']);
+
+    await listWrapper.find('.btn-action-bill').trigger('click');
+    expect(listWrapper.emitted('open-bill')[0][0].id).toBe(sample[0].id);
+
+    await listWrapper.find('.btn-action-call').trigger('click');
+    expect(listWrapper.emitted('call-patient')[0][0].id).toBe(sample[0].id);
+  });
+});
 
 describe('Billing Rawat Jalan Components', () => {
   const mockRecords = generateMockBillingRecords();
@@ -205,6 +326,193 @@ describe('Billing Rawat Jalan Components', () => {
       const nextBtn = wrapper.find('.btn-next');
       await nextBtn.trigger('click');
       expect(wrapper.emitted('page-change')[0]).toEqual([2]);
+    });
+  });
+
+  describe('BillingDailyListCard UI Standardization', () => {
+    it('renders standardized default dropdown labels, periode captions, and action controls', () => {
+      const wrapper = mount(BillingView);
+
+      expect(wrapper.find('h1').text()).toBe('Billing Pasien');
+      expect(wrapper.find('#billing-payment-status-filter option[value="Semua"]').text()).toBe('---- Semua ----');
+      expect(wrapper.find('#billing-polyclinic-filter option[value="Semua Poliklinik"]').text()).toBe('---- Semua Klinik ----');
+      expect(wrapper.find('#billing-guarantor-filter option[value="Semua Jenis Penjamin"]').text()).toBe('---- Semua Jaminan ----');
+
+      expect(wrapper.text()).toContain('*) tanggal awal');
+      expect(wrapper.text()).toContain('*) tanggal akhir');
+      expect(wrapper.find('.btn-search-billing').text()).toContain('Cari Data Pasien');
+      expect(wrapper.find('.btn-reset-billing').text()).toContain('Reset Filter');
+      expect(wrapper.find('.records-label').text()).toBe('records');
+    });
+
+    it('renders BillingDailyListCard status pills, patient meta format, and emits row actions', async () => {
+      const sampleRecord = {
+        ...generateMockBillingRecords()[0],
+        queue_number: '001',
+        service_date: '2026-11-11',
+        service_time: '10:21 WIB',
+        patient_name: 'Seto Bayu Aji',
+        medical_record_number: '000344',
+        gender: 'L',
+        birth_date: '1999-09-09',
+        guarantor_type: 'Pasien Umum / Tunai',
+        polyclinic: 'Poliklinik Bedah',
+        exam_status: 'Belum Dilayani',
+        pharmacy_status: 'Tidak Ada Resep',
+        status: 'Siap Dibayar'
+      };
+
+      const wrapper = mount(BillingDailyListCard, {
+        props: {
+          searchQuery: '',
+          records: [sampleRecord],
+          totalCount: 1,
+          currentPage: 1,
+          lastPage: 1,
+          perPage: 10,
+          from: 1,
+          to: 1,
+          filters: {
+            customStartDate: '2026-11-11',
+            customEndDate: '2026-11-12',
+            status: 'Semua',
+            polyclinic: 'Semua Poliklinik',
+            guarantor: 'Semua Jenis Penjamin'
+          },
+          polyclinics: ['Poliklinik Bedah']
+        }
+      });
+
+      expect(wrapper.text()).toContain('11 November 2026');
+      expect(wrapper.text()).toContain('10:21:00');
+      expect(wrapper.find('.patient-name').text()).toBe('Seto Bayu Aji');
+      expect(wrapper.find('.patient-meta-italic').text()).toBe('000344 | L | 1999-09-09 | UMUM');
+      expect(wrapper.text()).toContain('Poliklinik Bedah');
+      expect(wrapper.text()).toContain('Belum Dilayani');
+      expect(wrapper.text()).toContain('Tidak Ada Resep');
+      expect(wrapper.text()).toContain('Belum Bayar');
+
+      await wrapper.find('.btn-action-bill').trigger('click');
+      expect(wrapper.emitted('open-bill')[0]).toEqual([sampleRecord]);
+
+      await wrapper.find('.btn-action-call').trigger('click');
+      expect(wrapper.emitted('call-patient')[0]).toEqual([sampleRecord]);
+    });
+
+    it('navigates to BillingOrderView when clicking + button on BillingView', async () => {
+      const wrapper = mount(BillingView, {
+        global: {
+          stubs: { AppToast: true }
+        }
+      });
+
+      await wrapper.find('.btn-action-bill').trigger('click');
+      expect(mockPush).toHaveBeenCalledWith({
+        name: 'clinical.billing-order',
+        params: { id: 'BILL-0001' }
+      });
+    });
+  });
+
+  describe('BillingOrderView (Halaman Detail Billing Order)', () => {
+    it('renders patient banner, 6 tabs, LIST ORDERS table, payment summary boxes, and footer controls', () => {
+      const wrapper = mount(BillingOrderView, {
+        global: {
+          stubs: { AppToast: true }
+        }
+      });
+
+      expect(wrapper.text()).toContain('Billing Order');
+      expect(wrapper.find('.patient-hero-name').text()).toBe('Ahmad Pratama');
+      expect(wrapper.text()).toContain('Kunjungan RS');
+      expect(wrapper.find('.btn-call-patient').text()).toContain('Panggil');
+
+      const tabLabels = wrapper.findAll('.billing-tab-btn').map((btn) => btn.text().trim());
+      expect(tabLabels).toEqual(['Orders', 'Tindakan', 'Resep', 'Laboratorium', 'Radiologi', 'Ambulance']);
+
+      expect(wrapper.text()).toContain('LIST ORDERS');
+      expect(wrapper.find('select#billing-orders-type-filter').element.value).toBe('All');
+      expect(wrapper.find('select#billing-orders-perpage').exists()).toBe(true);
+      expect(wrapper.find('input#billing-orders-search').exists()).toBe(true);
+
+      const orderHeaders = wrapper
+        .find('.orders-table')
+        .findAll('thead th')
+        .map((th) => th.text().replace(/\s+/g, ' ').trim());
+      expect(orderHeaders[1]).toContain('Tgl Order');
+      expect(orderHeaders[2]).toContain('Jenis');
+      expect(orderHeaders[3]).toContain('Nama');
+      expect(orderHeaders[4]).toContain('Jumlah');
+      expect(orderHeaders[5]).toContain('Harga');
+      expect(orderHeaders[6]).toContain('Diskon');
+      expect(orderHeaders[7]).toContain('Total');
+      expect(orderHeaders[8]).toContain('Status');
+      expect(orderHeaders[9]).toBe('Aksi');
+
+      expect(wrapper.find('#billing-subtotal-display').text()).toBe('Rp 0');
+      expect(wrapper.find('#billing-global-discount').exists()).toBe(true);
+      expect(wrapper.find('#billing-grand-total').exists()).toBe(true);
+      expect(wrapper.find('#billing-pay-amount').exists()).toBe(true);
+      expect(wrapper.find('#billing-change-amount').exists()).toBe(true);
+      expect(wrapper.find('#billing-payment-note').exists()).toBe(true);
+      expect(wrapper.find('#billing-payment-method').exists()).toBe(true);
+      expect(wrapper.find('#billing-payment-time').exists()).toBe(true);
+      expect(wrapper.find('#billing-order-polyclinic').exists()).toBe(true);
+      expect(wrapper.find('.btn-batal-bayar').text()).toBe('Batal Bayar');
+      expect(wrapper.find('.btn-submit-order').text()).toBe('Submit');
+      expect(wrapper.find('.btn-print-order').text()).toBe('Print');
+      expect(wrapper.find('.btn-cancel-order').text()).toBe('Cancel');
+    });
+
+    it('calculates totals, applies row discount, submits payment, reverts payment, adds category item, prints, and cancels', async () => {
+      const wrapper = mount(BillingOrderView, {
+        global: {
+          stubs: { AppToast: true }
+        }
+      });
+
+      const firstCheckbox = wrapper.find('.row-order-checkbox');
+      await firstCheckbox.setValue(true);
+
+      // Default ADM item is Rp 5.000
+      expect(wrapper.find('#billing-subtotal-display').text()).toBe('Rp 5.000');
+      expect(wrapper.find('#billing-grand-total').element.value).toBe('5000');
+
+      // Apply 20% row discount -> Rp 4.000
+      await wrapper.find('.row-discount-select').setValue('20');
+      expect(wrapper.find('#billing-subtotal-display').text()).toBe('Rp 4.000');
+      expect(wrapper.find('#billing-grand-total').element.value).toBe('4000');
+
+      // Pay Rp 10.000 -> Kembali Rp 6.000
+      await wrapper.find('#billing-pay-amount').setValue(10000);
+      expect(wrapper.find('#billing-change-amount').element.value).toBe('6000');
+
+      // Submit payment -> first row becomes 'sudah bayar'
+      await wrapper.find('.btn-submit-order').trigger('click');
+      expect(wrapper.find('.orders-table tbody tr .order-status-pill').text().trim()).toBe('sudah bayar');
+
+      // Batal Bayar -> reverts back to 'belum bayar'
+      await wrapper.find('.btn-batal-bayar').trigger('click');
+      expect(wrapper.find('.orders-table tbody tr .order-status-pill').text().trim()).toBe('belum bayar');
+
+      // Switch to Ambulance tab & add item into LIST ORDERS
+      const tabBtns = wrapper.findAll('.billing-tab-btn');
+      await tabBtns[5].trigger('click');
+      expect(wrapper.text()).toContain('Ambulance');
+      await wrapper.find('#cat-name-AMB').setValue('Ambulance Dalam Kota Custom');
+      await wrapper.find('#cat-price-AMB').setValue(250000);
+      await wrapper.find('.cat-add-form').trigger('submit');
+
+      await tabBtns[0].trigger('click');
+      expect(wrapper.find('.orders-table tbody').text()).toContain('Ambulance Dalam Kota Custom');
+
+      // Print opens BillingReceiptModal
+      await wrapper.find('.btn-print-order').trigger('click');
+      expect(wrapper.text()).toContain('Pratinjau Kuitansi Pembayaran Rawat Jalan');
+
+      // Cancel navigates back to clinical.billing
+      await wrapper.find('.btn-cancel-order').trigger('click');
+      expect(mockPush).toHaveBeenCalledWith({ name: 'clinical.billing' });
     });
   });
 });

@@ -1,7 +1,7 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
-defineProps({
+const props = defineProps({
   isOpen: {
     type: Boolean,
     required: true
@@ -17,21 +17,47 @@ defineProps({
   nextQueueNumber: {
     type: String,
     default: 'A-025'
+  },
+  patient: {
+    type: Object,
+    default: null
   }
 });
 
 const emit = defineEmits(['close', 'submit']);
+
+const calcAge = (birthDate) => {
+  if (!birthDate) return 35;
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return 35;
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const m = now.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+  return Math.max(0, age);
+};
+
+const mapGuarantorType = (val) => {
+  if (!val) return 'UMUM';
+  const lower = String(val).toLowerCase();
+  if (lower.includes('bpjs') || lower.includes('jkn')) return 'BPJS Kesehatan';
+  if (lower.includes('swasta') || lower.includes('inhealth') || lower.includes('prudential')) return 'Asuransi Swasta';
+  return 'UMUM';
+};
 
 const form = ref({
   patient_name: '',
   medical_record_number: '',
   nik: '',
   gender: 'L',
+  birth_date: '1990-01-01',
   age: 35,
+  phone: '',
+  address: '',
   polyclinic: 'Poli Umum',
   doctor: 'dr. Budi Santoso, Sp.PD',
-  guarantor_type: 'BPJS Kesehatan',
-  guarantor_detail: 'JKN-Non PBI',
+  guarantor_type: 'UMUM',
+  guarantor_detail: 'Mandiri / Pribadi',
   notes: ''
 });
 
@@ -41,14 +67,48 @@ const resetForm = () => {
     medical_record_number: '',
     nik: '',
     gender: 'L',
+    birth_date: '1990-01-01',
     age: 35,
+    phone: '',
+    address: '',
     polyclinic: 'Poli Umum',
     doctor: 'dr. Budi Santoso, Sp.PD',
-    guarantor_type: 'BPJS Kesehatan',
-    guarantor_detail: 'JKN-Non PBI',
+    guarantor_type: 'UMUM',
+    guarantor_detail: 'Mandiri / Pribadi',
     notes: ''
   };
 };
+
+watch(
+  () => [props.isOpen, props.patient],
+  ([open, pat]) => {
+    if (!open) return;
+    if (pat) {
+      const mappedGuarantor = mapGuarantorType(pat.guarantor);
+      form.value = {
+        patient_name: pat.name || '',
+        medical_record_number: pat.medical_record_number || '',
+        nik: pat.nik || '',
+        gender: pat.gender || 'L',
+        birth_date: pat.birth_date || '1990-01-01',
+        age: calcAge(pat.birth_date),
+        phone: pat.phone || '',
+        address: pat.address || '',
+        polyclinic: props.polyclinics[0] || 'Poli Umum',
+        doctor: props.doctors[0] || 'dr. Budi Santoso, Sp.PD',
+        guarantor_type: mappedGuarantor,
+        guarantor_detail:
+          mappedGuarantor === 'UMUM'
+            ? 'Mandiri / Pribadi'
+            : (pat.insurance_number && pat.insurance_number !== '-' ? pat.insurance_number : 'JKN-Non PBI'),
+        notes: ''
+      };
+    } else {
+      resetForm();
+    }
+  },
+  { immediate: true }
+);
 
 const handleSubmit = () => {
   if (!form.value.patient_name.trim()) return;
@@ -180,8 +240,8 @@ const handleSubmit = () => {
             <div class="form-group">
               <label class="form-label" for="add-guarantor">Jenis Penjamin</label>
               <select id="add-guarantor" v-model="form.guarantor_type" class="form-select">
+                <option value="UMUM">UMUM (Mandiri)</option>
                 <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-                <option value="Pasien Umum / Mandiri">Pasien Umum / Mandiri</option>
                 <option value="Asuransi Swasta">Asuransi Swasta</option>
               </select>
             </div>

@@ -68,6 +68,23 @@ const lastNames = [
   'Wijaya', 'Siregar', 'Kurniawan', 'Nugroho', 'Subagyo', 'Purwanto'
 ];
 
+const birthPlaces = [
+  'Yogyakarta', 'Sleman', 'Bantul', 'Semarang', 'Surabaya', 'Jakarta', 'Solo', 'Magelang', 'Sumbawa', 'Purworejo'
+];
+
+const sampleAddresses = [
+  'Jl. Wiyoro No. 1, Wiyoro Baru, Baturetno, Banguntapan',
+  'Jl. Malioboro No. 45, Sosromenduran, Gedongtengen, Yogyakarta',
+  'Jl. Kaliurang Km 5.2 No. 18, Caturtunggal, Depok, Sleman',
+  'Jl. Parangtritis No. 82, Brontokusuman, Mergangsan, Yogyakarta',
+  'Jl. Solo Km 7 No. 12, Maguwoharjo, Depok, Sleman',
+  'Jl. Bantul Km 4 No. 33, Dongkelan, Sewon, Bantul',
+  'Jl. Gejayan No. 21, Condongcatur, Depok, Sleman',
+  'Jl. Kusumanegara No. 54, Muja Muju, Umbulharjo, Yogyakarta',
+  'Jl. Magelang Km 6 No. 9, Sinduadi, Mlati, Sleman',
+  'Jl. Brigjen Katamso No. 14, Prawirodirjan, Gondomanan, Yogyakarta'
+];
+
 const clinicalNotes = [
   'Kontrol rutin hipertensi & cek lab berkala',
   'Demam tinggi 3 hari disertai batuk pilek',
@@ -180,19 +197,30 @@ function generateMockAdmissions() {
       nik: nik,
       patient_name: fullName,
       gender: gender,
+      birth_place: birthPlaces[i % birthPlaces.length],
       birth_date: birthDate,
       age: age,
       phone: `08${1 + (i % 9)}${String(10000000 + i * 3421).slice(0, 8)}`,
+      address: sampleAddresses[i % sampleAddresses.length],
       polyclinic: poly,
       doctor: doc,
       guarantor_type: guarantor.label,
       guarantor_detail: guarantor.detail,
+      insurance_number: guarantor.label === 'BPJS Kesehatan'
+        ? `000182736${String(1000 + i).slice(-4)}`
+        : (guarantor.label === 'Asuransi Swasta' ? `INS-${String(50000 + i)}` : ''),
+      referral_source: i % 3 === 0 ? 'FKT Primer' : 'Datang Sendiri',
+      referral_name: i % 3 === 0 ? 'Puskesmas Gondokusuman I' : '',
+      visit_type: 'Rawat Jalan',
+      case_type: i % 2 === 0 ? 'Pemeriksaan Kasus Baru' : 'Pemeriksaan Kasus Lama',
       general_consent: generalConsent,
       status: status, // 'Menunggu' | 'Sedang Diperiksa' | 'Selesai' | 'Dibatalkan'
       notes: clinicalNotes[i % clinicalNotes.length],
       emergency_contact: {
         name: `Keluarga ${ln}`,
-        phone: `0812-9988-${String(1000 + i).slice(0, 4)}`
+        relationship: i % 2 === 0 ? 'Saudara' : 'Istri / Suami',
+        phone: `0812-9988-${String(1000 + i).slice(0, 4)}`,
+        address: sampleAddresses[(i + 2) % sampleAddresses.length]
       }
     });
   }

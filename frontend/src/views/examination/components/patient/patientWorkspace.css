@@ -1,0 +1,300 @@
+/* Shared styling for clinical tabs inside ExaminationPatientView */
+.clinical-workspace-panel {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+  color: var(--color-text-navy);
+}
+
+.clinical-workspace-panel button,
+.clinical-workspace-panel input,
+.clinical-workspace-panel select,
+.clinical-workspace-panel textarea {
+  font-family: inherit;
+}
+
+.clinical-workspace-panel button > span,
+.clinical-workspace-panel label > span {
+  font-weight: inherit;
+  font-size: inherit;
+}
+
+.clinical-workspace-panel strong,
+.clinical-workspace-panel b {
+  font-weight: 700;
+}
+
+.clinical-workspace-panel .font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.clinical-workspace-panel .font-bold {
+  font-weight: 700;
+}
+
+.clinical-workspace-panel .font-semibold {
+  font-weight: 600;
+}
+
+.clinical-workspace-panel .panel-section-title {
+  margin: 0 0 0.9rem 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-navy);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.clinical-workspace-panel .panel-subtitle {
+  margin: 0.15rem 0 0 0;
+  font-size: 0.84rem;
+  color: var(--color-text-secondary);
+}
+
+.clinical-workspace-panel .section-card-box {
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  padding: 1.15rem 1.25rem;
+}
+
+.clinical-workspace-panel .section-card-box + .section-card-box {
+  margin-top: 1rem;
+}
+
+.clinical-workspace-panel .cw-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.15rem;
+}
+
+.clinical-workspace-panel .cw-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+}
+
+.clinical-workspace-panel .cw-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.clinical-workspace-panel .cw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.clinical-workspace-panel .cw-field--full {
+  grid-column: 1 / -1;
+}
+
+.clinical-workspace-panel .cw-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--color-text-navy);
+}
+
+.clinical-workspace-panel .cw-req {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.clinical-workspace-panel .cw-input,
+.clinical-workspace-panel .cw-select,
+.clinical-workspace-panel .cw-textarea {
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-text-navy);
+  background: #ffffff;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.clinical-workspace-panel .cw-input,
+.clinical-workspace-panel .cw-select {
+  height: 40px;
+}
+
+.clinical-workspace-panel .cw-textarea {
+  min-height: 78px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.clinical-workspace-panel .cw-input:focus,
+.clinical-workspace-panel .cw-select:focus,
+.clinical-workspace-panel .cw-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.clinical-workspace-panel .cw-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.clinical-workspace-panel .cw-btn-primary {
+  height: 40px;
+  padding: 0 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  background: var(--color-primary);
+  color: #ffffff;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.clinical-workspace-panel .cw-btn-primary:hover {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+.clinical-workspace-panel .cw-btn-secondary {
+  height: 40px;
+  padding: 0 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: #ffffff;
+  color: var(--color-text-navy);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.clinical-workspace-panel .cw-btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.clinical-workspace-panel .cw-btn-danger-icon {
+  height: 32px;
+  padding: 0 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.clinical-workspace-panel .cw-btn-danger-icon:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.clinical-workspace-panel .cw-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 9px;
+}
+
+.clinical-workspace-panel .cw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.clinical-workspace-panel .cw-table th {
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  background: #f8fafc;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--color-border-soft);
+  white-space: nowrap;
+}
+
+.clinical-workspace-panel .cw-table td {
+  padding: 0.7rem 0.85rem;
+  color: var(--color-text-navy);
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.clinical-workspace-panel .cw-table tr:last-child td {
+  border-bottom: none;
+}
+
+.clinical-workspace-panel .cw-empty-state {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 9px;
+}
+
+.clinical-workspace-panel .cw-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: var(--color-text-navy);
+}
+
+.clinical-workspace-panel .cw-pill--primary {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.clinical-workspace-panel .cw-pill--danger {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.clinical-workspace-panel .cw-pill--warning {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.clinical-workspace-panel .cw-pill--success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+@media (max-width: 900px) {
+  .clinical-workspace-panel .cw-grid-2,
+  .clinical-workspace-panel .cw-grid-3,
+  .clinical-workspace-panel .cw-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -37,8 +37,9 @@ watch(
       formData.value = {
         polyclinic: newVal.polyclinic || '',
         doctor: newVal.doctor || '',
-        guarantor_type: newVal.guarantor_type || 'BPJS Kesehatan',
-        guarantor_detail: newVal.guarantor_detail || 'JKN-Non PBI',
+        guarantor_type:
+          newVal.guarantor_type === 'Pasien Umum / Mandiri' ? 'UMUM' : (newVal.guarantor_type || 'UMUM'),
+        guarantor_detail: newVal.guarantor_detail || 'Mandiri / Pribadi',
         notes: newVal.notes || ''
       };
     }
@@ -100,8 +101,8 @@ const handleSave = () => {
             <div class="form-group">
               <label class="form-label" for="edit-guarantor">Jenis Penjamin</label>
               <select id="edit-guarantor" v-model="formData.guarantor_type" class="form-select">
+                <option value="UMUM">UMUM (Mandiri)</option>
                 <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-                <option value="Pasien Umum / Mandiri">Pasien Umum / Mandiri</option>
                 <option value="Asuransi Swasta">Asuransi Swasta</option>
               </select>
             </div>

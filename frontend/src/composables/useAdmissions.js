@@ -7,9 +7,18 @@ import {
   mockLoketInfo 
 } from '@/mocks/admissions';
 
+// Session-level edits shared between AdmissionView and AdmissionEditView without leaking into unrelated unit tests
+const sessionAdmissionEdits = reactive({});
+
 export function useAdmissions() {
   // Master admissions reactive state (local in-memory store)
-  const admissionsList = ref([...mockAdmissions]);
+  const admissionsList = ref(
+    mockAdmissions.map((item) =>
+      sessionAdmissionEdits[item.id]
+        ? { ...item, ...sessionAdmissionEdits[item.id] }
+        : { ...item }
+    )
+  );
 
   // Search keyword
   const searchQuery = ref('');
@@ -42,6 +51,20 @@ export function useAdmissions() {
   // Selected admission for detail / edit / cancel / print
   const selectedAdmission = ref(null);
 
+  // Table sort state
+  const sort = reactive({
+    key: '',
+    direction: 'asc' // 'asc' | 'desc'
+  });
+
+  const normalizeGuarantor = (val) => {
+    if (!val) return '-';
+    if (val === 'Pasien Umum / Mandiri' || val === 'Umum / Pribadi' || val === 'UMUM') {
+      return 'UMUM';
+    }
+    return val;
+  };
+
   /**
    * Filtered admissions based on search query and active filters
    */
@@ -63,16 +86,28 @@ export function useAdmissions() {
     thirtyDaysAgo.setDate(today.getDate() - 30);
     const thirtyDaysAgoStr = formatIso(thirtyDaysAgo);
 
-    return admissionsList.value.filter((adm) => {
-      // 1. Text Search across No. RM, NIK, Nama Pasien, Dokter
+    const filtered = admissionsList.value.filter((adm) => {
+      // 1. Text Search across No. RM, NIK, Nama Pasien, Dokter, Antrean, HP, Alamat, Poli
       if (q) {
         const matchRm = adm.medical_record_number.toLowerCase().includes(q);
         const matchNik = adm.nik.toLowerCase().includes(q);
         const matchName = adm.patient_name.toLowerCase().includes(q);
         const matchDoctor = adm.doctor.toLowerCase().includes(q);
         const matchQueue = adm.queue_number.toLowerCase().includes(q);
+        const matchPhone = (adm.phone || '').toLowerCase().includes(q);
+        const matchAddress = (adm.address || '').toLowerCase().includes(q);
+        const matchPoly = (adm.polyclinic || '').toLowerCase().includes(q);
 
-        if (!matchRm && !matchNik && !matchName && !matchDoctor && !matchQueue) {
+        if (
+          !matchRm &&
+          !matchNik &&
+          !matchName &&
+          !matchDoctor &&
+          !matchQueue &&
+          !matchPhone &&
+          !matchAddress &&
+          !matchPoly
+        ) {
           return false;
         }
       }
@@ -103,7 +138,13 @@ export function useAdmissions() {
 
       // 5. Guarantor Filter
       if (filters.guarantor !== 'all') {
-        if (adm.guarantor_type !== filters.guarantor) return false;
+        if (filters.guarantor === 'UMUM') {
+          if (adm.guarantor_type !== 'UMUM' && adm.guarantor_type !== 'Pasien Umum / Mandiri') {
+            return false;
+          }
+        } else if (adm.guarantor_type !== filters.guarantor) {
+          return false;
+        }
       }
 
       // 6. Service Status Filter
@@ -113,7 +154,60 @@ export function useAdmissions() {
 
       return true;
     });
+
+    if (!sort.key) return filtered;
+
+    const dir = sort.direction === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      if (sort.key === 'waktu') {
+        valA = `${a.admission_date} ${a.admission_time}`;
+        valB = `${b.admission_date} ${b.admission_time}`;
+      } else if (sort.key === 'antrian') {
+        valA = (a.queue_number || '').toLowerCase();
+        valB = (b.queue_number || '').toLowerCase();
+      } else if (sort.key === 'nama') {
+        valA = (a.patient_name || '').toLowerCase();
+        valB = (b.patient_name || '').toLowerCase();
+      } else if (sort.key === 'hp') {
+        valA = (a.phone || '').toLowerCase();
+        valB = (b.phone || '').toLowerCase();
+      } else if (sort.key === 'alamat') {
+        valA = (a.address || '').toLowerCase();
+        valB = (b.address || '').toLowerCase();
+      } else if (sort.key === 'admisi_ke') {
+        valA = (a.polyclinic || '').toLowerCase();
+        valB = (b.polyclinic || '').toLowerCase();
+      } else if (sort.key === 'asuransi') {
+        valA = normalizeGuarantor(a.guarantor_type).toLowerCase();
+        valB = normalizeGuarantor(b.guarantor_type).toLowerCase();
+      } else if (sort.key === 'consent') {
+        valA = (a.general_consent || '').toLowerCase();
+        valB = (b.general_consent || '').toLowerCase();
+      }
+
+      if (valA < valB) return -1 * dir;
+      if (valA > valB) return 1 * dir;
+      return 0;
+    });
   });
+
+  const setSort = (key) => {
+    if (sort.key === key) {
+      if (sort.direction === 'asc') {
+        sort.direction = 'desc';
+      } else {
+        sort.key = '';
+        sort.direction = 'asc';
+      }
+    } else {
+      sort.key = key;
+      sort.direction = 'asc';
+    }
+    pagination.currentPage = 1;
+  };
 
   /**
    * Pagination computation
@@ -321,6 +415,7 @@ export function useAdmissions() {
       birth_date: newAdmissionData.birth_date || '1990-01-01',
       age: newAdmissionData.age || 35,
       phone: newAdmissionData.phone || '0812-0000-0000',
+      address: newAdmissionData.address || 'Alamat belum tercatat',
       polyclinic: newAdmissionData.polyclinic || 'Poli Umum',
       doctor: newAdmissionData.doctor || 'dr. Budi Santoso, Sp.PD',
       guarantor_type: newAdmissionData.guarantor_type || 'BPJS Kesehatan',
@@ -342,6 +437,31 @@ export function useAdmissions() {
     return { success: true, record: newRecord };
   };
 
+  const deleteAdmission = (id) => {
+    const index = admissionsList.value.findIndex((a) => a.id === id);
+    if (index !== -1) {
+      const [removed] = admissionsList.value.splice(index, 1);
+      return { success: true, item: removed };
+    }
+    return { success: false };
+  };
+
+  const getAdmissionById = (id) => {
+    const found = admissionsList.value.find((a) => String(a.id) === String(id));
+    if (found) return found;
+    return null;
+  };
+
+  const saveSessionAdmissionEdit = (id, payload) => {
+    const existing = getAdmissionById(id);
+    const merged = existing ? { ...existing, ...payload } : { id, ...payload };
+    sessionAdmissionEdits[String(id)] = merged;
+    if (existing) {
+      updateAdmission(existing.id, payload);
+    }
+    return { success: true, item: merged };
+  };
+
   return {
     admissionsList,
     filteredAdmissions,
@@ -356,11 +476,13 @@ export function useAdmissions() {
     nextQueueNumber,
     loading,
     selectedAdmission,
+    sort,
     mockPolyclinics,
     mockDoctors,
     mockGuarantors,
     applyFilters,
     resetFilters,
+    setSort,
     setPage,
     setPerPage,
     callCurrentQueue,
@@ -368,7 +490,10 @@ export function useAdmissions() {
     prevQueue,
     nextQueue,
     cancelAdmission,
+    deleteAdmission,
     updateAdmission,
+    getAdmissionById,
+    saveSessionAdmissionEdit,
     addAdmission
   };
 }

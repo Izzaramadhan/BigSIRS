@@ -1,55 +1,49 @@
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
+import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
 import AppToast from '@/components/common/AppToast.vue';
-import AdmissionStatsCards from './components/AdmissionStatsCards.vue';
-import AdmissionQueueCard from './components/AdmissionQueueCard.vue';
-import AdmissionFiltersCard from './components/AdmissionFiltersCard.vue';
-import AdmissionTable from './components/AdmissionTable.vue';
-import AdmissionPagination from './components/AdmissionPagination.vue';
-import AdmissionDetailModal from './components/AdmissionDetailModal.vue';
-import AdmissionEditModal from './components/AdmissionEditModal.vue';
+import AdmissionOldPatientSearchCard from './components/AdmissionOldPatientSearchCard.vue';
+import AdmissionPatientListCard from './components/AdmissionPatientListCard.vue';
 import AdmissionPrintModal from './components/AdmissionPrintModal.vue';
-import AdmissionCancelDialog from './components/AdmissionCancelDialog.vue';
 import AdmissionNewModal from './components/AdmissionNewModal.vue';
 import { useAdmissions } from '@/composables/useAdmissions';
+import { mockPatients } from '@/mocks/patients';
+
+const router = useRouter();
 
 const {
-  filteredAdmissions,
   paginatedAdmissions,
   paginationInfo,
   pagination,
-  searchQuery,
   filters,
-  statistics,
-  loket,
-  currentQueueNumber,
+  sort,
   nextQueueNumber,
   loading,
   mockPolyclinics,
   mockDoctors,
-  mockGuarantors,
-  applyFilters,
-  resetFilters,
+  setSort,
   setPage,
   setPerPage,
-  callCurrentQueue,
-  callNextQueue,
-  prevQueue,
-  nextQueue,
-  cancelAdmission,
-  updateAdmission,
+  deleteAdmission,
   addAdmission
 } = useAdmissions();
 
+// Form Pencarian Pasien Lama state (Frontend local simulation)
+const oldPatientQuery = ref('');
+const oldPatientBirthDate = ref('');
+const oldPatientResults = ref([]);
+const hasSearchedOldPatient = ref(false);
+const searchValidationError = ref('');
+
 // Modal States
-const isDetailOpen = ref(false);
-const isEditOpen = ref(false);
 const isPrintOpen = ref(false);
-const isCancelOpen = ref(false);
+const isDeleteOpen = ref(false);
 const isNewOpen = ref(false);
 
 const activeAdmission = ref(null);
+const selectedOldPatient = ref(null);
 const printDocType = ref('No. Antrean');
 
 // Toast Notification State
@@ -73,83 +67,95 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
-// Queue Actions
-const handleCallCurrent = () => {
-  const res = callCurrentQueue();
-  showToast({
-    type: 'success',
-    title: 'Memanggil Antrean',
-    message: `Nomor antrean ${res.queueNumber} (${res.patientName}) dipanggil ke Loket Admisi 02.`
+// Pencarian Pasien Lama Handlers
+const handleSearchOldPatient = () => {
+  const q = oldPatientQuery.value.trim().toLowerCase();
+  const bd = oldPatientBirthDate.value.trim();
+
+  if (!q && !bd) {
+    searchValidationError.value =
+      'Masukkan minimal NIK, No. Rekam Medis, Nama Pasien, atau Tanggal Lahir.';
+    showToast({
+      type: 'warning',
+      title: 'Kata Kunci Kosong',
+      message: searchValidationError.value
+    });
+    return;
+  }
+
+  if (q && q.length < 2 && !bd) {
+    searchValidationError.value =
+      'Masukkan minimal 2 karakter untuk pencarian NIK, No. Rekam Medis, atau Nama Pasien.';
+    showToast({
+      type: 'warning',
+      title: 'Kata Kunci Terlalu Pendek',
+      message: searchValidationError.value
+    });
+    return;
+  }
+
+  searchValidationError.value = '';
+
+  const matches = mockPatients.filter((p) => {
+    const matchesKeyword = !q
+      || (p.name && p.name.toLowerCase().includes(q))
+      || (p.nik && p.nik.toLowerCase().includes(q))
+      || (p.medical_record_number && p.medical_record_number.toLowerCase().includes(q));
+
+    const matchesDate = !bd || p.birth_date === bd;
+
+    return matchesKeyword && matchesDate;
   });
-};
 
-const handleCallNext = () => {
-  const res = callNextQueue();
-  showToast({
-    type: 'success',
-    title: 'Memanggil Antrean Berikutnya',
-    message: `Nomor antrean ${res.queueNumber} (${res.patientName}) dipanggil ke Loket Admisi 02.`
-  });
-};
+  oldPatientResults.value = matches;
+  hasSearchedOldPatient.value = true;
 
-const handlePrevQueue = () => {
-  prevQueue();
-  showToast({
-    type: 'info',
-    title: 'Nomor Antrean Mundur',
-    message: `Nomor antrean aktif diubah ke ${currentQueueNumber.value}.`
-  });
-};
-
-const handleNextQueue = () => {
-  nextQueue();
-  showToast({
-    type: 'info',
-    title: 'Nomor Antrean Maju',
-    message: `Nomor antrean aktif diubah ke ${currentQueueNumber.value}.`
-  });
-};
-
-// Filter Actions
-const handleApplyFilter = () => {
-  applyFilters();
-  showToast({
-    type: 'success',
-    title: 'Filter Diterapkan',
-    message: `Menampilkan ${paginationInfo.value.total} data admisi yang sesuai.`
-  });
-};
-
-const handleResetFilter = () => {
-  resetFilters();
-  showToast({
-    type: 'info',
-    title: 'Filter Direset',
-    message: 'Semua filter pencarian dan periode telah dikembalikan ke kondisi awal.'
-  });
-};
-
-// Table Dropdown Action Handlers
-const handleViewDetail = (item) => {
-  activeAdmission.value = item;
-  isDetailOpen.value = true;
-};
-
-const handleOpenEdit = (item) => {
-  activeAdmission.value = item;
-  isEditOpen.value = true;
-};
-
-const handleSaveEdit = ({ id, payload }) => {
-  const res = updateAdmission(id, payload);
-  if (res.success) {
-    isEditOpen.value = false;
+  if (matches.length === 0) {
+    showToast({
+      type: 'info',
+      title: 'Pasien Tidak Ditemukan',
+      message: 'Tidak ada data pasien lama yang cocok dengan kriteria pencarian Anda.'
+    });
+  } else {
     showToast({
       type: 'success',
-      title: 'Data Admisi Diperbarui',
-      message: `Perubahan data admisi ${res.item.patient_name} berhasil disimpan.`
+      title: 'Pasien Ditemukan',
+      message: `Ditemukan ${matches.length} data pasien lama yang sesuai.`
     });
   }
+};
+
+const handleResetOldPatientSearch = () => {
+  oldPatientQuery.value = '';
+  oldPatientBirthDate.value = '';
+  oldPatientResults.value = [];
+  hasSearchedOldPatient.value = false;
+  searchValidationError.value = '';
+};
+
+const handleSelectOldPatient = (patient) => {
+  selectedOldPatient.value = patient;
+  isNewOpen.value = true;
+};
+
+const handleRegisterNewPatient = () => {
+  router.push('/pendaftaran/baru');
+};
+
+// Filter Asuransi di Daftar Pasien
+const handleGuarantorChange = (val) => {
+  filters.guarantor = val;
+  pagination.currentPage = 1;
+};
+
+const handleResetGuarantor = () => {
+  filters.guarantor = 'all';
+  pagination.currentPage = 1;
+};
+
+// Table Dropdown (Tools) Action Handlers
+const handleOpenEdit = (item) => {
+  router.push({ name: 'registration.admission-edit', params: { id: item.id } });
 };
 
 const handleOpenPrint = ({ item, documentType }) => {
@@ -167,36 +173,46 @@ const handleConfirmPrint = ({ documentType, admission }) => {
   });
 };
 
-const handleOpenCancel = (item) => {
+const handleOpenDelete = (item) => {
   activeAdmission.value = item;
-  isCancelOpen.value = true;
+  isDeleteOpen.value = true;
 };
 
-const handleConfirmCancel = ({ id, reason }) => {
-  const res = cancelAdmission(id, reason);
+const handleConfirmDelete = () => {
+  if (!activeAdmission.value) return;
+  const res = deleteAdmission(activeAdmission.value.id);
+  isDeleteOpen.value = false;
   if (res.success) {
-    isCancelOpen.value = false;
+    if (paginatedAdmissions.value.length === 0 && pagination.currentPage > 1) {
+      pagination.currentPage -= 1;
+    }
     showToast({
       type: 'warning',
-      title: 'Admisi Dibatalkan',
-      message: `Pendaftaran admisi ${res.item.patient_name} (${res.item.queue_number}) telah dibatalkan.`
+      title: 'Data Admisi Dihapus',
+      message: `Data admisi ${res.item.patient_name} (${res.item.medical_record_number}) telah dihapus dari daftar.`
     });
   }
+  activeAdmission.value = null;
 };
 
-// New Admission Handlers
-const handleOpenNew = () => {
-  isNewOpen.value = true;
+const handleCloseNewModal = () => {
+  isNewOpen.value = false;
+  selectedOldPatient.value = null;
 };
 
 const handleSubmitNew = (newRecordData) => {
   const res = addAdmission(newRecordData);
   if (res.success) {
     isNewOpen.value = false;
+    selectedOldPatient.value = null;
+    if (filters.guarantor !== 'all' && filters.guarantor !== res.record.guarantor_type) {
+      filters.guarantor = 'all';
+    }
+    pagination.currentPage = 1;
     showToast({
       type: 'success',
-      title: 'Admisi Baru Berhasil Didaftarkan',
-      message: `Pasien ${res.record.patient_name} berhasil didaftarkan dengan No. Antrean ${res.record.queue_number}.`
+      title: 'Admisi Berhasil Didaftarkan',
+      message: `Pasien ${res.record.patient_name} berhasil didaftarkan ke ${res.record.polyclinic}.`
     });
   }
 };
@@ -213,108 +229,58 @@ const handleSubmitNew = (newRecordData) => {
       @close="closeToast"
     />
 
-    <!-- Header Section (Breadcrumb: Rawat Jalan → Admisi) -->
+    <!-- Header Section -->
     <MasterDataPageHeader
-      title="Admisi Rawat Jalan"
-      subtitle="Kelola antrean dan pendaftaran pasien yang akan menerima pelayanan medis di seluruh poliklinik."
+      title="Admisi Pasien"
+      subtitle="Pencarian data pasien lama dan pengelolaan daftar kunjungan pasien admisi."
       :breadcrumbs="[
-        { label: 'Rawat Jalan', active: false },
-        { label: 'Admisi', active: true }
+        { label: 'Home', active: false },
+        { label: 'Data Admisi Pasien', active: true }
       ]"
-    >
-      <template #actions>
-        <button 
-          type="button" 
-          class="btn-primary btn-add-admission" 
-          @click="handleOpenNew"
-          aria-label="Tambah Admisi Pasien Baru"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          <span>+ Tambah Admisi</span>
-        </button>
-      </template>
-    </MasterDataPageHeader>
+      badge="Admisi Pasien"
+    />
 
     <!-- Page Content Flow -->
     <div class="page-content">
-      <!-- 1. Empat Kartu Statistik Admisi -->
-      <AdmissionStatsCards :stats="statistics" />
-
-      <!-- 2. Informasi Loket Admisi dan Antrean -->
-      <AdmissionQueueCard
-        :loket="loket"
-        :current-queue="currentQueueNumber"
-        :next-queue="nextQueueNumber"
-        @call-current="handleCallCurrent"
-        @call-next="handleCallNext"
-        @prev-queue="handlePrevQueue"
-        @next-queue="handleNextQueue"
+      <!-- Card 1: FORM PENCARIAN PASIEN LAMA -->
+      <AdmissionOldPatientSearchCard
+        v-model:keyword="oldPatientQuery"
+        v-model:birthDate="oldPatientBirthDate"
+        :results="oldPatientResults"
+        :has-searched="hasSearchedOldPatient"
+        :validation-error="searchValidationError"
+        @search="handleSearchOldPatient"
+        @reset="handleResetOldPatientSearch"
+        @select-patient="handleSelectOldPatient"
+        @register-new="handleRegisterNewPatient"
       />
 
-      <!-- 3. Bagian Pencarian dan Filter Admisi -->
-      <AdmissionFiltersCard
-        v-model:searchQuery="searchQuery"
-        :filters="filters"
-        :polyclinics="mockPolyclinics"
-        :doctors="mockDoctors"
-        :guarantors="mockGuarantors"
-        :loading="loading"
-        @apply="handleApplyFilter"
-        @reset="handleResetFilter"
-      />
-
-      <!-- 4. Tabel Daftar Admisi Rawat Jalan (11 Kolom Urutan Tetap) -->
-      <AdmissionTable
+      <!-- Card 2: DAFTAR PASIEN -->
+      <AdmissionPatientListCard
         :admissions="paginatedAdmissions"
         :total-count="paginationInfo.total"
-        :current-page="pagination.currentPage"
-        :per-page="pagination.perPage"
-        :loading="loading"
-        @view-detail="handleViewDetail"
-        @edit-admission="handleOpenEdit"
-        @print-document="handleOpenPrint"
-        @cancel-admission="handleOpenCancel"
-        @reset-filter="handleResetFilter"
-      />
-
-      <!-- 5. Bagian Paginasi -->
-      <AdmissionPagination
-        :current-page="pagination.currentPage"
+        :current-page="paginationInfo.current_page"
         :last-page="paginationInfo.last_page"
         :per-page="pagination.perPage"
-        :total="paginationInfo.total"
         :from="paginationInfo.from"
         :to="paginationInfo.to"
+        :guarantor-filter="filters.guarantor"
+        :sort-key="sort.key"
+        :sort-direction="sort.direction"
         :loading="loading"
-        @page-change="setPage"
+        @update:guarantorFilter="handleGuarantorChange"
         @update:perPage="setPerPage"
+        @page-change="setPage"
+        @sort="setSort"
+        @edit-admission="handleOpenEdit"
+        @delete-admission="handleOpenDelete"
+        @print-document="handleOpenPrint"
+        @reset-filter="handleResetGuarantor"
       />
     </div>
 
     <!-- Modals & Dialogs -->
-    <!-- Modal 1: Detail Admisi -->
-    <AdmissionDetailModal
-      :is-open="isDetailOpen"
-      :admission="activeAdmission"
-      @close="isDetailOpen = false"
-      @edit="handleOpenEdit"
-      @print="handleOpenPrint"
-    />
 
-    <!-- Modal 2: Edit Data Admisi -->
-    <AdmissionEditModal
-      :is-open="isEditOpen"
-      :admission="activeAdmission"
-      :polyclinics="mockPolyclinics"
-      :doctors="mockDoctors"
-      @close="isEditOpen = false"
-      @save="handleSaveEdit"
-    />
-
-    <!-- Modal 3: Pratinjau / Simulasi Cetak Dokumen -->
     <AdmissionPrintModal
       :is-open="isPrintOpen"
       :admission="activeAdmission"
@@ -323,21 +289,23 @@ const handleSubmitNew = (newRecordData) => {
       @confirm-print="handleConfirmPrint"
     />
 
-    <!-- Modal 4: Konfirmasi Pembatalan Admisi -->
-    <AdmissionCancelDialog
-      :is-open="isCancelOpen"
-      :admission="activeAdmission"
-      @close="isCancelOpen = false"
-      @confirm="handleConfirmCancel"
+    <MasterDataDeleteDialog
+      :is-open="isDeleteOpen"
+      title="Hapus Data Admisi?"
+      :item-name="activeAdmission ? `${activeAdmission.patient_name} (${activeAdmission.medical_record_number})` : ''"
+      warning-message="Data kunjungan admisi yang dihapus akan dikeluarkan dari daftar pasien."
+      confirm-text="Ya, Hapus"
+      @close="isDeleteOpen = false"
+      @confirm="handleConfirmDelete"
     />
 
-    <!-- Modal 5: Tambah Admisi Baru -->
     <AdmissionNewModal
       :is-open="isNewOpen"
       :polyclinics="mockPolyclinics"
       :doctors="mockDoctors"
       :next-queue-number="nextQueueNumber"
-      @close="isNewOpen = false"
+      :patient="selectedOldPatient"
+      @close="handleCloseNewModal"
       @submit="handleSubmitNew"
     />
   </div>
@@ -357,13 +325,5 @@ const handleSubmitNew = (newRecordData) => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.btn-add-admission {
-  box-shadow: 0 2px 6px rgba(8, 127, 120, 0.2);
-}
-
-.btn-add-admission:hover {
-  box-shadow: 0 4px 12px rgba(8, 127, 120, 0.3);
 }
 </style>

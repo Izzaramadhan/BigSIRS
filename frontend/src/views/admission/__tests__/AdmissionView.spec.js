@@ -1,9 +1,288 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import AdmissionView from '../AdmissionView.vue';
+import AdmissionEditView from '../AdmissionEditView.vue';
+import AdmissionOldPatientSearchCard from '../components/AdmissionOldPatientSearchCard.vue';
+import AdmissionPatientListCard from '../components/AdmissionPatientListCard.vue';
 import AdmissionTable from '../components/AdmissionTable.vue';
 import AdmissionStatsCards from '../components/AdmissionStatsCards.vue';
 import AdmissionQueueCard from '../components/AdmissionQueueCard.vue';
 import { mockAdmissions, mockLoketInfo } from '@/mocks/admissions';
+
+const mockPush = vi.fn();
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    params: { id: '1' }
+  }),
+  useRouter: () => ({
+    push: mockPush
+  })
+}));
+
+describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
+  it('renders FORM PENCARIAN PASIEN LAMA and DAFTAR PASIEN with 6 standardized columns', () => {
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: false,
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain('Admisi Pasien');
+    expect(wrapper.text()).toContain('Home');
+    expect(wrapper.text()).toContain('Data Admisi Pasien');
+    expect(wrapper.text()).toContain('FORM PENCARIAN PASIEN LAMA');
+    expect(wrapper.text()).toContain('DAFTAR PASIEN');
+
+    expect(wrapper.find('input#old-patient-query').exists()).toBe(true);
+    expect(wrapper.find('input#old-patient-birthdate').exists()).toBe(true);
+    expect(wrapper.find('button.btn-search-old').text()).toContain('Cari');
+
+    expect(wrapper.find('select#admission-guarantor-filter').exists()).toBe(true);
+    expect(wrapper.find('select#admission-records-perpage').exists()).toBe(true);
+
+    const headers = wrapper
+      .find('.admission-list-card')
+      .findAll('thead th')
+      .map((th) => th.text().trim());
+
+    expect(headers).toEqual([
+      'No.',
+      'Waktu Admisi',
+      'Nama',
+      'Admisi ke',
+      'Jenis Asuransi',
+      'Aksi'
+    ]);
+
+    expect(wrapper.find('.btn-tools').exists()).toBe(true);
+    expect(wrapper.find('.btn-tools').text()).toContain('Tools');
+  });
+
+  it('searches old patients in FORM PENCARIAN PASIEN LAMA and allows opening AdmissionNewModal', async () => {
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('input#old-patient-query').setValue('Bambang');
+    await wrapper.find('form.old-patient-search-form').trigger('submit.prevent');
+
+    expect(wrapper.find('.search-results-panel').exists()).toBe(true);
+    expect(wrapper.find('.search-results-panel').text()).toContain('Bambang Setyadi');
+
+    await wrapper.find('.btn-admit-patient').trigger('click');
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true);
+    expect(wrapper.find('input#add-patient-name').element.value).toContain('Bambang Setyadi');
+  });
+
+  it('filters DAFTAR PASIEN by Jenis Asuransi dropdown (UMUM / BPJS Kesehatan)', async () => {
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    const guarantorSelect = wrapper.find('select#admission-guarantor-filter');
+    await guarantorSelect.setValue('UMUM');
+
+    const badges = wrapper.findAll('.insurance-badge').map((el) => el.text().trim());
+    expect(badges.length).toBeGreaterThan(0);
+    expect(badges.every((b) => b === 'UMUM')).toBe(true);
+  });
+
+  it('emits expected events from AdmissionOldPatientSearchCard & AdmissionPatientListCard', async () => {
+    const searchWrapper = mount(AdmissionOldPatientSearchCard, {
+      props: {
+        keyword: 'RM-000245',
+        birthDate: '',
+        results: [],
+        hasSearched: false
+      }
+    });
+    await searchWrapper.find('form').trigger('submit.prevent');
+    expect(searchWrapper.emitted('search')).toBeTruthy();
+
+    const listWrapper = mount(AdmissionPatientListCard, {
+      props: {
+        admissions: mockAdmissions.slice(0, 3),
+        totalCount: 3,
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 10,
+        from: 1,
+        to: 3,
+        guarantorFilter: 'all'
+      },
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+    await listWrapper.find('th.col-name').trigger('click');
+    expect(listWrapper.emitted('sort')[0]).toEqual(['nama']);
+  });
+
+  it('renders updated Tools dropdown menu items (Edit, Hapus, Cetak Tracer, Cetak Antrian, Cetak Label)', async () => {
+    const listWrapper = mount(AdmissionPatientListCard, {
+      props: {
+        admissions: mockAdmissions.slice(0, 1),
+        totalCount: 1,
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 10,
+        from: 1,
+        to: 1,
+        guarantorFilter: 'all'
+      },
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    await listWrapper.find('.btn-tools').trigger('click');
+    const menuLabels = listWrapper
+      .findAll('.dropdown-action-btn span')
+      .map((el) => el.text().trim());
+
+    expect(menuLabels).toEqual([
+      'Edit',
+      'Hapus',
+      'Cetak Tracer',
+      'Cetak Antrian',
+      'Cetak Label'
+    ]);
+
+    await listWrapper.findAll('.dropdown-action-btn')[1].trigger('click');
+    expect(listWrapper.emitted('delete-admission')).toBeTruthy();
+  });
+
+  it('navigates to Edit Data Admisi page when clicking Tools -> Edit in AdmissionView', async () => {
+    mockPush.mockClear();
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('.btn-tools').trigger('click');
+    const editBtn = wrapper.findAll('.dropdown-action-btn')[0];
+    expect(editBtn.text()).toContain('Edit');
+
+    await editBtn.trigger('click');
+    expect(mockPush).toHaveBeenCalledWith({
+      name: 'registration.admission-edit',
+      params: { id: expect.anything() }
+    });
+  });
+});
+
+describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
+  it('renders DATA PASIEN card and FORM EDIT with 3 sub-panels', () => {
+    const wrapper = mount(AdmissionEditView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain('DATA PASIEN');
+    expect(wrapper.text()).toContain('No. RM');
+    expect(wrapper.text()).toContain('Nama');
+    expect(wrapper.text()).toContain('TTL');
+    expect(wrapper.text()).toContain('Alamat');
+    expect(wrapper.text()).toContain('FORM EDIT');
+    expect(wrapper.text()).toContain('Data Admisi Pasien');
+    expect(wrapper.text()).toContain('Data Visit Pasien');
+    expect(wrapper.text()).toContain('Data Keluarga Terdekat Pasien');
+    expect(wrapper.find('.btn-header-back').exists()).toBe(true);
+    expect(wrapper.find('.btn-batal').text()).toContain('Batal');
+    expect(wrapper.find('.btn-update').text()).toContain('Update');
+  });
+
+  it('disables No. Asuransi for UMUM, enables for BPJS, and validates required fields', async () => {
+    const wrapper = mount(AdmissionEditView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    const guarantorSelect = wrapper.find('#edit-guarantor');
+    const insuranceInput = wrapper.find('#edit-insurance-number');
+
+    await guarantorSelect.setValue('UMUM');
+    expect(insuranceInput.element.disabled).toBe(true);
+
+    await guarantorSelect.setValue('BPJS Kesehatan');
+    expect(insuranceInput.element.disabled).toBe(false);
+
+    await wrapper.find('#edit-referral-source').setValue('FKT Primer');
+    await wrapper.find('#edit-referral-name').setValue('');
+    await wrapper.find('form').trigger('submit');
+
+    expect(wrapper.find('.error-message').text()).toContain('Nama Asal Rujukan wajib diisi.');
+  });
+
+  it('saves edit changes on Update and navigates back to /admisi', async () => {
+    mockPush.mockClear();
+    vi.useFakeTimers();
+    try {
+      const wrapper = mount(AdmissionEditView, {
+        global: {
+          stubs: {
+            Teleport: true
+          }
+        }
+      });
+
+      await wrapper.find('#edit-referral-name').setValue('Puskesmas Banguntapan I');
+      const doctorOptions = wrapper.findAll('#edit-doctor option').filter((opt) => opt.element.value);
+      if (doctorOptions.length > 0) {
+        await wrapper.find('#edit-doctor').setValue(doctorOptions[0].element.value);
+      }
+      await wrapper.find('#edit-family-name').setValue('Sabirin');
+      await wrapper.find('form').trigger('submit');
+
+      expect(wrapper.text()).toContain('Data Admisi Diperbarui');
+      vi.advanceTimersByTime(600);
+      expect(mockPush).toHaveBeenCalledWith('/admisi');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('navigates back to /admisi when Batal is clicked', async () => {
+    mockPush.mockClear();
+    const wrapper = mount(AdmissionEditView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('.btn-batal').trigger('click');
+    expect(mockPush).toHaveBeenCalledWith('/admisi');
+  });
+});
 
 describe('Admission Rawat Jalan Components', () => {
   describe('AdmissionTable', () => {

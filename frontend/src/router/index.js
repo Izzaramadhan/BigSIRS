@@ -34,10 +34,24 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/pendaftaran/baru',
+      alias: ['/pendaftaran/pasien-baru', '/pendaftaran/tambah'],
+      name: 'registration.new-patient',
+      component: () => import('../views/registration/NewPatientView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/admisi',
       alias: ['/pendaftaran/admisi', '/admisi-rawat-jalan'],
       name: 'registration.admission',
       component: () => import('../views/admission/AdmissionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/admisi/:id/edit',
+      alias: ['/pendaftaran/admisi/:id/edit', '/admisi/edit/:id'],
+      name: 'registration.admission-edit',
+      component: () => import('../views/admission/AdmissionEditView.vue'),
       meta: { requiresAuth: true }
     },
     {
@@ -48,10 +62,24 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/pemeriksaan/:id',
+      alias: ['/rawat-jalan/pemeriksaan/:id', '/pemeriksaan-pasien/:id'],
+      name: 'clinical.examination-patient',
+      component: () => import('../views/examination/ExaminationPatientView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/billing',
       alias: ['/rawat-jalan/billing', '/billing-rawat-jalan'],
       name: 'clinical.billing',
       component: () => import('../views/billing/BillingView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/billing/:id',
+      alias: ['/rawat-jalan/billing/:id', '/billing-order/:id', '/billing/order/:id'],
+      name: 'clinical.billing-order',
+      component: () => import('../views/billing/BillingOrderView.vue'),
       meta: { requiresAuth: true }
     },
     {

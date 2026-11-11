@@ -1,32 +1,52 @@
 import { ref, computed, reactive } from 'vue';
 import {
   generateMockBillingRecords,
+  buildDefaultBillingOrders,
   mockPolyclinics,
   mockDoctors,
   mockGuarantorOptions,
   mockPeriodOptions,
   mockStatusOptions,
   mockPaymentMethods,
+  mockBillingPaymentMethods,
+  mockOrderDiscountOptions,
+  mockBillingOrderCatalogs,
   mockCashierShift
 } from '@/mocks/billing';
 
+// Frontend-only session state shared between BillingView and BillingOrderView
+const sessionBillingOrders = reactive({});
+const sessionBillingOverrides = reactive({});
+
 export function useBilling() {
-  // All billing records in reactive local state
-  const billingList = ref(generateMockBillingRecords());
+  // All billing records in reactive local state (hydrated with session edits if any)
+  const initialRecords = generateMockBillingRecords().map((item) => {
+    const override = sessionBillingOverrides[String(item.id)];
+    return override ? { ...item, ...override } : item;
+  });
+  const billingList = ref(initialRecords);
 
   // Search input query
   const searchQuery = ref('');
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   // Dropdown multi-filters
   const filters = reactive({
     period: 'today',
-    customStartDate: '',
-    customEndDate: '',
+    customStartDate: todayStr,
+    customEndDate: todayStr,
     polyclinic: 'Semua Poliklinik',
     doctor: 'Semua Dokter DPJP',
     guarantor: 'Semua Jenis Penjamin',
     status: 'Semua',
     paymentMethod: 'Semua'
+  });
+
+  // Sort state
+  const sort = reactive({
+    key: '',
+    direction: 'asc'
   });
 
   // Active quick filter chip ('all', 'ready_cashier', 'verify_bpjs', 'general_today', 'tariff_adjustment')
@@ -115,6 +135,14 @@ export function useBilling() {
       });
     }
 
+    // 1.5. Periode Tanggal (Start - End)
+    if (filters.customStartDate) {
+      result = result.filter((item) => !item.service_date || item.service_date >= filters.customStartDate);
+    }
+    if (filters.customEndDate) {
+      result = result.filter((item) => !item.service_date || item.service_date <= filters.customEndDate);
+    }
+
     // 2. Dropdown Filters
     if (filters.polyclinic && filters.polyclinic !== 'Semua Poliklinik') {
       result = result.filter((item) => item.polyclinic === filters.polyclinic);
@@ -140,7 +168,16 @@ export function useBilling() {
     }
 
     if (filters.status && filters.status !== 'Semua') {
-      result = result.filter((item) => item.status === filters.status);
+      if (filters.status === 'Belum Bayar') {
+        result = result.filter(
+          (item) =>
+            item.status === 'Siap Dibayar' ||
+            item.status === 'Menunggu Verifikasi' ||
+            item.status === 'Belum Lengkap'
+        );
+      } else {
+        result = result.filter((item) => item.status === filters.status);
+      }
     }
 
     if (filters.paymentMethod && filters.paymentMethod !== 'Semua') {
@@ -158,8 +195,56 @@ export function useBilling() {
       result = result.filter((item) => item.needs_tariff_adjustment);
     }
 
+    if (sort.key) {
+      const dir = sort.direction === 'asc' ? 1 : -1;
+      result.sort((a, b) => {
+        let valA = '';
+        let valB = '';
+        if (sort.key === 'antrian') {
+          valA = (a.queue_number || '').toLowerCase();
+          valB = (b.queue_number || '').toLowerCase();
+        } else if (sort.key === 'waktu') {
+          valA = `${a.service_date || ''} ${a.service_time || ''}`;
+          valB = `${b.service_date || ''} ${b.service_time || ''}`;
+        } else if (sort.key === 'nama') {
+          valA = (a.patient_name || '').toLowerCase();
+          valB = (b.patient_name || '').toLowerCase();
+        } else if (sort.key === 'klinik') {
+          valA = (a.polyclinic || '').toLowerCase();
+          valB = (b.polyclinic || '').toLowerCase();
+        } else if (sort.key === 'exam_status') {
+          valA = (a.exam_status || '').toLowerCase();
+          valB = (b.exam_status || '').toLowerCase();
+        } else if (sort.key === 'pharmacy_status') {
+          valA = (a.pharmacy_status || '').toLowerCase();
+          valB = (b.pharmacy_status || '').toLowerCase();
+        } else if (sort.key === 'payment_status') {
+          valA = (a.status || '').toLowerCase();
+          valB = (b.status || '').toLowerCase();
+        }
+        if (valA < valB) return -1 * dir;
+        if (valA > valB) return 1 * dir;
+        return 0;
+      });
+    }
+
     return result;
   });
+
+  const setSort = (key) => {
+    if (sort.key === key) {
+      if (sort.direction === 'asc') {
+        sort.direction = 'desc';
+      } else {
+        sort.key = '';
+        sort.direction = 'asc';
+      }
+    } else {
+      sort.key = key;
+      sort.direction = 'asc';
+    }
+    pagination.currentPage = 1;
+  };
 
   // Paginated records
   const paginatedRecords = computed(() => {
@@ -230,8 +315,8 @@ export function useBilling() {
   const resetFilters = () => {
     searchQuery.value = '';
     filters.period = 'today';
-    filters.customStartDate = '';
-    filters.customEndDate = '';
+    filters.customStartDate = todayStr;
+    filters.customEndDate = todayStr;
     filters.polyclinic = 'Semua Poliklinik';
     filters.doctor = 'Semua Dokter DPJP';
     filters.guarantor = 'Semua Jenis Penjamin';
@@ -340,6 +425,92 @@ export function useBilling() {
     };
   };
 
+  // Lookup single bill record for BillingOrderView
+  const getBillById = (billId) => {
+    const targetId = String(billId || '');
+    const base = billingList.value.find((b) => String(b.id) === targetId);
+    if (!base) return null;
+    const override = sessionBillingOverrides[targetId];
+    return override ? { ...base, ...override } : base;
+  };
+
+  // Lookup or initialize order line items for BillingOrderView (LIST ORDERS)
+  const getBillOrders = (billId) => {
+    const targetId = String(billId || '');
+    if (!targetId) return [];
+    if (!sessionBillingOrders[targetId]) {
+      const bill = getBillById(targetId) || billingList.value[0];
+      sessionBillingOrders[targetId] = buildDefaultBillingOrders(bill);
+    }
+    return sessionBillingOrders[targetId].map((item) => ({ ...item }));
+  };
+
+  // Save updated order list and payment summary back into reactive session state
+  const saveBillOrders = (billId, nextOrders = [], summaryMeta = {}) => {
+    const targetId = String(billId || '');
+    if (!targetId) return { success: false };
+
+    const normalized = nextOrders.map((item) => ({ ...item }));
+    sessionBillingOrders[targetId] = normalized;
+
+    const totalSum = normalized.reduce((acc, item) => {
+      const gross = (Number(item.price) || 0) * (Math.max(1, Number(item.qty) || 1));
+      const discPct = Math.min(100, Math.max(0, Number(item.discount_percent) || 0));
+      return acc + Math.max(0, Math.round(gross * (1 - discPct / 100)));
+    }, 0);
+
+    const paidSum = normalized
+      .filter((item) => item.status === 'Lunas')
+      .reduce((acc, item) => {
+        const gross = (Number(item.price) || 0) * (Math.max(1, Number(item.qty) || 1));
+        const discPct = Math.min(100, Math.max(0, Number(item.discount_percent) || 0));
+        return acc + Math.max(0, Math.round(gross * (1 - discPct / 100)));
+      }, 0);
+
+    const allPaid = normalized.length > 0 && normalized.every((item) => item.status === 'Lunas');
+    const somePaid = normalized.some((item) => item.status === 'Lunas');
+    const nextStatus = allPaid ? 'Lunas' : somePaid ? 'Dibayar Sebagian' : 'Siap Dibayar';
+
+    const existing = getBillById(targetId);
+    const overridePayload = {
+      status: summaryMeta.status || nextStatus,
+      total_amount: totalSum,
+      paid_amount: paidSum,
+      remaining_balance: Math.max(0, totalSum - paidSum - (existing?.guarantor_amount || 0)),
+      payment_method: summaryMeta.payment_method || existing?.payment_method || null,
+      polyclinic: summaryMeta.polyclinic || existing?.polyclinic,
+      exam_status: allPaid ? 'Sudah Dilayani' : existing?.exam_status || 'Belum Dilayani',
+      pharmacy_status: allPaid ? 'Sudah Diterima' : existing?.pharmacy_status || 'Tidak Ada Resep',
+      items: normalized.map((ord) => {
+        const gross = (Number(ord.price) || 0) * (Math.max(1, Number(ord.qty) || 1));
+        const discPct = Math.min(100, Math.max(0, Number(ord.discount_percent) || 0));
+        return {
+          name: ord.name,
+          category: ord.jenis,
+          qty: Number(ord.qty) || 1,
+          unit_price: Number(ord.price) || 0,
+          total: Math.max(0, Math.round(gross * (1 - discPct / 100)))
+        };
+      })
+    };
+
+    sessionBillingOverrides[targetId] = {
+      ...(sessionBillingOverrides[targetId] || {}),
+      ...overridePayload
+    };
+
+    const idx = billingList.value.findIndex((b) => String(b.id) === targetId);
+    if (idx !== -1) {
+      Object.assign(billingList.value[idx], overridePayload);
+    }
+
+    return {
+      success: true,
+      bill: getBillById(targetId),
+      orders: getBillOrders(targetId)
+    };
+  };
+
   return {
     billingList,
     searchQuery,
@@ -350,6 +521,7 @@ export function useBilling() {
     loading,
     error,
     cashierShift,
+    sort,
     statistics,
     quickFilterCounts,
     filteredRecords,
@@ -362,6 +534,9 @@ export function useBilling() {
     mockPeriodOptions,
     mockStatusOptions,
     mockPaymentMethods,
+    mockBillingPaymentMethods,
+    mockOrderDiscountOptions,
+    mockBillingOrderCatalogs,
     areAllVisibleSelected,
     toggleSelectAll,
     toggleSelectRow,
@@ -369,12 +544,16 @@ export function useBilling() {
     applyFilters,
     resetFilters,
     setQuickFilter,
+    setSort,
     setPage,
     setPerPage,
     refreshData,
     processPayment,
     verifyBill,
     settleRemainder,
-    notifyClinic
+    notifyClinic,
+    getBillById,
+    getBillOrders,
+    saveBillOrders
   };
 }

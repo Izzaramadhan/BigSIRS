@@ -1,36 +1,66 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
+import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
 import AppToast from '@/components/common/AppToast.vue';
-import PatientSearchFilters from './components/PatientSearchFilters.vue';
-import PatientSearchTable from './components/PatientSearchTable.vue';
-import PatientPagination from './components/PatientPagination.vue';
+import RegistrationPatientSearchCard from './components/RegistrationPatientSearchCard.vue';
+import RegistrationQueueCard from './components/RegistrationQueueCard.vue';
+import RegistrationPatientListCard from './components/RegistrationPatientListCard.vue';
+import SatuSehatKycModal from './components/SatuSehatKycModal.vue';
 import PatientDetailModal from './components/PatientDetailModal.vue';
-import NewPatientModal from './components/NewPatientModal.vue';
-import { usePatientSearch } from '@/composables/usePatientSearch';
+import AdmissionNewModal from '@/views/admission/components/AdmissionNewModal.vue';
+import AdmissionEditModal from '@/views/admission/components/AdmissionEditModal.vue';
+import AdmissionPrintModal from '@/views/admission/components/AdmissionPrintModal.vue';
+import { useAdmissions } from '@/composables/useAdmissions';
+import { mockPatients } from '@/mocks/patients';
+
+const router = useRouter();
 
 const {
-  paginatedPatients,
+  paginatedAdmissions,
   paginationInfo,
   pagination,
   searchQuery,
-  validationError,
   filters,
-  isAdvancedFilterOpen,
+  sort,
+  nextQueueNumber,
   loading,
-  selectedPatient,
-  search,
-  resetFilters,
+  mockPolyclinics,
+  mockDoctors,
+  setSort,
   setPage,
   setPerPage,
-  selectPatient,
-  toggleAdvancedFilter
-} = usePatientSearch();
+  updateAdmission,
+  deleteAdmission,
+  addAdmission
+} = useAdmissions();
 
-// Modals State
-const isDetailModalOpen = ref(false);
-const isRegisterModalOpen = ref(false);
+// Search Form State (FORM PENCARIAN PASIEN)
+const patientKeyword = ref('');
+const patientBirthDate = ref('');
+const patientResults = ref([]);
+const hasSearchedPatient = ref(false);
+const searchValidationError = ref('');
+
+// Antrean Pendaftaran Counter State (P001, P002, ...)
+const queueNumberIndex = ref(1);
+const formattedQueueNumber = computed(() => {
+  return `P${String(queueNumberIndex.value).padStart(3, '0')}`;
+});
+
+// Modals & Active Item State
+const isKycModalOpen = ref(false);
+const isPatientDetailOpen = ref(false);
+const isNewAdmissionOpen = ref(false);
+const isEditAdmissionOpen = ref(false);
+const isPrintModalOpen = ref(false);
+const isDeleteDialogOpen = ref(false);
+
 const patientInDetail = ref(null);
+const selectedPatientForAdmission = ref(null);
+const activeAdmission = ref(null);
+const printDocType = ref('No. Antrean');
 
 // Toast Notification State
 const toast = ref({
@@ -53,95 +83,227 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
-// Search Handler
-const handleSearch = () => {
-  const result = search();
+// Search Handler (FORM PENCARIAN PASIEN)
+const handleSearchPatient = () => {
+  const q = patientKeyword.value.trim().toLowerCase();
+  const bd = patientBirthDate.value.trim();
 
-  if (!result.success && result.reason === 'validation_error') {
+  if (!q && !bd) {
+    searchValidationError.value =
+      'Masukkan minimal No. KTP/NIK, No. RM, Nama Pasien, atau Tanggal Lahir.';
     showToast({
       type: 'warning',
-      title: 'Pencarian Belum Sesuai',
-      message: result.message
+      title: 'Kata Kunci Kosong',
+      message: searchValidationError.value
     });
     return;
   }
 
-  if (result.count === 0) {
+  if (q && q.length < 2 && !bd) {
+    searchValidationError.value =
+      'Masukkan minimal 2 karakter untuk mencari berdasarkan No. KTP/NIK, No. RM, atau Nama.';
+    showToast({
+      type: 'warning',
+      title: 'Kata Kunci Terlalu Pendek',
+      message: searchValidationError.value
+    });
+    return;
+  }
+
+  searchValidationError.value = '';
+
+  const matches = mockPatients.filter((p) => {
+    const matchKeyword =
+      !q ||
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.nik && p.nik.toLowerCase().includes(q)) ||
+      (p.medical_record_number && p.medical_record_number.toLowerCase().includes(q));
+
+    const matchDate = !bd || p.birth_date === bd;
+    return matchKeyword && matchDate;
+  });
+
+  patientResults.value = matches;
+  hasSearchedPatient.value = true;
+
+  if (matches.length === 0) {
     showToast({
       type: 'info',
       title: 'Data Tidak Ditemukan',
-      message: 'Tidak ada data pasien yang sesuai dengan kata kunci atau filter yang Anda masukkan.'
+      message: 'Tidak ada data pasien yang cocok. Anda dapat mendaftarkan pasien baru.'
     });
   } else {
     showToast({
       type: 'success',
       title: 'Pencarian Berhasil',
-      message: `Ditemukan ${result.count} data pasien yang cocok.`
+      message: `Ditemukan ${matches.length} data pasien terdaftar.`
     });
   }
 };
 
-// Reset Search & Filters Handler
-const handleReset = () => {
-  resetFilters();
-  showToast({
-    type: 'info',
-    title: 'Filter Direset',
-    message: 'Form pencarian dan filter lanjutan telah dikembalikan ke kondisi awal.'
-  });
+const handleResetSearch = () => {
+  patientKeyword.value = '';
+  patientBirthDate.value = '';
+  patientResults.value = [];
+  hasSearchedPatient.value = false;
+  searchValidationError.value = '';
 };
 
-// Open Detail Modal Handler
-const handleViewDetail = (patient) => {
-  patientInDetail.value = patient;
-  isDetailModalOpen.value = true;
+const handleNavigateRegisterNew = () => {
+  router.push('/pendaftaran/baru');
 };
 
-// Close Detail Modal Handler
-const handleCloseDetail = () => {
-  isDetailModalOpen.value = false;
-  patientInDetail.value = null;
+const handleOpenKyc = () => {
+  isKycModalOpen.value = true;
 };
 
-// Select Patient Handler (Simulation for admission/clinical service)
-const handleSelectPatient = (patient) => {
-  selectPatient(patient);
-  
-  // If detail modal was open, close it
-  if (isDetailModalOpen.value) {
-    isDetailModalOpen.value = false;
-  }
-
+const handleKycVerified = (res) => {
   showToast({
     type: 'success',
-    title: 'Pasien Berhasil Dipilih',
-    message: `${patient.name} (${patient.medical_record_number}) berhasil dipilih untuk simulasi admisi/pelayanan.`
+    title: 'SatuSehat KYC Terverifikasi',
+    message: `NIK ${res.nik} berhasil terverifikasi (No. IHS Simulasi: ${res.ihs_number}).`
   });
 };
 
-// Clear currently selected patient
-const handleClearSelectedPatient = () => {
-  selectedPatient.value = null;
+const handleViewPatientDetail = (patient) => {
+  patientInDetail.value = patient;
+  isPatientDetailOpen.value = true;
+};
+
+const handleAdmitFromSearch = (patient) => {
+  isPatientDetailOpen.value = false;
+  selectedPatientForAdmission.value = patient;
+  isNewAdmissionOpen.value = true;
+};
+
+// Queue Handlers (NO. ANTRIAN)
+const handleCallQueue = () => {
+  showToast({
+    type: 'success',
+    title: 'Memanggil Antrean Pendaftaran',
+    message: `Nomor antrean ${formattedQueueNumber.value} sedang dipanggil ke Loket Pendaftaran (Simulasi).`
+  });
+};
+
+const handlePrevQueue = () => {
+  if (queueNumberIndex.value > 1) {
+    queueNumberIndex.value -= 1;
+    showToast({
+      type: 'info',
+      title: 'Antrean Sebelumnya',
+      message: `Nomor antrean aktif diubah ke ${formattedQueueNumber.value}.`
+    });
+  }
+};
+
+const handleNextQueue = () => {
+  queueNumberIndex.value += 1;
   showToast({
     type: 'info',
-    title: 'Pilihan Dibatalkan',
-    message: 'Pilihan pasien aktif telah dibatalkan.'
+    title: 'Antrean Berikutnya',
+    message: `Nomor antrean aktif diubah ke ${formattedQueueNumber.value}.`
   });
 };
 
-// Open New Patient Registration Modal
-const handleOpenRegister = () => {
-  isRegisterModalOpen.value = true;
+// Table Filter & Search Handlers (DAFTAR PASIEN)
+const handleGuarantorChange = (val) => {
+  filters.guarantor = val;
+  pagination.currentPage = 1;
 };
 
-const handleCloseRegister = () => {
-  isRegisterModalOpen.value = false;
+const handleTableSearchChange = (val) => {
+  searchQuery.value = val;
+  pagination.currentPage = 1;
+};
+
+const handleResetListFilter = () => {
+  filters.guarantor = 'all';
+  searchQuery.value = '';
+  pagination.currentPage = 1;
+};
+
+// Tools Dropdown Action Handlers
+const handleOpenEditAdmission = (item) => {
+  activeAdmission.value = item;
+  isEditAdmissionOpen.value = true;
+};
+
+const handleSaveEditAdmission = ({ id, payload }) => {
+  const res = updateAdmission(id, payload);
+  if (res.success) {
+    isEditAdmissionOpen.value = false;
+    showToast({
+      type: 'success',
+      title: 'Admisi Diperbarui',
+      message: `Data admisi ${res.item.patient_name} berhasil diperbarui.`
+    });
+  }
+};
+
+const handleOpenDeleteAdmission = (item) => {
+  activeAdmission.value = item;
+  isDeleteDialogOpen.value = true;
+};
+
+const handleConfirmDeleteAdmission = () => {
+  if (!activeAdmission.value) return;
+  const res = deleteAdmission(activeAdmission.value.id);
+  isDeleteDialogOpen.value = false;
+  if (res.success) {
+    if (paginatedAdmissions.value.length === 0 && pagination.currentPage > 1) {
+      pagination.currentPage -= 1;
+    }
+    showToast({
+      type: 'warning',
+      title: 'Admisi Dihapus',
+      message: `Data kunjungan admisi ${res.item.patient_name} (${res.item.queue_number}) telah dihapus dari daftar.`
+    });
+  }
+  activeAdmission.value = null;
+};
+
+const handleOpenPrintDocument = ({ item, documentType }) => {
+  activeAdmission.value = item;
+  printDocType.value = documentType || 'No. Antrean';
+  isPrintModalOpen.value = true;
+};
+
+const handleConfirmPrint = ({ documentType, admission }) => {
+  isPrintModalOpen.value = false;
+  showToast({
+    type: 'success',
+    title: 'Cetak Dokumen Diproses',
+    message: `Dokumen ${documentType} untuk ${admission.patient_name} (${admission.medical_record_number}) berhasil dicetak (Simulasi).`
+  });
+};
+
+const handleCloseNewAdmission = () => {
+  isNewAdmissionOpen.value = false;
+  selectedPatientForAdmission.value = null;
+};
+
+const handleSubmitNewAdmission = (newRecordData) => {
+  const res = addAdmission(newRecordData);
+  if (res.success) {
+    isNewAdmissionOpen.value = false;
+    selectedPatientForAdmission.value = null;
+    if (filters.guarantor !== 'all' && filters.guarantor !== res.record.guarantor_type) {
+      filters.guarantor = 'all';
+    }
+    searchQuery.value = '';
+    pagination.currentPage = 1;
+    showToast({
+      type: 'success',
+      title: 'Admisi Berhasil Didaftarkan',
+      message: `${res.record.patient_name} berhasil ditambahkan ke daftar pasien (${res.record.polyclinic}).`
+    });
+  }
 };
 </script>
 
 <template>
-  <div class="page-container patient-search-page">
-    <!-- Notification Toast System -->
+  <div class="page-container registration-home-page">
+    <!-- Toast Notification -->
     <AppToast
       :show="toast.show"
       :type="toast.type"
@@ -153,129 +315,123 @@ const handleCloseRegister = () => {
     <!-- Header Section -->
     <MasterDataPageHeader
       title="Pendaftaran Pasien"
-      subtitle="Cari pasien yang sudah terdaftar atau tambahkan pasien baru ke dalam sistem."
+      subtitle="Manajemen Data Pasien — Pencarian pasien, registrasi pasien baru, kontrol antrean, dan daftar pasien."
       :breadcrumbs="[
-        { label: 'Rawat Jalan', active: false },
-        { label: 'Pendaftaran', active: false },
-        { label: 'Pencarian Pasien', active: true }
+        { label: 'Home', active: false },
+        { label: 'Data Pasien', active: true }
       ]"
-    >
-      <template #actions>
-        <button 
-          type="button" 
-          class="btn-primary btn-add-patient" 
-          @click="handleOpenRegister"
-          aria-label="Registrasi Pasien Baru"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-            <circle cx="9" cy="7" r="4"></circle>
-            <line x1="19" y1="8" x2="19" y2="14"></line>
-            <line x1="22" y1="11" x2="16" y2="11"></line>
-          </svg>
-          <span>+ Registrasi Pasien Baru</span>
-        </button>
-      </template>
-    </MasterDataPageHeader>
+      badge="Manajemen Data Pasien"
+    />
 
-    <!-- Selected Patient Simulation Banner (if a patient is currently picked) -->
-    <Transition name="fade">
-      <div v-if="selectedPatient" class="selected-patient-banner" role="status">
-        <div class="banner-left">
-          <div class="banner-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </div>
-          <div class="banner-text">
-            <span class="banner-title">Pasien Aktif Terpilih (Simulasi Admisi):</span>
-            <span class="banner-patient-name">{{ selectedPatient.name }}</span>
-            <span class="banner-rm-badge">{{ selectedPatient.medical_record_number }}</span>
-            <span class="banner-nik">NIK: {{ selectedPatient.nik }}</span>
-          </div>
-        </div>
-
-        <div class="banner-actions">
-          <button 
-            type="button" 
-            class="btn-banner-detail" 
-            @click="handleViewDetail(selectedPatient)"
-          >
-            Lihat Detail
-          </button>
-          <button 
-            type="button" 
-            class="btn-banner-clear" 
-            @click="handleClearSelectedPatient"
-            title="Batalkan Pilihan"
-          >
-            Batal Pilih
-          </button>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Page Content -->
+    <!-- Main Page Content -->
     <div class="page-content">
-      <!-- 1. Card Pencarian Data Pasien -->
-      <PatientSearchFilters
-        v-model:searchQuery="searchQuery"
-        :filters="filters"
-        :is-open="isAdvancedFilterOpen"
-        :validation-error="validationError"
-        :loading="loading"
-        @search="handleSearch"
-        @toggle-advanced="toggleAdvancedFilter"
-        @reset="handleReset"
-      />
+      <!-- Top Row: Form Pencarian Pasien (Left) + No. Antrian (Right) -->
+      <div class="top-cards-grid">
+        <RegistrationPatientSearchCard
+          v-model:keyword="patientKeyword"
+          v-model:birthDate="patientBirthDate"
+          :results="patientResults"
+          :has-searched="hasSearchedPatient"
+          :validation-error="searchValidationError"
+          @search="handleSearchPatient"
+          @reset="handleResetSearch"
+          @register-new="handleNavigateRegisterNew"
+          @open-kyc="handleOpenKyc"
+          @view-detail="handleViewPatientDetail"
+          @admit-patient="handleAdmitFromSearch"
+        />
 
-      <!-- 2. Card Tabel Hasil Pencarian Pasien -->
-      <PatientSearchTable
-        :patients="paginatedPatients"
+        <RegistrationQueueCard
+          :queue-number="formattedQueueNumber"
+          :can-prev="queueNumberIndex > 1"
+          @call="handleCallQueue"
+          @prev="handlePrevQueue"
+          @next="handleNextQueue"
+        />
+      </div>
+
+      <!-- Bottom Card: DAFTAR PASIEN -->
+      <RegistrationPatientListCard
+        :admissions="paginatedAdmissions"
         :total-count="paginationInfo.total"
-        :current-page="pagination.currentPage"
-        :per-page="pagination.perPage"
-        :loading="loading"
-        :selected-patient-id="selectedPatient?.id"
-        @view-detail="handleViewDetail"
-        @select-patient="handleSelectPatient"
-        @open-register="handleOpenRegister"
-        @reset-search="handleReset"
-      />
-
-      <!-- 3. Pagination Section -->
-      <PatientPagination
-        :current-page="pagination.currentPage"
+        :current-page="paginationInfo.current_page"
         :last-page="paginationInfo.last_page"
         :per-page="pagination.perPage"
-        :total="paginationInfo.total"
         :from="paginationInfo.from"
         :to="paginationInfo.to"
+        :guarantor-filter="filters.guarantor"
+        :table-search="searchQuery"
+        :sort-key="sort.key"
+        :sort-direction="sort.direction"
         :loading="loading"
-        @page-change="setPage"
+        @update:guarantorFilter="handleGuarantorChange"
         @update:perPage="setPerPage"
+        @update:tableSearch="handleTableSearchChange"
+        @page-change="setPage"
+        @sort="setSort"
+        @edit-admission="handleOpenEditAdmission"
+        @delete-admission="handleOpenDeleteAdmission"
+        @print-document="handleOpenPrintDocument"
+        @reset-filter="handleResetListFilter"
       />
     </div>
 
     <!-- Modals -->
-    <!-- Modal Detail Pasien -->
-    <PatientDetailModal
-      :is-open="isDetailModalOpen"
-      :patient="patientInDetail"
-      @close="handleCloseDetail"
-      @select="handleSelectPatient"
+    <SatuSehatKycModal
+      :is-open="isKycModalOpen"
+      :initial-nik="patientKeyword"
+      @close="isKycModalOpen = false"
+      @verified="handleKycVerified"
     />
 
-    <!-- Modal Registrasi Pasien Baru (Placeholder) -->
-    <NewPatientModal
-      :is-open="isRegisterModalOpen"
-      @close="handleCloseRegister"
+    <PatientDetailModal
+      :is-open="isPatientDetailOpen"
+      :patient="patientInDetail"
+      @close="isPatientDetailOpen = false"
+      @select="handleAdmitFromSearch"
+    />
+
+    <AdmissionNewModal
+      :is-open="isNewAdmissionOpen"
+      :polyclinics="mockPolyclinics"
+      :doctors="mockDoctors"
+      :next-queue-number="nextQueueNumber"
+      :patient="selectedPatientForAdmission"
+      @close="handleCloseNewAdmission"
+      @submit="handleSubmitNewAdmission"
+    />
+
+    <AdmissionEditModal
+      :is-open="isEditAdmissionOpen"
+      :admission="activeAdmission"
+      :polyclinics="mockPolyclinics"
+      :doctors="mockDoctors"
+      @close="isEditAdmissionOpen = false"
+      @save="handleSaveEditAdmission"
+    />
+
+    <AdmissionPrintModal
+      :is-open="isPrintModalOpen"
+      :admission="activeAdmission"
+      :document-type="printDocType"
+      @close="isPrintModalOpen = false"
+      @confirm-print="handleConfirmPrint"
+    />
+
+    <MasterDataDeleteDialog
+      :is-open="isDeleteDialogOpen"
+      title="Hapus Data Admisi?"
+      :item-name="activeAdmission ? `${activeAdmission.patient_name} (${activeAdmission.queue_number})` : ''"
+      warning-message="Data kunjungan admisi yang dihapus akan dikeluarkan dari daftar pasien hari ini."
+      confirm-text="Ya, Hapus Admisi"
+      @close="isDeleteDialogOpen = false"
+      @confirm="handleConfirmDeleteAdmission"
     />
   </div>
 </template>
 
 <style scoped>
-.patient-search-page {
+.registration-home-page {
   animation: fadeIn 0.25s ease-out;
 }
 
@@ -290,146 +446,16 @@ const handleCloseRegister = () => {
   }
 }
 
-.btn-add-patient {
-  box-shadow: 0 2px 6px rgba(8, 127, 120, 0.2);
+.top-cards-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 1.25rem;
+  align-items: stretch;
 }
 
-.btn-add-patient:hover {
-  box-shadow: 0 4px 12px rgba(8, 127, 120, 0.3);
-}
-
-/* Selected Patient Banner */
-.selected-patient-banner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-  background: linear-gradient(135deg, #dff7f4 0%, #edfcf9 100%);
-  border: 1px solid #a7eedf;
-  border-radius: 10px;
-  padding: 0.85rem 1.25rem;
-  margin-bottom: 0.5rem;
-  box-shadow: 0 2px 6px rgba(8, 127, 120, 0.05);
-}
-
-.banner-left {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.banner-icon {
-  width: 28px;
-  height: 28px;
-  background: var(--color-primary);
-  color: #ffffff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.banner-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.banner-text {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.875rem;
-  flex-wrap: wrap;
-}
-
-.banner-title {
-  color: var(--color-primary-dark);
-  font-weight: 600;
-}
-
-.banner-patient-name {
-  color: var(--color-text-navy);
-  font-weight: 700;
-}
-
-.banner-rm-badge {
-  background: var(--color-primary);
-  color: #ffffff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-}
-
-.banner-nik {
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.banner-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.btn-banner-detail {
-  background: #ffffff;
-  border: 1px solid var(--color-primary);
-  color: var(--color-primary);
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-banner-detail:hover {
-  background: var(--color-primary-light);
-}
-
-.btn-banner-clear {
-  background: transparent;
-  border: 1px solid #cbd5e1;
-  color: var(--color-text-secondary);
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-banner-clear:hover {
-  background: #f1f5f9;
-  color: var(--color-text-navy);
-}
-
-/* Transition for Banner */
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.25s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-@media (max-width: 640px) {
-  .selected-patient-banner {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .banner-actions {
-    justify-content: flex-end;
+@media (max-width: 1024px) {
+  .top-cards-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

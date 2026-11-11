@@ -60,6 +60,65 @@ export const mockPaymentMethods = [
   'EDC'
 ];
 
+export const mockBillingPaymentMethods = [
+  'UMUM',
+  'BPJS Kesehatan',
+  'Mandiri Inhealth',
+  'Asuransi Swasta',
+  'Tunai',
+  'QRIS',
+  'Debit / EDC',
+  'Transfer Bank'
+];
+
+export const mockOrderDiscountOptions = [
+  { label: 'Pilih', value: 0 },
+  { label: '5%', value: 5 },
+  { label: '10%', value: 10 },
+  { label: '15%', value: 15 },
+  { label: '20%', value: 20 },
+  { label: '25%', value: 25 },
+  { label: '50%', value: 50 },
+  { label: '100%', value: 100 }
+];
+
+export const mockBillingOrderCatalogs = {
+  tindakan: [
+    { code: 'TND-001', jenis: 'TND', name: 'Konsultasi Dokter Spesialis', price: 150000 },
+    { code: 'TND-002', jenis: 'TND', name: 'Konsultasi Dokter Umum Poliklinik', price: 75000 },
+    { code: 'TND-003', jenis: 'TND', name: 'Perawatan Luka Ringan / Ganti Balut', price: 95000 },
+    { code: 'TND-004', jenis: 'TND', name: 'Tindakan Nebulisasi / Inhalasi', price: 85000 },
+    { code: 'TND-005', jenis: 'TND', name: 'Pemasangan Infus Dewasa', price: 120000 },
+    { code: 'TND-006', jenis: 'TND', name: 'Elektrokardiografi (EKG 12 Lead)', price: 140000 }
+  ],
+  resep: [
+    { code: 'RSP-001', jenis: 'RSP', name: 'Paracetamol 500 mg Tablet (Strip 10)', price: 12000 },
+    { code: 'RSP-002', jenis: 'RSP', name: 'Amoxicillin 500 mg Kapsul (Strip 10)', price: 24000 },
+    { code: 'RSP-003', jenis: 'RSP', name: 'Omeprazole 20 mg Kapsul', price: 32000 },
+    { code: 'RSP-004', jenis: 'RSP', name: 'Amlodipine 5 mg Tablet (Box/30)', price: 28000 },
+    { code: 'RSP-005', jenis: 'RSP', name: 'Infus NaCl 0.9% 500 ml + Infus Set', price: 45000 }
+  ],
+  laboratorium: [
+    { code: 'LAB-001', jenis: 'LAB', name: 'Darah Lengkap (Hematologi Rutin)', price: 95000 },
+    { code: 'LAB-002', jenis: 'LAB', name: 'Gula Darah Puasa / Sewaktu', price: 45000 },
+    { code: 'LAB-003', jenis: 'LAB', name: 'Fungsi Hati (SGOT / SGPT)', price: 120000 },
+    { code: 'LAB-004', jenis: 'LAB', name: 'Fungsi Ginjal (Ureum / Kreatinin)', price: 115000 },
+    { code: 'LAB-005', jenis: 'LAB', name: 'Urinalisis Lengkap', price: 65000 }
+  ],
+  radiologi: [
+    { code: 'RAD-001', jenis: 'RAD', name: 'Foto Thorax PA / AP', price: 165000 },
+    { code: 'RAD-002', jenis: 'RAD', name: 'USG Abdomen Atas & Bawah', price: 350000 },
+    { code: 'RAD-003', jenis: 'RAD', name: 'Foto Ekstremitas / Sendi (2 Posisi)', price: 185000 },
+    { code: 'RAD-004', jenis: 'RAD', name: 'CT Scan Kepala Non-Kontras', price: 950000 }
+  ],
+  ambulance: [
+    { code: 'AMB-001', jenis: 'AMB', name: 'Layanan Ambulance Dalam Kota (< 15 Km)', price: 250000 },
+    { code: 'AMB-002', jenis: 'AMB', name: 'Layanan Ambulance Luar Kota / Rujukan (> 15 Km)', price: 550000 },
+    { code: 'AMB-003', jenis: 'AMB', name: 'Pendampingan Perawat / Paramedis Ambulance', price: 175000 },
+    { code: 'AMB-004', jenis: 'AMB', name: 'Pemakaian Oksigen Transport Ambulance', price: 85000 }
+  ]
+};
+
 export const mockCashierShift = {
   shift_title: 'Validasi Closing Shift Kasir #1',
   shift_time: '07:00 – 14:00 WIB',
@@ -222,6 +281,67 @@ const poolLastNames = [
   'Wijaya', 'Siregar', 'Kurniawan', 'Nugroho', 'Subagyo', 'Purwanto'
 ];
 
+const billingBirthPlaces = [
+  'Yogyakarta', 'Madiun', 'Sleman', 'Bantul', 'Jakarta', 'Semarang', 'Surabaya', 'Solo', 'Magelang', 'Bandung'
+];
+
+const billingAddresses = [
+  'Jl. Murangan No. 12, Sleman, DI Yogyakarta',
+  'Jl. Kesehatan Raya No. 45, Jakarta Pusat',
+  'Jl. Kaliurang Km 6, Depok, Sleman',
+  'Jl. Malioboro No. 88, Gedongtengen, Yogyakarta',
+  'Jl. Parangtritis Km 4.5, Sewon, Bantul',
+  'Jl. Pemuda No. 102, Semarang Tengah'
+];
+
+/**
+ * Build default order rows for BillingOrderView (LIST ORDERS tab) from a bill record.
+ */
+export function buildDefaultBillingOrders(bill) {
+  if (!bill) return [];
+  const defaultStatus = bill.status === 'Lunas' ? 'Lunas' : 'Belum Bayar';
+  const orderDate = bill.service_date || new Date().toISOString().split('T')[0];
+
+  const baseItems = [
+    {
+      id: `${bill.id}-ORD-ADM`,
+      order_date: orderDate,
+      jenis: 'ADM',
+      name: 'Administrasi Pasien Lama',
+      qty: 1,
+      price: 5000,
+      discount_percent: 0,
+      status: defaultStatus
+    }
+  ];
+
+  const categoryMap = {
+    'Jasa Medis DPJP': 'TND',
+    Laboratorium: 'LAB',
+    'Farmasi & Alkes': 'RSP',
+    Radiologi: 'RAD',
+    Ambulance: 'AMB'
+  };
+
+  if (Array.isArray(bill.items)) {
+    bill.items.forEach((item, index) => {
+      if (item.category === 'Administrasi') return;
+      baseItems.push({
+        id: `${bill.id}-ORD-${index + 1}`,
+        order_date: orderDate,
+        jenis: categoryMap[item.category] || 'TND',
+        name: item.name,
+        qty: Number(item.qty) || 1,
+        price: Number(item.unit_price) || Number(item.total) || 0,
+        discount_percent: 0,
+        status: defaultStatus
+      });
+    });
+  }
+
+  return baseItems;
+}
+
 /**
  * Generate 248 mock billing records deterministically matching all statistics & chips:
  * Total: 248
@@ -240,6 +360,8 @@ const poolLastNames = [
  */
 export function generateMockBillingRecords() {
   const records = [];
+  const todayStr = new Date().toISOString().split('T')[0];
+  const queueLetters = ['A', 'B', 'C', 'D'];
   const total = 248;
 
   const targetWaiting = 18;
@@ -412,6 +534,17 @@ export function generateMockBillingRecords() {
     const invoiceNum = `INV-RJ-20260912-${String(i).padStart(4, '0')}`;
     const visitNum = `#KJ-${String(90800 + i)}`;
     const rmNum = `RM-${String(240 + i).padStart(6, '0')}`;
+    const queueNo = `${queueLetters[(i - 1) % queueLetters.length]}${String(((i - 1) % 60) + 1).padStart(3, '0')}`;
+
+    const examStatus =
+      status === 'Lunas'
+        ? 'Sudah Dilayani'
+        : (i % 3 === 0 ? 'Sedang Diperiksa' : 'Belum Dilayani');
+
+    const pharmacyStatus =
+      status === 'Lunas'
+        ? 'Sudah Diterima'
+        : (i % 4 === 0 ? 'Menunggu Obat' : 'Tidak Ada Resep');
 
     // Financial calculations
     const patientLiability = Math.max(0, totalAmount - guarantorAmount);
@@ -427,14 +560,19 @@ export function generateMockBillingRecords() {
       id: `BILL-${String(i).padStart(4, '0')}`,
       invoice_number: invoiceNum,
       visit_number: visitNum,
-      service_date: '2026-09-12',
+      queue_number: queueNo,
+      service_date: todayStr,
       service_time: serviceTime,
+      exam_status: examStatus,
+      pharmacy_status: pharmacyStatus,
       medical_record_number: rmNum,
       nik: nik,
       patient_name: patientName,
       gender: gender,
       age: age,
+      birth_place: billingBirthPlaces[(i - 1) % billingBirthPlaces.length],
       birth_date: birthDate,
+      address: billingAddresses[(i - 1) % billingAddresses.length],
       priority: priority,
       polyclinic: polyclinic,
       doctor: doctor,

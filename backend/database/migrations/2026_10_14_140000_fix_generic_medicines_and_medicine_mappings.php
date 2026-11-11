@@ -61,7 +61,7 @@ return new class extends Migration
                     })
                     ->get(['id', 'id_hlp']);
 
-                $mapGenericsByLegacyId = GenericMedicine::pluck('id', 'legacy_id')->toArray();
+                $mapGenericsByLegacyId = DB::table('generic_medicines')->pluck('id', 'legacy_id')->toArray();
                 $mapGenericsByHlp = [];
                 foreach ($validGenerics as $lg) {
                     if (! empty($lg->id_hlp) && (int) $lg->id_hlp > 0 && isset($mapGenericsByLegacyId[$lg->id])) {
