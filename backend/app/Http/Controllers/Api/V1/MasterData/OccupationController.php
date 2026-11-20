@@ -22,6 +22,10 @@ class OccupationController extends Controller
         if (LegacyAccess::isAvailable('ref_pekerjaan')) {
             $query = LegacyOccupation::query();
 
+            if ($request->has('is_active')) {
+                $query->where('status', $request->boolean('is_active') ? '1' : '0');
+            }
+
             if ($request->filled('search')) {
                 $query->search($request->search);
             }
@@ -39,6 +43,10 @@ class OccupationController extends Controller
         }
 
         $query = Occupation::query();
+
+        if ($request->has('is_active')) {
+            $query->where('is_active', $request->boolean('is_active'));
+        }
 
         if ($request->filled('search')) {
             $search = $request->search;

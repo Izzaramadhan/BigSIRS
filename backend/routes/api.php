@@ -8,6 +8,9 @@ use App\Http\Controllers\Api\V1\Logistics\PosSaleController;
 use App\Http\Controllers\Api\V1\Logistics\StockMutationController;
 use App\Http\Controllers\Api\V1\Logistics\StockOpnameController;
 use App\Http\Controllers\Api\V1\LookupController;
+use App\Http\Controllers\Api\V1\Admission\AdmissionController;
+use App\Http\Controllers\Api\V1\Examination\ExaminationController;
+use App\Http\Controllers\Api\V1\Registration\PatientController;
 use App\Http\Controllers\Api\V1\MasterData\ActivityTypeController;
 use App\Http\Controllers\Api\V1\MasterData\BedController;
 use App\Http\Controllers\Api\V1\MasterData\BuildingController;
@@ -71,6 +74,28 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware('auth:sanctum')->group(function () {
+        Route::prefix('patients')->group(function () {
+            Route::get('search', [PatientController::class, 'search']);
+            Route::post('/', [PatientController::class, 'store']);
+            Route::get('{id}', [PatientController::class, 'show'])->whereNumber('id');
+            Route::put('{id}', [PatientController::class, 'update'])->whereNumber('id');
+            Route::delete('{id}', [PatientController::class, 'destroy'])->whereNumber('id');
+            Route::get('{id}/admissions', [PatientController::class, 'admissions'])->whereNumber('id');
+            Route::get('{id}/timeline', [PatientController::class, 'timeline'])->whereNumber('id');
+        });
+
+        Route::prefix('admissions')->group(function () {
+            Route::get('/', [AdmissionController::class, 'index']);
+            Route::post('/', [AdmissionController::class, 'store']);
+            Route::get('{id}', [AdmissionController::class, 'show'])->whereNumber('id');
+            Route::put('{id}', [AdmissionController::class, 'update'])->whereNumber('id');
+        });
+
+        Route::prefix('examinations')->group(function () {
+            Route::get('/', [ExaminationController::class, 'index']);
+            Route::get('{id}', [ExaminationController::class, 'show'])->whereNumber('id');
+        });
+
         Route::prefix('master-data')->group(function () {
             Route::get('polyclinics/service-types', [PolyclinicController::class, 'serviceTypes']);
             Route::patch('polyclinics/{polyclinic}/status', [PolyclinicController::class, 'status']);
@@ -196,6 +221,7 @@ Route::prefix('v1')->group(function () {
             Route::get('educations', [LookupController::class, 'educations']);
             Route::get('occupations', [LookupController::class, 'occupations']);
             Route::get('positions', [LookupController::class, 'positions']);
+            Route::get('referral-sources', [LookupController::class, 'referralSources']);
             Route::get('laboratory-categories', [LookupController::class, 'laboratoryCategories']);
             Route::get('radiology-categories', [LookupController::class, 'radiologyCategories']);
             Route::get('radiology-types', [LookupController::class, 'radiologyTypes']);

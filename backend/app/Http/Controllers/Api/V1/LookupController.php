@@ -23,6 +23,7 @@ use App\Models\Legacy\LegacyProvince;
 use App\Models\Legacy\LegacyRadiologyCategory;
 use App\Models\Legacy\LegacyRadiologyItemGroup;
 use App\Models\Legacy\LegacyRadiologyType;
+use App\Models\Legacy\LegacyReferralSource;
 use App\Models\Legacy\LegacyRegency;
 use App\Models\Legacy\LegacySpecialization;
 use App\Models\Legacy\LegacySupplier;
@@ -196,7 +197,7 @@ class LookupController extends Controller
     {
         if (LegacyAccess::isAvailable('ref_kelurahan')) {
             $query = LegacyVillage::query()
-                ->with('district.regency')
+                ->with('district.regency.province')
                 ->where('status', 1)
                 ->orderBy('nama');
 
@@ -215,14 +216,21 @@ class LookupController extends Controller
             $villages = $query->limit(50)->get();
 
             $mapped = $villages->map(function ($village) {
+                $district = $village->district;
+                $regency = $district ? $district->regency : null;
+                $province = $regency ? $regency->province : null;
+
                 return [
-                    'id' => $village->id,
-                    'code' => $village->code,
+                    'id' => (string) $village->id,
+                    'code' => $village->code ? (string) $village->code : null,
                     'name' => $village->name,
-                    'district_id' => $village->district_id,
-                    'district_name' => $village->district ? $village->district->name : null,
-                    'regency_id' => $village->district ? $village->district->regency_id : null,
-                    'regency_name' => $village->district && $village->district->regency ? $village->district->regency->name : null,
+                    'district_id' => $district ? (string) $district->id : ($village->district_id ? (string) $village->district_id : null),
+                    'district_name' => $district ? $district->name : null,
+                    'regency_id' => $regency ? (string) $regency->id : null,
+                    'regency_name' => $regency ? $regency->name : null,
+                    'province_id' => $province ? (string) $province->id : ($regency && isset($regency->province_id) ? (string) $regency->province_id : null),
+                    'province_name' => $province ? $province->name : null,
+                    'postal_code' => !empty($village->kode_pos) ? (string) $village->kode_pos : null,
                 ];
             });
 
@@ -230,7 +238,7 @@ class LookupController extends Controller
         }
 
         $query = Village::query()
-            ->with('district.regency:id,name')
+            ->with('district.regency.province')
             ->where('is_active', true)
             ->orderBy('name');
 
@@ -247,17 +255,24 @@ class LookupController extends Controller
         }
 
         // Limit to 50 results to prevent massive payloads during search
-        $villages = $query->limit(50)->get(['id', 'code', 'name', 'district_id']);
+        $villages = $query->limit(50)->get();
 
         $mapped = $villages->map(function ($village) {
+            $district = $village->district;
+            $regency = $district ? $district->regency : null;
+            $province = $regency ? $regency->province : null;
+
             return [
-                'id' => $village->id,
-                'code' => $village->code,
+                'id' => (string) $village->id,
+                'code' => $village->code ? (string) $village->code : null,
                 'name' => $village->name,
-                'district_id' => $village->district_id,
-                'district_name' => $village->district ? $village->district->name : null,
-                'regency_id' => $village->district ? $village->district->regency_id : null,
-                'regency_name' => $village->district && $village->district->regency ? $village->district->regency->name : null,
+                'district_id' => $district ? (string) $district->id : ($village->district_id ? (string) $village->district_id : null),
+                'district_name' => $district ? $district->name : null,
+                'regency_id' => $regency ? (string) $regency->id : null,
+                'regency_name' => $regency ? $regency->name : null,
+                'province_id' => $province ? (string) $province->id : ($regency && isset($regency->province_id) ? (string) $regency->province_id : null),
+                'province_name' => $province ? $province->name : null,
+                'postal_code' => !empty($village->postal_code) ? (string) $village->postal_code : null,
             ];
         });
 
@@ -355,6 +370,34 @@ class LookupController extends Controller
         }
 
         return response()->json($query->orderBy('name')->get());
+    }
+
+    public function referralSources(Request $request)
+    {
+        if (LegacyAccess::isAvailable('ref_asal_rujukan')) {
+            $query = LegacyReferralSource::active();
+
+            if ($request->filled('search')) {
+                $term = $request->search;
+                $query->where(function ($q) use ($term) {
+                    $q->where('nama', 'like', "%{$term}%")
+                        ->orWhere('kode', 'like', "%{$term}%");
+                });
+            }
+
+            $sources = $query->orderBy('id')->get()->map(function ($item) {
+                return [
+                    'id' => (int) $item->id,
+                    'code' => $item->kode,
+                    'name' => $item->nama,
+                    'is_inacbg' => (bool) $item->is_inacbg,
+                ];
+            });
+
+            return response()->json($sources);
+        }
+
+        return response()->json([]);
     }
 
     public function laboratoryCategories(Request $request)

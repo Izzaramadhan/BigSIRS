@@ -2,6 +2,7 @@
 
 namespace App\Models\Legacy;
 
+use App\Support\LegacyAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -66,7 +67,7 @@ class LegacyDoctor extends LegacyModel
 
     public function getNameAttribute(): string
     {
-        if ($this->employee && $this->employee->person) {
+        if (LegacyAccess::hasTable('ref_pegawai') && $this->employee && $this->employee->person) {
             return $this->employee->person->name;
         }
         if ($this->person) {

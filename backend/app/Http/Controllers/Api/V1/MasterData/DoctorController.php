@@ -24,7 +24,14 @@ class DoctorController extends Controller
         $perPage = (int) $request->get('per_page', 10);
 
         if (LegacyAccess::isAvailable('ref_dokter')) {
-            $query = LegacyDoctor::with(['employee.person', 'person', 'specialization']);
+            $withRelations = ['person'];
+            if (LegacyAccess::hasTable('ref_pegawai')) {
+                $withRelations[] = 'employee.person';
+            }
+            if (LegacyAccess::hasTable('ref_spesialisasi')) {
+                $withRelations[] = 'specialization';
+            }
+            $query = LegacyDoctor::with($withRelations);
 
             if ($request->filled('search')) {
                 $query->search($request->search);
@@ -36,7 +43,7 @@ class DoctorController extends Controller
 
             if ($request->has('status')) {
                 $isActive = $request->boolean('status');
-                $query->where('status', $isActive ? 1 : 0);
+                $query->whereIn('status', $isActive ? [1, '1'] : [0, '0']);
             }
 
             // Sorting
@@ -368,16 +375,23 @@ class DoctorController extends Controller
     public function lookup(Request $request)
     {
         if (LegacyAccess::isAvailable('ref_dokter')) {
-            $query = LegacyDoctor::with(['employee.person', 'person', 'specialization']);
+            $withRelations = ['person'];
+            if (LegacyAccess::hasTable('ref_pegawai')) {
+                $withRelations[] = 'employee.person';
+            }
+            if (LegacyAccess::hasTable('ref_spesialisasi')) {
+                $withRelations[] = 'specialization';
+            }
+            $query = LegacyDoctor::with($withRelations);
 
             if ($request->filled('search')) {
                 $query->search($request->search);
             }
 
             if ($request->has('is_active')) {
-                $query->where('status', $request->boolean('is_active') ? 1 : 0);
+                $query->whereIn('status', $request->boolean('is_active') ? [1, '1'] : [0, '0']);
             } elseif (! $request->has('include_inactive')) {
-                $query->where('status', 1);
+                $query->whereIn('status', [1, '1']);
             }
 
             if ($request->has('ids')) {
@@ -385,9 +399,102 @@ class DoctorController extends Controller
                 $query->orWhereIn('id', $ids);
             }
 
-            $doctors = $query->paginate(20);
+            $metaInfo = [];
 
-            return DoctorLookupResource::collection($doctors);
+            if ($request->filled('polyclinic_id') || $request->filled('id_poliklinik')) {
+                $polyclinicId = $request->input('polyclinic_id') ?? $request->input('id_poliklinik');
+                $date = $request->input('date') ?? $request->input('admission_date');
+
+                // Check total active doctors assigned to this polyclinic (regardless of day/schedule)
+                $baseScheduleQuery = DB::connection('legacy')->table('trx_jadwal_dokter')
+                    ->where('id_poliklinik', $polyclinicId)
+                    ->where('status', '1')
+                    ->where('libur', 0);
+
+                $totalAssignedDoctors = (clone $baseScheduleQuery)->distinct('id_dokter')->count('id_dokter');
+
+                $metaInfo['polyclinic_id'] = (int) $polyclinicId;
+                $metaInfo['total_assigned_doctors'] = $totalAssignedDoctors;
+                $metaInfo['has_assigned_doctors'] = $totalAssignedDoctors > 0;
+
+                if ($totalAssignedDoctors === 0) {
+                    // Condition A: No doctors assigned to this polyclinic
+                    $query->whereRaw('1 = 0');
+                    $metaInfo['available_on_schedule'] = 0;
+                } else {
+                    $scheduleQuery = clone $baseScheduleQuery;
+
+                    if (!empty($date)) {
+                        $tz = new \DateTimeZone('Asia/Jakarta');
+                        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/', trim((string) $date), $m)) {
+                            $y = $m[3];
+                            $mo = $m[2];
+                            $d = $m[1];
+                            $timePart = isset($m[4]) ? " {$m[4]}:{$m[5]}" . (isset($m[6]) ? ":{$m[6]}" : ':00') : '';
+                            $dt = new \DateTime("{$y}-{$mo}-{$d}{$timePart}", $tz);
+                        } else {
+                            try {
+                                $dt = new \DateTime((string) $date, $tz);
+                            } catch (\Exception $e) {
+                                $dt = new \DateTime('now', $tz);
+                            }
+                        }
+
+                        $formattedDate = $dt->format('Y-m-d');
+                        $dayIndex = (int) $dt->format('N');
+                        $dayNames = [
+                            1 => 'Senin',
+                            2 => 'Selasa',
+                            3 => 'Rabu',
+                            4 => 'Kamis',
+                            5 => 'Jumat',
+                            6 => 'Sabtu',
+                            7 => 'Minggu',
+                        ];
+                        $dayName = $dayNames[$dayIndex] ?? null;
+
+                        $metaInfo['query_date'] = $formattedDate;
+                        $metaInfo['query_day'] = $dayName;
+
+                        // Check holiday dates
+                        $scheduleQuery->where(function ($q) use ($formattedDate) {
+                            $q->whereNull('tanggal_mulai_libur')
+                                ->orWhere('tanggal_mulai_libur', '>', $formattedDate)
+                                ->orWhere('tanggal_selesai_libur', '<', $formattedDate);
+                        });
+
+                        // Filter strictly by day of practice
+                        $scheduleQuery->where(function ($q) use ($dayName, $dayIndex) {
+                            if ($dayName) {
+                                $q->where('hari_praktik', $dayName);
+                            }
+                            if ($dayIndex) {
+                                $q->orWhere('index_hari', $dayIndex);
+                            }
+                        });
+                    }
+
+                    $doctorIds = $scheduleQuery->pluck('id_dokter')->unique()->toArray();
+                    $metaInfo['available_on_schedule'] = count($doctorIds);
+
+                    if (empty($doctorIds)) {
+                        // Condition B: Doctors are assigned to polyclinic, but none available on this schedule
+                        $query->whereRaw('1 = 0');
+                    } else {
+                        $query->whereIn('ref_dokter.id', $doctorIds);
+                    }
+                }
+            }
+
+            $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+            $doctors = $query->paginate($perPage);
+
+            $resourceCollection = DoctorLookupResource::collection($doctors);
+            if (!empty($metaInfo)) {
+                $resourceCollection->additional(['meta' => $metaInfo]);
+            }
+
+            return $resourceCollection;
         }
 
         $query = Doctor::with(['employee', 'specialization']);
@@ -411,8 +518,58 @@ class DoctorController extends Controller
             $query->orWhereIn('id', $ids);
         }
 
-        $doctors = $query->paginate(20);
+        $metaInfo = [];
+        if ($request->filled('polyclinic_id') || $request->filled('id_poliklinik')) {
+            $polyclinicId = $request->input('polyclinic_id') ?? $request->input('id_poliklinik');
+            $date = $request->input('date') ?? $request->input('admission_date');
 
-        return DoctorLookupResource::collection($doctors);
+            if (\Illuminate\Support\Facades\Schema::hasTable('doctor_schedules')) {
+                $baseScheduleQuery = \App\Models\MasterData\DoctorSchedule::where('polyclinic_id', $polyclinicId)
+                    ->where('is_holiday', false);
+
+                $totalAssignedDoctors = (clone $baseScheduleQuery)->distinct('doctor_id')->count('doctor_id');
+                $metaInfo['polyclinic_id'] = (int) $polyclinicId;
+                $metaInfo['total_assigned_doctors'] = $totalAssignedDoctors;
+                $metaInfo['has_assigned_doctors'] = $totalAssignedDoctors > 0;
+
+                if ($totalAssignedDoctors === 0) {
+                    $query->whereRaw('1 = 0');
+                    $metaInfo['available_on_schedule'] = 0;
+                } else {
+                    $scheduleQuery = clone $baseScheduleQuery;
+                    if (!empty($date)) {
+                        $tz = new \DateTimeZone('Asia/Jakarta');
+                        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/', trim((string) $date), $m)) {
+                            $dt = new \DateTime("{$m[3]}-{$m[2]}-{$m[1]}", $tz);
+                        } else {
+                            try {
+                                $dt = new \DateTime((string) $date, $tz);
+                            } catch (\Exception $e) {
+                                $dt = new \DateTime('now', $tz);
+                            }
+                        }
+                        $dayIndex = (int) $dt->format('N');
+                        $scheduleQuery->where('day_of_week', $dayIndex);
+                    }
+
+                    $doctorIds = $scheduleQuery->pluck('doctor_id')->unique()->toArray();
+                    $metaInfo['available_on_schedule'] = count($doctorIds);
+
+                    if (empty($doctorIds)) {
+                        $query->whereRaw('1 = 0');
+                    } else {
+                        $query->whereIn('id', $doctorIds);
+                    }
+                }
+            }
+        }
+
+        $doctors = $query->paginate(20);
+        $resourceCollection = DoctorLookupResource::collection($doctors);
+        if (!empty($metaInfo)) {
+            $resourceCollection->additional(['meta' => $metaInfo]);
+        }
+
+        return $resourceCollection;
     }
 }

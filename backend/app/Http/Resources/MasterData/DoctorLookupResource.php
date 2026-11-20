@@ -9,10 +9,13 @@ class DoctorLookupResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $name = $this->employee?->name 
-            ?? $this->employee?->person?->nama 
-            ?? $this->person?->nama 
-            ?? $this->name 
+        $name = null;
+        if (\App\Support\LegacyAccess::hasTable('ref_pegawai') && $this->relationLoaded('employee')) {
+            $name = $this->employee?->name ?? $this->employee?->person?->nama;
+        }
+        $name = $name
+            ?? $this->name
+            ?? ($this->relationLoaded('person') ? $this->person?->nama : null)
             ?? 'Unknown';
 
         $specializationName = $this->specialization?->nama ?? $this->specialization?->name ?? '';

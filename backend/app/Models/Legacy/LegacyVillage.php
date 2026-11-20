@@ -106,7 +106,10 @@ class LegacyVillage extends LegacyModel
         $term = "%{$term}%";
         return $query->where(function ($q) use ($term) {
             $q->where('nama', 'like', $term)
-              ->orWhere('kode_kelurahan', 'like', $term);
+              ->orWhere('kode_kelurahan', 'like', $term)
+              ->orWhereHas('district', function ($dq) use ($term) {
+                  $dq->where('nama', 'like', $term);
+              });
         });
     }
 
