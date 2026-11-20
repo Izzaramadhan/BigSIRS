@@ -34,10 +34,6 @@ const props = defineProps({
     type: String,
     default: 'all'
   },
-  tableSearch: {
-    type: String,
-    default: ''
-  },
   sortKey: {
     type: String,
     default: ''
@@ -49,22 +45,30 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  guarantorOptions: {
+    type: Array,
+    default: () => []
+  },
+  loadingGuarantors: {
+    type: Boolean,
+    default: false
   }
 });
 
 const emit = defineEmits([
   'update:guarantorFilter',
   'update:perPage',
-  'update:tableSearch',
   'page-change',
   'sort',
+  'admit-patient',
   'edit-admission',
   'delete-admission',
   'print-document',
   'reset-filter'
 ]);
 
-const perPageOptions = [10, 25, 50, 100];
+const perPageOptions = [10, 25, 50];
 
 const shortMonthNames = [
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
@@ -109,6 +113,9 @@ const formatBirthDateWithExactAge = (isoDate) => {
 
 const formatGuarantor = (val) => {
   if (!val) return 'UMUM';
+  if (typeof val === 'object' && val !== null) {
+    return val.name || val.jenis_asuransi || 'UMUM';
+  }
   if (val === 'Pasien Umum / Mandiri' || val === 'Umum / Pribadi' || val === 'UMUM') {
     return 'UMUM';
   }
@@ -116,17 +123,26 @@ const formatGuarantor = (val) => {
 };
 
 const getInsuranceBadgeClass = (val) => {
-  const label = formatGuarantor(val);
-  if (label === 'UMUM') return 'badge-umum';
-  if (label === 'BPJS Kesehatan') return 'badge-bpjs';
+  const label = String(formatGuarantor(val)).toUpperCase();
+  if (label.includes('UMUM') || label.includes('GRATIS') || label.includes('MANDIRI')) return 'badge-umum';
+  if (label.includes('BPJS') || label.includes('JKN')) return 'badge-bpjs';
   return 'badge-swasta';
 };
 
+const isConsentPrinted = (status) => {
+  if (!status) return false;
+  const s = String(status).toLowerCase().trim();
+  return s.includes('sudah') || s.includes('print') || s === 'sudah diprint' || s === 'sudah ttd';
+};
+
+const getConsentContainerClass = (status) => {
+  return isConsentPrinted(status) ? 'consent-container-green' : 'consent-container-red';
+};
+
 const getConsentBadgeClass = (status) => {
-  if (status === 'Sudah TTD') return 'consent-signed';
-  if (status === 'Belum TTD') return 'consent-unsigned';
+  if (isConsentPrinted(status)) return 'consent-signed';
   if (status === 'Dibatalkan') return 'consent-cancelled';
-  return 'consent-uncreated';
+  return 'consent-unsigned';
 };
 
 const pageNumbers = computed(() => {
@@ -202,7 +218,9 @@ const handleAction = (actionType, docType = '') => {
   closeDropdown();
   if (!item) return;
 
-  if (actionType === 'edit') {
+  if (actionType === 'admit') {
+    emit('admit-patient', item);
+  } else if (actionType === 'edit') {
     emit('edit-admission', item);
   } else if (actionType === 'delete') {
     emit('delete-admission', item);
@@ -270,12 +288,17 @@ onUnmounted(() => {
             :value="guarantorFilter"
             class="guarantor-filter-select"
             aria-label="Filter Jenis Asuransi"
+            :disabled="loadingGuarantors"
             @change="emit('update:guarantorFilter', $event.target.value)"
           >
             <option value="all">Semua Jenis Asuransi</option>
-            <option value="UMUM">UMUM</option>
-            <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-            <option value="Asuransi Swasta">Asuransi Swasta</option>
+            <option
+              v-for="opt in guarantorOptions"
+              :key="opt.id"
+              :value="String(opt.id)"
+            >
+              {{ opt.name || opt.jenis_asuransi }}
+            </option>
           </select>
           <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
@@ -303,31 +326,6 @@ onUnmounted(() => {
           </svg>
         </div>
         <span class="records-label">records</span>
-      </div>
-
-      <div class="table-search-box">
-        <label for="reg-table-search" class="table-search-label">Search:</label>
-        <div class="table-search-input-wrap">
-          <input
-            id="reg-table-search"
-            :value="tableSearch"
-            type="text"
-            class="form-input table-search-input"
-            placeholder="Cari antrian, nama, No. RM, HP..."
-            autocomplete="off"
-            @input="emit('update:tableSearch', $event.target.value)"
-          />
-          <button
-            v-if="tableSearch"
-            type="button"
-            class="btn-clear-table-search"
-            @click="emit('update:tableSearch', '')"
-            title="Hapus pencarian tabel"
-            aria-label="Hapus pencarian tabel"
-          >
-            &times;
-          </button>
-        </div>
       </div>
     </div>
 
@@ -478,9 +476,9 @@ onUnmounted(() => {
                   </svg>
                 </div>
                 <h3 class="empty-title">Tidak ada data pasien yang ditemukan.</h3>
-                <p class="empty-desc">Ubah filter jenis asuransi atau kata kunci pencarian tabel untuk menampilkan data lainnya.</p>
+                <p class="empty-desc">Ubah filter jenis asuransi untuk menampilkan data lainnya.</p>
                 <button
-                  v-if="guarantorFilter !== 'all' || tableSearch"
+                  v-if="guarantorFilter !== 'all'"
                   type="button"
                   class="btn-primary btn-reset-empty"
                   @click="emit('reset-filter')"
@@ -500,7 +498,7 @@ onUnmounted(() => {
 
               <!-- 2. No. Antrian -->
               <td class="col-queue">
-                <span class="queue-pill font-mono">{{ adm.queue_number }}</span>
+                <span class="queue-pill font-mono">—</span>
               </td>
 
               <!-- 3. Waktu Admisi -->
@@ -550,11 +548,11 @@ onUnmounted(() => {
 
               <!-- 9. General Consent -->
               <td class="col-consent">
-                <span class="consent-badge" :class="getConsentBadgeClass(adm.general_consent)">
-                  <svg v-if="adm.general_consent === 'Sudah TTD'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                  <span>{{ adm.general_consent || 'Belum TTD' }}</span>
+                <span
+                  class="consent-container-badge"
+                  :class="getConsentContainerClass(adm.general_consent)"
+                >
+                  {{ isConsentPrinted(adm.general_consent) ? 'Sudah diprint' : 'Belum diprint' }}
                 </span>
               </td>
 
@@ -655,7 +653,7 @@ onUnmounted(() => {
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
-              <span>Hapus Admisi</span>
+              <span>Hapus</span>
             </button>
           </li>
 
@@ -684,13 +682,13 @@ onUnmounted(() => {
           </li>
 
           <li role="menuitem">
-            <button type="button" class="dropdown-action-btn" @click="handleAction('print', 'No. Antrean')">
+            <button type="button" class="dropdown-action-btn" @click="handleAction('print', 'Formulir General Consent')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                <rect x="6" y="14" width="12" height="8"></rect>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <polyline points="9 15 11 17 15 13"></polyline>
               </svg>
-              <span>Cetak Antrian</span>
+              <span>Cetak General Consent</span>
             </button>
           </li>
         </ul>
@@ -876,61 +874,6 @@ onUnmounted(() => {
   font-size: 0.825rem;
   color: var(--color-text-secondary);
   font-weight: 500;
-}
-
-.table-search-box {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.table-search-label {
-  font-size: 0.825rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.table-search-input-wrap {
-  position: relative;
-}
-
-.table-search-input {
-  width: 240px;
-  height: 34px;
-  padding: 0 1.8rem 0 0.75rem;
-  font-size: 0.825rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-navy);
-  background: #ffffff;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-
-.table-search-input::placeholder {
-  color: #94a3b8;
-}
-
-.btn-clear-table-search {
-  position: absolute;
-  right: 0.45rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  color: #94a3b8;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  padding: 0;
-}
-
-.btn-clear-table-search:hover {
-  color: var(--color-text-navy);
 }
 
 /* Table */
@@ -1156,6 +1099,34 @@ onUnmounted(() => {
 .consent-cancelled {
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+
+/* General Consent Status Container (Sesuai arahan: merah jika belum, hijau jika sudah) */
+.consent-container-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  transition: all 0.2s ease;
+}
+
+.consent-container-red {
+  background-color: #ef4444;
+  color: #ffffff;
+  border: 1px solid #dc2626;
+  box-shadow: 0 1px 2px rgba(239, 68, 68, 0.2);
+}
+
+.consent-container-green {
+  background-color: #16a34a;
+  color: #ffffff;
+  border: 1px solid #15803d;
+  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.2);
 }
 
 /* Standardized Tools Button */
@@ -1413,10 +1384,7 @@ onUnmounted(() => {
 
 @media (max-width: 640px) {
   .guarantor-select-wrapper,
-  .guarantor-filter-select,
-  .table-search-box,
-  .table-search-input-wrap,
-  .table-search-input {
+  .guarantor-filter-select {
     width: 100%;
   }
 

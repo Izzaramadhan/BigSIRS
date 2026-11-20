@@ -1,0 +1,349 @@
+<USER_REQUEST>
+# BIGSIRS — TAHAP 3A: FINALISASI NAVIGASI REGISTRASI DAN FORM ADMISI RAWAT JALAN
+
+Saya ingin melanjutkan pengembangan modul Rawat Jalan BIGSIRS berdasarkan PRD, Manual Book, dan screenshot Form Admisi dari sistem lama.
+
+**FOKUS PEKERJAAN INI HANYA:**
+1. Navigasi otomatis setelah registrasi pasien berhasil.
+2. Pemuatan identitas pasien pada Form Admisi.
+3. Penyesuaian field Form Admisi sesuai sistem lama.
+4. Integrasi Jenis Asuransi, Klinik, Asal Rujukan, dan Dokter Klinik dengan referensi database.
+5. Pengaturan Jenis Visit dan Kasus.
+6. Validasi input dan keterkaitan antarfield.
+
+Jangan mengerjakan ulang modul Pendaftaran. Jangan mengimplementasikan ulang penyimpanan Admisi/Visit, daftar Admisi, atau Pemeriksaan pada tahap ini.
+
+## 1. AUDIT IMPLEMENTASI SAAT INI
+
+Sebelum mengubah kode:
+
+- Periksa halaman `NewPatientView.vue` dan mekanisme setelah berhasil menyimpan registrasi.
+- Periksa router dan halaman Form Admisi yang sudah ada.
+- Periksa service pasien dan admisi.
+- Periksa controller, model, API, dan endpoint lookup yang digunakan.
+- Periksa struktur tabel pada database MySQL lokal aktif.
+- Periksa apakah Form Admisi memiliki dropdown hardcoded, mock, atau mapping ID yang tidak sesuai.
+
+Gunakan database hasil impor `database/backup_db_simrs_masking-202609101406.sql` yang digunakan aplikasi saat ini.
+
+Jika koneksi bernama `legacy` masih digunakan untuk database restore lokal, jangan menghapus atau memindahkannya tanpa alasan yang terbukti.
+
+Pertahankan implementasi yang sudah berjalan.
+
+## 2. NAVIGASI OTOMATIS SETELAH REGISTRASI
+
+Saat petugas berhasil menyimpan registrasi pasien baru:
+
+1. Backend menyelesaikan penyimpanan `master_person_index` dan `ref_pasien`.
+2. Frontend menerima ID pasien yang benar dari `ref_pasien`.
+3. Tampilkan notifikasi sukses: **"Pasien berhasil terdaftar. Lanjut ke Admisi."**
+4. Secara otomatis arahkan petugas menuju Form Admisi pasien terkait setelah transaksi benar-benar berhasil.
+5. Identitas pasien dimuat kembali dari API menggunakan ID pasien.
+6. Jangan membuat data pasien baru lagi ketika Form Admisi dibuka.
+7. Jangan membuat `trx_admisi` atau `trx_visit` hanya karena navigasi berlangsung.
+8. Form tetap dapat memuat identitas yang benar setelah halaman di-refresh.
+
+Apabila saat ini terdapat modal sukses dengan tombol "Lanjut ke Admisi", sesuaikan agar alur utama tidak lagi memerlukan klik tambahan untuk berpindah ke form, tanpa merusak penanganan kesalahan registrasi.
+
+Untuk pasien lama, aksi Tools → Admisi harus membuka form yang sama dengan identitas pasien terpilih.
+
+## 3. BAGIAN DATA PASIEN
+
+Pada bagian atas Form Admisi, tampilkan otomatis:
+
+- No. RM
+- Nama lengkap
+- Jenis kelamin
+- Tempat dan tanggal lahir
+- Alamat lengkap beserta wilayah
+
+Semua data berasal dari API pasien, bukan state lokal atau data mock.
+
+Identitas pasien bersifat read-only dalam konteks form ini. Perubahan identitas utama harus melalui fitur Edit Pasien yang sesuai.
+
+Tampilkan informasi kunjungan terakhir dari data riwayat yang nyata jika sudah ada.
+
+Untuk pasien tanpa riwayat, tampilkan: **"Belum ada kunjungan sebelumnya"**.
+
+## 4. BAGIAN DATA ADMISI PASIEN
+
+Susun field sesuai gambar referensi:
+
+### A. Waktu Admisi
+
+- Tampilkan tanggal dan waktu lokal saat proses admisi dibuat.
+- Gunakan format tampilan sesuai standar UI BIGSIRS.
+- Pastikan tidak terjadi kesalahan timezone.
+- Validasi tanggal dan waktu sesuai aturan bisnis.
+
+### B. Jenis Asuransi
+
+Wajib membaca dari:
+
+**Master Data → Data Dasar → Jenis Asuransi**
+
+Sumber tabel: `ref_jenis_asuransi`.
+
+Kolom referensi yang ditemukan:
+
+- `id`
+- `jenis_asuransi`
+- `type`
+- `status`
+- `deleted_at`
+
+Ketentuan:
+
+1. Gunakan endpoint API Master Jenis Asuransi yang sudah tersedia.
+2. Value dropdown menggunakan `ref_jenis_asuransi.id`.
+3. Label menggunakan `ref_jenis_asuransi.jenis_asuransi`.
+4. Tampilkan pilihan yang valid sesuai master data aktif.
+5. Jangan mengganti seluruh pilihan master dengan kategori hardcoded UMUM/BPJS/PRIVATE.
+6. Jika pasien memiliki penjamin default, pilih nilai awal yang sesuai.
+7. Petugas dapat mengganti penjamin untuk kunjungan ini.
+8. Perubahan pada form admisi tidak boleh otomatis menimpa penjamin default pasien.
+
+### C. Nomor Asuransi
+
+- Ambil nomor jaminan yang tersedia pada data pasien jika sesuai.
+- Atur kewajiban dan status input berdasarkan penjamin yang dipilih.
+- Jangan menggunakan perbandingan nama asuransi secara hardcoded jika atribut `type` tersedia dan sesuai.
+- Pastikan nomor jaminan menggunakan tipe string.
+
+### D. NIK / No. KIA
+
+- Isi otomatis dari identitas pasien.
+- Jangan meminta petugas mengetik ulang apabila data sudah valid.
+- Pertahankan nomor identitas sebagai string.
+- Jangan mengubah data identitas pasien melalui penyimpanan admisi secara diam-diam.
+
+### E. Asal Rujukan
+
+Gunakan tabel `ref_asal_rujukan`.
+
+Dalam database terdapat referensi seperti Datang Sendiri, FKT Primer, FKT Lanjutan, dan Rujukan Internal.
+
+Ketentuan:
+
+- Ambil pilihan yang valid dari referensi database.
+- Jangan menggunakan array asal rujukan yang berbeda dari master.
+- Bila Datang Sendiri dipilih, Nama Asal Rujukan dapat dinonaktifkan jika tidak diperlukan.
+- Bila jenis rujukan membutuhkan nama instansi, tampilkan input dan validasi yang sesuai.
+- Periksa pemetaan `id_asal_rujukan` dan `asal_rujukan` pada `trx_admisi`.
+
+## 5. BAGIAN DATA VISIT PASIEN
+
+Bagian ini harus sesuai proses Rawat Jalan.
+
+### A. Jenis Visit
+
+Untuk alur yang sedang dikembangkan:
+
+**Jenis Visit hanya menampilkan "Rawat Jalan".**
+
+Ketentuan:
+
+1. Pilihan Rawat Jalan sudah terpilih secara default.
+2. Jangan tampilkan Rawat Inap, IGD, atau jenis pelayanan lain.
+3. Jika hanya ada satu pilihan, boleh ditampilkan sebagai select read-only atau field terpilih.
+4. Jangan menggunakan `ref_jenis_layanan` sebagai enum jenis visit, karena data tabel tersebut merupakan referensi layanan seperti Penyakit Dalam, Bedah, dan lainnya.
+5. Untuk tahap ini, jangan membuat mapping database baru. Verifikasi bagaimana backend yang sudah ada merepresentasikan jenis visit Rawat Jalan.
+
+### B. Klinik / Poliklinik
+
+Wajib terhubung ke:
+
+**Master Data → Poliklinik**
+
+Sumber tabel: `ref_poliklinik`.
+
+Kolom penting:
+
+- `id`
+- `nama`
+- `jenis`
+- `status`
+- `tampil`
+- `deleted_at`
+
+Ketentuan:
+
+1. Gunakan API Master Poliklinik yang sudah ada.
+2. Tampilkan poliklinik dengan `jenis = 'rawat-jalan'` yang memenuhi aturan aktif dan tampil untuk pelayanan.
+3. Gunakan ID asli poliklinik sebagai value.
+4. Gunakan nama poliklinik sebagai label.
+5. Jangan menggunakan daftar klinik hardcoded.
+6. Jangan menampilkan poli Rawat Inap, IGD, atau unit penunjang sebagai tujuan rawat jalan reguler.
+7. Jika tidak tersedia klinik valid, tampilkan pesan yang jelas.
+8. Pastikan perubahan Master Poliklinik tercermin pada form setelah data dimuat ulang.
+
+### C. Kasus
+
+Sediakan tepat tiga pilihan:
+
+1. Pemeriksaan Kasus Baru
+2. Perawatan Lanjutan
+3. Riwayat Penyakit Kronis atau Akut
+
+Database saat ini menyimpan nilai historis pada `trx_visit.kasus` sebagai:
+
+- `pemeriksaan kasus baru`
+- `perawatan lanjutan`
+- `riwayat penyakit kronis/akut`
+
+Gunakan label yang mudah dipahami petugas, tetapi pastikan value kompatibel dengan nilai historis tersebut.
+
+Tidak perlu membuat tabel `ref_kasus` baru karena tabel tersebut tidak ditemukan dalam SQL.
+
+Agar tidak tersebar di beberapa komponen Vue, definisikan pilihan bisnis ini secara terpusat melalui kontrak frontend/backend yang konsisten.
+
+### D. Dokter Klinik
+
+Sumber referensi:
+
+- `ref_dokter`
+- `trx_jadwal_dokter`
+- `ref_spesialisasi`
+- `master_person_index`
+
+Logika:
+
+1. Saat Form Admisi dibuka dan Klinik belum dipilih, dropdown Dokter Klinik dinonaktifkan.
+2. Setelah petugas memilih Klinik, frontend meminta daftar dokter yang relevan dari backend.
+3. Backend mencari dokter berdasarkan relasi `trx_jadwal_dokter.id_poliklinik` dan `trx_jadwal_dokter.id_dokter`, serta memeriksa data dokter pada `ref_dokter`.
+4. Nama dokter diambil melalui relasi `ref_dokter.id_mpi` ke `master_person_index`.
+5. Spesialisasi dibaca dari `ref_spesialisasi` jika dibutuhkan untuk verifikasi.
+6. Sesuaikan hasil dengan tanggal pelayanan dan jadwal yang berlaku.
+7. Periksa status aktif, libur, dan aturan kuota yang tersedia.
+8. Jangan menganggap dokter bisa bertugas di suatu poli hanya karena nama spesialisasinya mirip.
+9. Jika Klinik berubah, reset pilihan Dokter Klinik sebelumnya.
+10. Jika tidak ada dokter yang tersedia, tampilkan pemberitahuan. Jangan otomatis menggunakan dokter sembarang atau ID dummy.
+11. Semua validasi relasi poli–dokter juga harus dilakukan di backend.
+
+Jangan membuat relasi dokter-polikliknik baru bila relasi yang ada sudah sesuai.
+
+## 6. KELUARGA TERDEKAT
+
+Tampilkan empat field:
+
+- Nama
+- Hubungan
+- No. HP
+- Alamat
+
+Isi awal berasal dari data keluarga terdekat pasien jika tersedia.
+
+Jangan mengosongkan data keluarga yang sudah disimpan saat registrasi.
+
+Periksa tempat penyimpanan data agar perubahan pada form admisi tidak merusak informasi personal pasien.
+
+## 7. INTEGRASI SATUSEHAT DAN BOOKING DU KOAS
+
+Pertahankan bagian yang ada di form lama apabila memang masih diperlukan.
+
+Namun:
+
+- Jangan menganggap SATUSEHAT sudah terhubung tanpa bukti integrasi.
+- Jangan mengirim persetujuan ke layanan eksternal secara otomatis.
+- Jangan menyamakan persetujuan berbagi data SATUSEHAT dengan General Consent rumah sakit.
+- Jangan membuat kode booking DU KOAS palsu.
+- Jangan memaksa petugas mengisi booking jika layanan tersebut belum digunakan dalam alur Rawat Jalan biasa.
+
+Jika backend belum mendukung fitur tertentu, tampilkan kondisi yang jujur dan dokumentasikan batasannya.
+
+## 8. VALIDASI FRONTEND DAN BACKEND
+
+Pastikan:
+
+- ID pasien valid.
+- Jenis asuransi berasal dari master.
+- Klinik berasal dari master poliklinik yang memenuhi kriteria.
+- Jenis visit hanya Rawat Jalan.
+- Kasus termasuk salah satu dari tiga value yang valid.
+- Dokter benar-benar sesuai klinik dan jadwal yang dipilih.
+- Asal rujukan valid.
+- Field wajib memiliki pesan validasi yang jelas.
+
+Gunakan loading state, error state, dan empty state.
+
+Jangan mengisi ID yang kosong dengan 0 atau nilai dummy hanya untuk membuat form terlihat lengkap.
+
+## 9. PERTAHANKAN STANDAR UI BIGSIRS
+
+Gunakan desain dan komponen sistem baru yang sudah distandarisasi.
+
+Form tetap memiliki struktur:
+
+- Data Pasien
+- Data Admisi Pasien
+- Data Visit Pasien
+- Data Keluarga Terdekat
+- Integrasi SATUSEHAT
+- Data Booking DU KOAS jika relevan
+
+Jangan menyalin warna, font, dan komposisi sistem lama secara mentah.
+
+Tidak perlu melakukan redesign keseluruhan halaman.
+
+## 10. PENGUJIAN TAHAP 3A
+
+Lakukan pengujian:
+
+1. Registrasi baru berhasil dan navigasi otomatis menuju Form Admisi.
+2. Notifikasi keberhasilan registrasi tampil.
+3. Identitas pasien pada Form Admisi sesuai database.
+4. Identitas tetap tampil setelah reload.
+5. Jenis Asuransi sesuai daftar Master Jenis Asuransi.
+6. Nomor asuransi mengikuti penjamin.
+7. Jenis Visit hanya menampilkan Rawat Jalan.
+8. Klinik berasal dari Master Poliklinik Rawat Jalan.
+9. Kasus memiliki tiga pilihan dengan value yang benar.
+10. Memilih Klinik memuat dokter yang sesuai.
+11. Mengganti Klinik mengosongkan dokter sebelumnya.
+12. Dokter tanpa relasi/jadwal yang valid tidak ditampilkan sebagai dokter tersedia.
+13. Data keluarga terdekat terisi dari registrasi.
+14. Asal rujukan mengambil referensi database.
+15. Form menangani kegagalan API dengan benar.
+16. Tidak ada admisi/visit baru hanya karena membuka halaman.
+
+Jalankan test frontend/backend yang relevan, lint, dan production build.
+
+## 11. BATASAN TAHAP INI
+
+- Jangan mengubah database secara destruktif.
+- Jangan mengimpor ulang file SQL.
+- Jangan membuat data master duplikat.
+- Jangan menggunakan mock.
+- Jangan mengubah modul Logistik dan Billing.
+- Jangan membangun sistem antrean.
+- Jangan menulis ulang logika penyimpanan `trx_admisi` dan `trx_visit` pada tahap ini.
+- Jangan mengimplementasikan cetak General Consent terlebih dahulu.
+- Jangan mengubah menu utama Admisi dan Pemeriksaan.
+- Jangan melakukan Git commit, push, atau merge otomatis.
+
+## 12. LAPORAN HASIL
+
+Setelah selesai, laporkan:
+
+1. File yang diubah.
+2. Alur navigasi setelah registrasi.
+3. Endpoint untuk Asuransi, Klinik, Dokter, dan Asal Rujukan.
+4. Mapping ID dan relasi database yang digunakan.
+5. Cara sistem memfilter dokter berdasarkan poliklinik.
+6. Hasil pengujian.
+7. Field yang belum memiliki pemetaan backend valid.
+8. Kendala yang masih ditemukan.
+
+**TARGET AKHIR TAHAP 3A:**
+
+Setelah registrasi berhasil, petugas otomatis diarahkan ke Form Admisi yang menampilkan identitas pasien sesuai database.
+
+Jenis Asuransi membaca Master Jenis Asuransi, Jenis Visit hanya Rawat Jalan, Klinik membaca Master Poliklinik, Kasus memiliki tiga pilihan sesuai nilai historis, dan Dokter Klinik mengikuti relasi serta jadwal dokter pada poliklinik yang dipilih.
+
+Seluruh form harus siap untuk tahap penyimpanan transaksi Admisi dan Visit.
+
+Setelah selesai, hentikan pengerjaan dan tampilkan laporan. Jangan melanjutkan Tahap 3B secara otomatis.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-17T14:42:17+07:00.
+</ADDITIONAL_METADATA>

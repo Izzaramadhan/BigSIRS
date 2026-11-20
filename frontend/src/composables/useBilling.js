@@ -495,7 +495,7 @@ export function useBilling() {
     };
 
     sessionBillingOverrides[targetId] = {
-      ...(sessionBillingOverrides[targetId] || {}),
+      ...sessionBillingOverrides[targetId],
       ...overridePayload
     };
 

@@ -46,6 +46,7 @@ const mapGuarantorType = (val) => {
 };
 
 const form = ref({
+  patient_id: null,
   patient_name: '',
   medical_record_number: '',
   nik: '',
@@ -63,6 +64,7 @@ const form = ref({
 
 const resetForm = () => {
   form.value = {
+    patient_id: null,
     patient_name: '',
     medical_record_number: '',
     nik: '',
@@ -86,6 +88,7 @@ watch(
     if (pat) {
       const mappedGuarantor = mapGuarantorType(pat.guarantor);
       form.value = {
+        patient_id: pat.id || pat.patient_id || null,
         patient_name: pat.name || '',
         medical_record_number: pat.medical_record_number || '',
         nik: pat.nik || '',

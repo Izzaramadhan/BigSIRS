@@ -64,7 +64,7 @@ const toggleSection = (key) => {
 };
 
 const doctorOptions = computed(() => {
-  const list = new Set([...props.doctors]);
+  const list = new Set(props.doctors);
   if (props.patient.doctor && props.patient.doctor !== '-') {
     list.add(props.patient.doctor);
   }

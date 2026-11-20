@@ -2,11 +2,15 @@
 defineProps({
   queueNumber: {
     type: String,
-    default: 'P001'
+    default: '—'
   },
   canPrev: {
     type: Boolean,
-    default: true
+    default: false
+  },
+  disabled: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -44,6 +48,7 @@ const emit = defineEmits(['call', 'prev', 'next']);
         <button
           type="button"
           class="btn-primary btn-call-queue"
+          :disabled="disabled"
           @click="emit('call')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -58,7 +63,7 @@ const emit = defineEmits(['call', 'prev', 'next']);
         <button
           type="button"
           class="btn-queue-step btn-prev-queue"
-          :disabled="!canPrev"
+          :disabled="!canPrev || disabled"
           @click="emit('prev')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -71,6 +76,7 @@ const emit = defineEmits(['call', 'prev', 'next']);
         <button
           type="button"
           class="btn-queue-step btn-next-queue"
+          :disabled="disabled"
           @click="emit('next')"
         >
           <span>Next</span>
@@ -93,6 +99,10 @@ const emit = defineEmits(['call', 'prev', 'next']);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: fit-content;
+  align-self: start;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .card-header-bar {
@@ -142,7 +152,6 @@ const emit = defineEmits(['call', 'prev', 'next']);
 
 .queue-card-body {
   padding: 1.25rem 1.4rem;
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;

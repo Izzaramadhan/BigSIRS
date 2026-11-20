@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { maskNik, formatGender } from '@/utils/patientFormatters';
 
 const props = defineProps({
@@ -37,6 +37,8 @@ const emit = defineEmits([
   'register-new',
   'open-kyc',
   'view-detail',
+  'edit-patient',
+  'delete-patient',
   'admit-patient'
 ]);
 
@@ -71,6 +73,85 @@ const clearKeyword = () => {
     emit('reset');
   }
 };
+
+// Teleported Tools Dropdown Menu
+const activeDropdownId = ref(null);
+const activeDropdownPatient = ref(null);
+const dropdownCoords = ref({ top: '0px', left: '0px' });
+
+const closeDropdown = () => {
+  activeDropdownId.value = null;
+  activeDropdownPatient.value = null;
+};
+
+const toggleDropdown = (event, patient) => {
+  if (activeDropdownId.value === patient.id) {
+    closeDropdown();
+    return;
+  }
+
+  activeDropdownId.value = patient.id;
+  activeDropdownPatient.value = patient;
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const dropdownWidth = 160;
+  const dropdownHeight = 165;
+
+  let left = rect.right - dropdownWidth;
+  if (left < 10) left = 10;
+
+  let top = rect.bottom + 4;
+  if (top + dropdownHeight > window.innerHeight) {
+    top = rect.top - dropdownHeight - 4;
+  }
+
+  dropdownCoords.value = {
+    top: `${top}px`,
+    left: `${left}px`
+  };
+};
+
+const handleAction = (actionType) => {
+  const patient = activeDropdownPatient.value;
+  closeDropdown();
+  if (!patient) return;
+
+  if (actionType === 'detail') {
+    emit('view-detail', patient);
+  } else if (actionType === 'edit') {
+    emit('edit-patient', patient);
+  } else if (actionType === 'delete') {
+    emit('delete-patient', patient);
+  } else if (actionType === 'admit') {
+    emit('admit-patient', patient);
+  }
+};
+
+const handleDocClick = (e) => {
+  if (activeDropdownId.value && !e.target.closest('.dropdown-portal') && !e.target.closest('.btn-tools')) {
+    closeDropdown();
+  }
+};
+
+const handleKeyDown = (e) => {
+  if (e.key === 'Escape' && activeDropdownId.value) {
+    closeDropdown();
+  }
+};
+
+onMounted(() => {
+  document.addEventListener('click', handleDocClick);
+  document.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('resize', closeDropdown);
+  window.addEventListener('scroll', closeDropdown, true);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocClick);
+  document.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('resize', closeDropdown);
+  window.removeEventListener('scroll', closeDropdown, true);
+});
 </script>
 
 <template>
@@ -260,7 +341,7 @@ const clearKeyword = () => {
                 <td>
                   <span class="rm-badge font-mono">{{ patient.medical_record_number }}</span>
                 </td>
-                <td class="font-mono text-secondary">{{ maskNik(patient.nik) }}</td>
+                <td class="font-mono text-secondary">{{ maskNik(patient.nik || patient.nik_masked) }}</td>
                 <td>
                   <div class="patient-result-name">{{ patient.name }}</div>
                   <div class="patient-result-address" :title="patient.address">{{ patient.address }}</div>
@@ -270,31 +351,20 @@ const clearKeyword = () => {
                   <div class="text-muted-sm">{{ formatGender(patient.gender) }}</div>
                 </td>
                 <td>{{ patient.phone || '—' }}</td>
-                <td>
-                  <div class="result-actions-group">
-                    <button
-                      type="button"
-                      class="btn-detail-sm"
-                      @click="emit('view-detail', patient)"
-                      title="Lihat Detail Pasien"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      class="btn-admit-sm"
-                      @click="emit('admit-patient', patient)"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                      </svg>
-                      <span>Admisi</span>
-                    </button>
-                  </div>
+                <td class="text-center">
+                  <button
+                    type="button"
+                    class="btn-tools"
+                    :class="{ 'active': activeDropdownId === patient.id }"
+                    :aria-expanded="activeDropdownId === patient.id"
+                    aria-haspopup="true"
+                    @click="toggleDropdown($event, patient)"
+                  >
+                    <span>Tools</span>
+                    <svg class="tools-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -312,6 +382,57 @@ const clearKeyword = () => {
         </div>
       </div>
     </Transition>
+
+    <!-- Teleported Tools Dropdown Menu -->
+    <Teleport to="body">
+      <div v-if="activeDropdownId" class="dropdown-portal" :style="dropdownCoords">
+        <ul class="dropdown-list" role="menu">
+          <li role="menuitem">
+            <button type="button" class="dropdown-action-btn" @click="handleAction('detail')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span>Detail</span>
+            </button>
+          </li>
+
+          <li role="menuitem">
+            <button type="button" class="dropdown-action-btn" @click="handleAction('edit')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+              <span>Edit</span>
+            </button>
+          </li>
+
+          <li role="menuitem">
+            <button type="button" class="dropdown-action-btn text-danger" @click="handleAction('delete')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Delete</span>
+            </button>
+          </li>
+
+          <li class="dropdown-divider"></li>
+
+          <li role="menuitem">
+            <button type="button" class="dropdown-action-btn text-primary font-bold" @click="handleAction('admit')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <line x1="9" y1="15" x2="15" y2="15"></line>
+              </svg>
+              <span>Admisi</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -324,6 +445,10 @@ const clearKeyword = () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  height: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .card-header-bar {
@@ -882,6 +1007,118 @@ const clearKeyword = () => {
 
 .text-center {
   text-align: center !important;
+}
+
+/* Standardized Tools Button */
+.btn-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 32px;
+  padding: 0 0.75rem;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(8, 127, 120, 0.35);
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-tools:hover,
+.btn-tools.active {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
+.tools-chevron {
+  width: 13px;
+  height: 13px;
+}
+
+/* Teleported Dropdown Portal */
+.dropdown-portal {
+  position: fixed;
+  width: 160px;
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+  z-index: 9999;
+  padding: 0.4rem 0;
+  animation: popIn 0.12s ease-out;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dropdown-action-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-navy);
+  font-size: 0.825rem;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.dropdown-action-btn:hover {
+  background: #f8fafc;
+  color: var(--color-primary-dark);
+}
+
+.dropdown-action-btn.text-danger {
+  color: var(--color-danger);
+}
+
+.dropdown-action-btn.text-danger:hover {
+  background: var(--color-danger-bg);
+}
+
+.dropdown-action-btn.text-primary {
+  color: var(--color-primary);
+}
+
+.dropdown-action-btn.font-bold {
+  font-weight: 600;
+}
+
+.dropdown-action-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--color-border-soft);
+  margin: 0.35rem 0;
 }
 
 .fade-enter-active,

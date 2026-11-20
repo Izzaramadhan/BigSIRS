@@ -23,7 +23,7 @@ const props = defineProps({
 const emit = defineEmits(['save']);
 
 const doctorOptions = computed(() => {
-  const list = new Set([...props.doctors]);
+  const list = new Set(props.doctors);
   if (props.dokter.dpjp) {
     list.add(props.dokter.dpjp);
   }

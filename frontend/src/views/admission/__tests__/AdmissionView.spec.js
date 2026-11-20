@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import AdmissionView from '../AdmissionView.vue';
 import AdmissionEditView from '../AdmissionEditView.vue';
 import AdmissionOldPatientSearchCard from '../components/AdmissionOldPatientSearchCard.vue';
@@ -8,15 +8,85 @@ import AdmissionTable from '../components/AdmissionTable.vue';
 import AdmissionStatsCards from '../components/AdmissionStatsCards.vue';
 import AdmissionQueueCard from '../components/AdmissionQueueCard.vue';
 import { mockAdmissions, mockLoketInfo } from '@/mocks/admissions';
+import { mockPatients } from '@/mocks/patients';
 
 const mockPush = vi.fn();
-vi.mock('vue-router', () => ({
-  useRoute: () => ({
-    params: { id: '1' }
-  }),
-  useRouter: () => ({
-    push: mockPush
-  })
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useRoute: () => ({
+      params: { id: '1' },
+      query: {}
+    }),
+    useRouter: () => ({
+      push: mockPush
+    })
+  };
+});
+
+vi.mock('@/services/patient.service', () => ({
+  default: {
+    searchPatients: vi.fn(async (params = {}) => {
+      let filtered = [...mockPatients];
+      if (params.q) {
+        const q = String(params.q).toLowerCase();
+        filtered = filtered.filter((p) =>
+          (p.name && p.name.toLowerCase().includes(q)) ||
+          (p.nik && p.nik.includes(q)) ||
+          (p.medical_record_number && p.medical_record_number.toLowerCase().includes(q))
+        );
+      }
+      return {
+        data: {
+          data: filtered,
+          meta: {
+            total: filtered.length,
+            current_page: 1,
+            last_page: 1,
+            from: filtered.length > 0 ? 1 : 0,
+            to: filtered.length
+          }
+        }
+      };
+    }),
+    getPatient: vi.fn(async (id) => ({
+      data: {
+        data: mockPatients.find((p) => p.id === Number(id)) || mockPatients[0]
+      }
+    }))
+  }
+}));
+
+vi.mock('@/services/admission.service', () => ({
+  default: {
+    getAdmissions: vi.fn(async (params = {}) => {
+      let filtered = [...mockAdmissions];
+      if (params.guarantor && params.guarantor !== 'all') {
+        filtered = filtered.filter((a) => a.guarantor_type === params.guarantor);
+      }
+      return {
+        data: {
+          data: filtered.slice(0, params.per_page || 10),
+          meta: {
+            total: filtered.length,
+            current_page: params.page || 1,
+            last_page: Math.ceil(filtered.length / (params.per_page || 10)),
+            from: 1,
+            to: Math.min(filtered.length, params.per_page || 10)
+          }
+        }
+      };
+    }),
+    createAdmission: vi.fn(async (payload) => ({
+      data: {
+        data: {
+          id: 999,
+          ...payload
+        }
+      }
+    }))
+  }
 }));
 
 describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
@@ -74,6 +144,7 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
 
     await wrapper.find('input#old-patient-query').setValue('Bambang');
     await wrapper.find('form.old-patient-search-form').trigger('submit.prevent');
+    await flushPromises();
 
     expect(wrapper.find('.search-results-panel').exists()).toBe(true);
     expect(wrapper.find('.search-results-panel').text()).toContain('Bambang Setyadi');
@@ -81,6 +152,49 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
     await wrapper.find('.btn-admit-patient').trigger('click');
     expect(wrapper.find('.modal-overlay').exists()).toBe(true);
     expect(wrapper.find('input#add-patient-name').element.value).toContain('Bambang Setyadi');
+  });
+
+  it('blocks AdmissionNewModal and triggers unpaid billing notification when patient has unpaid bills', async () => {
+    const patientService = (await import('@/services/patient.service')).default;
+    patientService.searchPatients.mockResolvedValueOnce({
+      data: {
+        data: [
+          {
+            id: 99,
+            name: 'Hanjaya Hartono',
+            medical_record_number: '000176',
+            nik: '6585877985746978',
+            has_unpaid_bills: true,
+            unpaid_billing_message: 'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
+          }
+        ],
+        meta: { total: 1 }
+      }
+    });
+
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('input#old-patient-query').setValue('Hanjaya');
+    await wrapper.find('form.old-patient-search-form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.find('.search-results-panel').exists()).toBe(true);
+    expect(wrapper.find('.search-results-panel').text()).toContain('Hanjaya Hartono');
+
+    // Click Admit button
+    await wrapper.find('.btn-admit-patient').trigger('click');
+    await flushPromises();
+
+    // Modal AdmissionNewModal MUST NOT be open!
+    expect(wrapper.find('.modal-overlay').exists()).toBe(false);
+    expect(wrapper.find('input#add-patient-name').exists()).toBe(false);
   });
 
   it('filters DAFTAR PASIEN by Jenis Asuransi dropdown (UMUM / BPJS Kesehatan)', async () => {
@@ -93,8 +207,10 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
       }
     });
 
+    await flushPromises();
     const guarantorSelect = wrapper.find('select#admission-guarantor-filter');
     await guarantorSelect.setValue('UMUM');
+    await flushPromises();
 
     const badges = wrapper.findAll('.insurance-badge').map((el) => el.text().trim());
     expect(badges.length).toBeGreaterThan(0);
@@ -190,6 +306,37 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
       params: { id: expect.anything() }
     });
   });
+
+  it('AdmissionOldPatientSearchCard blocks select-patient event and displays unpaid toast when patient has unpaid bills', async () => {
+    const wrapper = mount(AdmissionOldPatientSearchCard, {
+      props: {
+        keyword: 'Hanjaya',
+        birthDate: '',
+        hasSearched: true,
+        results: [
+          {
+            id: 99,
+            name: 'Hanjaya Hartono',
+            no_rm: '000176',
+            no_ktp: '6585877985746978',
+            has_unpaid_bills: true,
+            unpaid_billing_message: 'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
+          }
+        ]
+      },
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    await wrapper.find('.btn-admit-patient').trigger('click');
+
+    expect(wrapper.emitted('select-patient')).toBeFalsy();
+    expect(wrapper.find('.unpaid-billing-toast').exists()).toBe(true);
+    expect(wrapper.find('.unpaid-billing-toast').text()).toContain('Pasien ini belum lunas pembayaran');
+  });
 });
 
 describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
@@ -281,6 +428,29 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
 
     await wrapper.find('.btn-batal').trigger('click');
     expect(mockPush).toHaveBeenCalledWith('/admisi');
+  });
+
+  it('renders restriction warning banner and disables polyclinic select when clinic change is restricted', async () => {
+    const wrapper = mount(AdmissionEditView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+
+    // Simulate restricted examination state
+    wrapper.vm.canChangeClinic = false;
+    wrapper.vm.cannotChangeReason = 'Pasien sedang dalam proses pemeriksaan klinis di poliklinik. Perubahan poliklinik dibatasi.';
+    await wrapper.vm.$nextTick();
+
+    const banner = wrapper.find('.clinic-restriction-banner');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('Pembatasan Perubahan Pelayanan');
+    expect(banner.text()).toContain('sedang dalam proses pemeriksaan klinis');
+
+    const clinicSelect = wrapper.find('#edit-clinic');
+    expect(clinicSelect.element.disabled).toBe(true);
   });
 });
 

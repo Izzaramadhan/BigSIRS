@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import ExaminationView from '../ExaminationView.vue';
 import ExaminationPatientView from '../ExaminationPatientView.vue';
 import ExaminationDailyListCard from '../components/ExaminationDailyListCard.vue';
@@ -10,13 +10,43 @@ import ExaminationPagination from '../components/ExaminationPagination.vue';
 import { generateMockExaminations } from '@/mocks/examinations';
 
 const mockPush = vi.fn();
-vi.mock('vue-router', () => ({
-  useRoute: () => ({
-    params: { id: 'EXM-0001' }
-  }),
-  useRouter: () => ({
-    push: mockPush
-  })
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useRoute: () => ({
+      params: { id: 'EXM-0001' },
+      query: {}
+    }),
+    useRouter: () => ({
+      push: mockPush
+    })
+  };
+});
+
+vi.mock('@/services/examination.service', () => ({
+  default: {
+    getExaminations: vi.fn(async () => {
+      const all = generateMockExaminations();
+      return {
+        data: {
+          data: all,
+          meta: {
+            total: all.length,
+            current_page: 1,
+            last_page: 1,
+            from: 1,
+            to: all.length
+          }
+        }
+      };
+    }),
+    getExamination: vi.fn(async (id) => ({
+      data: {
+        data: generateMockExaminations().find((e) => e.id === id) || generateMockExaminations()[0]
+      }
+    }))
+  }
 }));
 
 describe('ExaminationView (Halaman Awal Pemeriksaan Terbaru)', () => {
@@ -70,6 +100,8 @@ describe('ExaminationView (Halaman Awal Pemeriksaan Terbaru)', () => {
         }
       }
     });
+
+    await flushPromises();
 
     await wrapper.find('input#exam-search-input').setValue('Soedirman');
     expect(wrapper.find('.exam-daily-card tbody').text()).toContain('Soedirman');

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
@@ -9,11 +9,13 @@ import RegistrationQueueCard from './components/RegistrationQueueCard.vue';
 import RegistrationPatientListCard from './components/RegistrationPatientListCard.vue';
 import SatuSehatKycModal from './components/SatuSehatKycModal.vue';
 import PatientDetailModal from './components/PatientDetailModal.vue';
+import PatientEditModal from './components/PatientEditModal.vue';
 import AdmissionNewModal from '@/views/admission/components/AdmissionNewModal.vue';
 import AdmissionEditModal from '@/views/admission/components/AdmissionEditModal.vue';
 import AdmissionPrintModal from '@/views/admission/components/AdmissionPrintModal.vue';
 import { useAdmissions } from '@/composables/useAdmissions';
-import { mockPatients } from '@/mocks/patients';
+import patientService from '@/services/patient.service';
+import { guarantorsService } from '@/services/master-data/guarantors.service';
 
 const router = useRouter();
 
@@ -21,7 +23,6 @@ const {
   paginatedAdmissions,
   paginationInfo,
   pagination,
-  searchQuery,
   filters,
   sort,
   nextQueueNumber,
@@ -42,6 +43,7 @@ const patientBirthDate = ref('');
 const patientResults = ref([]);
 const hasSearchedPatient = ref(false);
 const searchValidationError = ref('');
+const isSearchingPatient = ref(false);
 
 // Antrean Pendaftaran Counter State (P001, P002, ...)
 const queueNumberIndex = ref(1);
@@ -52,6 +54,11 @@ const formattedQueueNumber = computed(() => {
 // Modals & Active Item State
 const isKycModalOpen = ref(false);
 const isPatientDetailOpen = ref(false);
+const isEditPatientOpen = ref(false);
+const patientToEdit = ref(null);
+const isDeletePatientOpen = ref(false);
+const patientToDelete = ref(null);
+const isDeletingPatient = ref(false);
 const isNewAdmissionOpen = ref(false);
 const isEditAdmissionOpen = ref(false);
 const isPrintModalOpen = ref(false);
@@ -84,8 +91,8 @@ const closeToast = () => {
 };
 
 // Search Handler (FORM PENCARIAN PASIEN)
-const handleSearchPatient = () => {
-  const q = patientKeyword.value.trim().toLowerCase();
+const handleSearchPatient = async () => {
+  const q = patientKeyword.value.trim();
   const bd = patientBirthDate.value.trim();
 
   if (!q && !bd) {
@@ -111,33 +118,41 @@ const handleSearchPatient = () => {
   }
 
   searchValidationError.value = '';
+  isSearchingPatient.value = true;
 
-  const matches = mockPatients.filter((p) => {
-    const matchKeyword =
-      !q ||
-      (p.name && p.name.toLowerCase().includes(q)) ||
-      (p.nik && p.nik.toLowerCase().includes(q)) ||
-      (p.medical_record_number && p.medical_record_number.toLowerCase().includes(q));
+  try {
+    const params = {};
+    if (q) params.q = q;
+    if (bd) params.birth_date = bd;
+    params.per_page = 50;
 
-    const matchDate = !bd || p.birth_date === bd;
-    return matchKeyword && matchDate;
-  });
+    const res = await patientService.searchPatients(params);
+    const data = res.data?.data || [];
 
-  patientResults.value = matches;
-  hasSearchedPatient.value = true;
+    patientResults.value = data;
+    hasSearchedPatient.value = true;
 
-  if (matches.length === 0) {
+    if (data.length === 0) {
+      showToast({
+        type: 'info',
+        title: 'Data Tidak Ditemukan',
+        message: 'Tidak ada data pasien yang cocok. Anda dapat mendaftarkan pasien baru.'
+      });
+    } else {
+      showToast({
+        type: 'success',
+        title: 'Pencarian Berhasil',
+        message: `Ditemukan ${data.length} data pasien terdaftar.`
+      });
+    }
+  } catch (err) {
     showToast({
-      type: 'info',
-      title: 'Data Tidak Ditemukan',
-      message: 'Tidak ada data pasien yang cocok. Anda dapat mendaftarkan pasien baru.'
+      type: 'danger',
+      title: 'Gagal Mencari Data',
+      message: err.response?.data?.message || 'Terjadi kesalahan saat memanggil server.'
     });
-  } else {
-    showToast({
-      type: 'success',
-      title: 'Pencarian Berhasil',
-      message: `Ditemukan ${matches.length} data pasien terdaftar.`
-    });
+  } finally {
+    isSearchingPatient.value = false;
   }
 };
 
@@ -165,15 +180,120 @@ const handleKycVerified = (res) => {
   });
 };
 
-const handleViewPatientDetail = (patient) => {
-  patientInDetail.value = patient;
+const handleViewPatientDetail = async (patient) => {
+  try {
+    const res = await patientService.getPatient(patient.id);
+    patientInDetail.value = res.data?.data || patient;
+  } catch {
+    patientInDetail.value = patient;
+  }
   isPatientDetailOpen.value = true;
 };
 
 const handleAdmitFromSearch = (patient) => {
   isPatientDetailOpen.value = false;
-  selectedPatientForAdmission.value = patient;
-  isNewAdmissionOpen.value = true;
+  handleAdmitPatient(patient);
+};
+
+const handleAdmitPatient = async (item) => {
+  const patientId = item.patient_id || item.id;
+  if (!patientId) return;
+
+  // Verifikasi status tunggakan billing pasien
+  let hasUnpaid = item.has_unpaid_bills;
+  let unpaidMsg = item.unpaid_billing_message;
+
+  if (hasUnpaid === undefined) {
+    try {
+      const res = await patientService.getPatient(patientId);
+      const patData = res.data?.data;
+      if (patData) {
+        hasUnpaid = Boolean(patData.has_unpaid_bills);
+        unpaidMsg = patData.unpaid_billing_message;
+      }
+    } catch (e) {
+      console.warn('Gagal memverifikasi status billing pasien:', e);
+    }
+  }
+
+  // Jika pasien memiliki tanggungan belum lunas: Tampilkan notifikasi di Pendaftaran & JANGAN berpindah halaman
+  if (hasUnpaid) {
+    showToast({
+      type: 'danger',
+      title: 'Notifications',
+      message:
+        unpaidMsg ||
+        'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
+    });
+    return;
+  }
+
+  // Jika pasien belum pernah admisi / tagihan lunas: Langsung arahkan ke Form Tambah Admisi
+  router.push({ path: '/admisi/baru', query: { patient_id: patientId } });
+};
+
+// Patient Tools Action Handlers (Edit & Delete Pasien)
+const handleOpenEditPatient = (patient) => {
+  const patientId = patient?.id;
+  if (!patientId) return;
+  router.push({
+    name: 'registration.patient-edit',
+    params: { id: patientId }
+  });
+};
+
+const handleSaveEditPatient = async ({ id, payload }) => {
+  const pName = payload.name || 'Pasien';
+  const idx = patientResults.value.findIndex((p) => p.id === id);
+  if (idx !== -1) {
+    patientResults.value[idx] = {
+      ...patientResults.value[idx],
+      ...payload,
+      name: payload.name || patientResults.value[idx].name,
+      phone: payload.phone || patientResults.value[idx].phone,
+      address: payload.address || patientResults.value[idx].address
+    };
+  }
+  loadPatientTable();
+  showToast({
+    type: 'success',
+    title: 'Data Pasien Diperbarui',
+    message: `Data pasien ${pName} berhasil diperbarui.`
+  });
+};
+
+const handleOpenDeletePatient = (patient) => {
+  patientToDelete.value = patient;
+  isDeletePatientOpen.value = true;
+};
+
+const handleConfirmDeletePatient = async () => {
+  if (!patientToDelete.value) return;
+  isDeletingPatient.value = true;
+  try {
+    const res = await patientService.deletePatient(patientToDelete.value.id);
+    const pName = patientToDelete.value.name || 'Pasien';
+    const pRm = patientToDelete.value.medical_record_number || '';
+    patientResults.value = patientResults.value.filter((p) => p.id !== patientToDelete.value.id);
+    loadPatientTable();
+    isDeletePatientOpen.value = false;
+    showToast({
+      type: 'warning',
+      title: 'Pasien Dinonaktifkan',
+      message: res.data?.message || `Data pasien ${pName} (${pRm}) berhasil dinonaktifkan.`
+    });
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message || 'Gagal menonaktifkan data pasien.';
+    showToast({
+      type: 'danger',
+      title: 'Penghapusan Dibatasi',
+      message: msg
+    });
+    isDeletePatientOpen.value = false;
+  } finally {
+    isDeletingPatient.value = false;
+    patientToDelete.value = null;
+  }
 };
 
 // Queue Handlers (NO. ANTRIAN)
@@ -205,39 +325,215 @@ const handleNextQueue = () => {
   });
 };
 
-// Table Filter & Search Handlers (DAFTAR PASIEN)
-const handleGuarantorChange = (val) => {
-  filters.guarantor = val;
-  pagination.currentPage = 1;
+// DAFTAR PASIEN Table State (terhubung langsung ke database backend)
+const patientTableList = ref([]);
+const patientTableLoading = ref(false);
+const patientTablePagination = reactive({
+  currentPage: 1,
+  perPage: 10,
+  total: 0,
+  lastPage: 1,
+  from: 0,
+  to: 0
+});
+const patientTableGuarantor = ref('all');
+const guarantorList = ref([]);
+const loadingGuarantors = ref(false);
+
+const getStoredPrintedConsents = () => {
+  try {
+    const raw = localStorage.getItem('bigsirs_printed_general_consents');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 };
 
-const handleTableSearchChange = (val) => {
-  searchQuery.value = val;
-  pagination.currentPage = 1;
+const saveStoredPrintedConsent = (id) => {
+  try {
+    if (!id) return;
+    const list = getStoredPrintedConsents();
+    const strId = String(id);
+    if (!list.includes(strId)) {
+      list.push(strId);
+      localStorage.setItem('bigsirs_printed_general_consents', JSON.stringify(list));
+    }
+  } catch {}
+};
+
+const loadGuarantors = async () => {
+  loadingGuarantors.value = true;
+  try {
+    const res = await guarantorsService.getGuarantors({ per_page: 100, is_active: true });
+    guarantorList.value = res.data || [];
+  } catch {
+    guarantorList.value = [];
+  } finally {
+    loadingGuarantors.value = false;
+  }
+};
+const patientTableSort = reactive({
+  key: '',
+  direction: 'asc'
+});
+
+const loadPatientTable = async () => {
+  patientTableLoading.value = true;
+  try {
+    const params = {
+      page: patientTablePagination.currentPage,
+      per_page: patientTablePagination.perPage
+    };
+    if (patientTableGuarantor.value !== 'all') {
+      params.guarantor = patientTableGuarantor.value;
+    }
+    const res = await patientService.searchPatients(params);
+    const rawData = res.data?.data || [];
+    const meta = res.data?.meta || {};
+
+    patientTablePagination.total = meta.total ?? rawData.length;
+    patientTablePagination.currentPage = meta.current_page ?? 1;
+    patientTablePagination.lastPage = meta.last_page ?? 1;
+    patientTablePagination.from = meta.from ?? (rawData.length > 0 ? (patientTablePagination.currentPage - 1) * patientTablePagination.perPage + 1 : 0);
+    patientTablePagination.to = meta.to ?? (rawData.length > 0 ? patientTablePagination.from + rawData.length - 1 : 0);
+
+    const printedConsents = getStoredPrintedConsents();
+    patientTableList.value = rawData.map((p) => {
+      const adm = p.admission || {};
+      const isPrinted = printedConsents.includes(String(p.id)) || 
+                        (adm.id && printedConsents.includes(String(adm.id))) ||
+                        adm.general_consent === 'Sudah diprint';
+      return {
+        id: p.id,
+        patient_id: p.id,
+        admission_id: adm.id || null,
+        visit_id: adm.visit_id || null,
+        rawPatient: p,
+        admission: adm,
+        queue_number: '—',
+        admission_date: adm.date || p.birth_date || '—',
+        admission_time: adm.time || '—',
+        patient_name: p.name,
+        medical_record_number: p.medical_record_number,
+        gender: p.gender,
+        birth_date: p.birth_date,
+        phone: p.phone,
+        address: p.address,
+        polyclinic: adm.polyclinic || 'Poli Umum',
+        notes: adm.notes || '',
+        guarantor_type: (p.guarantor && typeof p.guarantor === 'string')
+          ? p.guarantor
+          : (p.guarantor?.name || p.guarantor?.jenis_asuransi || 'UMUM'),
+        general_consent: isPrinted ? 'Sudah diprint' : 'Belum diprint'
+      };
+    });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Data',
+      message: err.response?.data?.message || 'Gagal memuat daftar pasien dari database.'
+    });
+  } finally {
+    patientTableLoading.value = false;
+  }
+};
+
+const handlePatientGuarantorChange = (val) => {
+  patientTableGuarantor.value = val;
+  patientTablePagination.currentPage = 1;
+  loadPatientTable();
+};
+
+const handlePatientResetFilter = () => {
+  patientTableGuarantor.value = 'all';
+  patientTablePagination.currentPage = 1;
+  loadPatientTable();
+};
+
+const handlePatientPerPageChange = (val) => {
+  patientTablePagination.perPage = val;
+  patientTablePagination.currentPage = 1;
+  loadPatientTable();
+};
+
+const handlePatientPageChange = (page) => {
+  patientTablePagination.currentPage = page;
+  loadPatientTable();
+};
+
+const handlePatientSort = (key) => {
+  if (patientTableSort.key === key) {
+    patientTableSort.direction = patientTableSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    patientTableSort.key = key;
+    patientTableSort.direction = 'asc';
+  }
+
+  patientTableList.value.sort((a, b) => {
+    let valA = a[key] || '';
+    let valB = b[key] || '';
+    if (key === 'nama') {
+      valA = a.patient_name;
+      valB = b.patient_name;
+    } else if (key === 'asuransi') {
+      valA = a.guarantor_type;
+      valB = b.guarantor_type;
+    }
+    const cmp = String(valA).localeCompare(String(valB), 'id', { numeric: true });
+    return patientTableSort.direction === 'asc' ? cmp : -cmp;
+  });
+};
+
+onMounted(() => {
+  loadGuarantors();
+  loadPatientTable();
+});
+
+// Table Filter Handlers (DAFTAR PASIEN)
+const handleGuarantorChange = (val) => {
+  handlePatientGuarantorChange(val);
 };
 
 const handleResetListFilter = () => {
-  filters.guarantor = 'all';
-  searchQuery.value = '';
-  pagination.currentPage = 1;
+  handlePatientResetFilter();
 };
 
 // Tools Dropdown Action Handlers
 const handleOpenEditAdmission = (item) => {
-  activeAdmission.value = item;
-  isEditAdmissionOpen.value = true;
+  const admissionId = item.admission_id || item.admission?.id;
+  if (!admissionId) {
+    showToast({
+      type: 'warning',
+      title: 'Admisi Belum Tersedia',
+      message: `Pasien ${item.patient_name || ''} belum memiliki riwayat admisi untuk diedit.`
+    });
+    return;
+  }
+  const query = { from: 'pendaftaran' };
+  const visitId = item.visit_id || item.admission?.visit_id;
+  if (visitId) {
+    query.visit_id = visitId;
+  }
+  router.push({
+    name: 'registration.admission-edit',
+    params: { id: admissionId },
+    query
+  });
 };
 
 const handleSaveEditAdmission = ({ id, payload }) => {
-  const res = updateAdmission(id, payload);
-  if (res.success) {
-    isEditAdmissionOpen.value = false;
-    showToast({
-      type: 'success',
-      title: 'Admisi Diperbarui',
-      message: `Data admisi ${res.item.patient_name} berhasil diperbarui.`
-    });
+  const item = patientTableList.value.find((p) => p.id === id);
+  if (item) {
+    if (payload.polyclinic) item.polyclinic = payload.polyclinic;
+    if (payload.notes !== undefined) item.notes = payload.notes;
+    if (payload.guarantor_type) item.guarantor_type = payload.guarantor_type;
   }
+  isEditAdmissionOpen.value = false;
+  showToast({
+    type: 'success',
+    title: 'Admisi Diperbarui',
+    message: `Data admisi ${item ? item.patient_name : ''} berhasil diperbarui.`
+  });
 };
 
 const handleOpenDeleteAdmission = (item) => {
@@ -247,18 +543,15 @@ const handleOpenDeleteAdmission = (item) => {
 
 const handleConfirmDeleteAdmission = () => {
   if (!activeAdmission.value) return;
-  const res = deleteAdmission(activeAdmission.value.id);
+  const deletedName = activeAdmission.value.patient_name;
+  patientTableList.value = patientTableList.value.filter((p) => p.id !== activeAdmission.value.id);
+  patientTablePagination.total = Math.max(0, patientTablePagination.total - 1);
   isDeleteDialogOpen.value = false;
-  if (res.success) {
-    if (paginatedAdmissions.value.length === 0 && pagination.currentPage > 1) {
-      pagination.currentPage -= 1;
-    }
-    showToast({
-      type: 'warning',
-      title: 'Admisi Dihapus',
-      message: `Data kunjungan admisi ${res.item.patient_name} (${res.item.queue_number}) telah dihapus dari daftar.`
-    });
-  }
+  showToast({
+    type: 'warning',
+    title: 'Admisi Dihapus',
+    message: `Data kunjungan admisi ${deletedName} telah dihapus dari daftar.`
+  });
   activeAdmission.value = null;
 };
 
@@ -266,14 +559,37 @@ const handleOpenPrintDocument = ({ item, documentType }) => {
   activeAdmission.value = item;
   printDocType.value = documentType || 'No. Antrean';
   isPrintModalOpen.value = true;
+
+  const dt = String(documentType || '').toLowerCase();
+  if (dt.includes('consent') || dt.includes('persetujuan')) {
+    item.general_consent = 'Sudah diprint';
+    const row = patientTableList.value.find((p) => p.id === item.id);
+    if (row) {
+      row.general_consent = 'Sudah diprint';
+    }
+    saveStoredPrintedConsent(item.id);
+    if (item.admission_id) saveStoredPrintedConsent(item.admission_id);
+  }
 };
 
 const handleConfirmPrint = ({ documentType, admission }) => {
   isPrintModalOpen.value = false;
+  const dt = String(documentType || '').toLowerCase();
+  if (dt.includes('consent') || dt.includes('persetujuan')) {
+    if (admission) {
+      admission.general_consent = 'Sudah diprint';
+      const row = patientTableList.value.find((p) => p.id === admission.id);
+      if (row) {
+        row.general_consent = 'Sudah diprint';
+      }
+      saveStoredPrintedConsent(admission.id);
+      if (admission.admission_id) saveStoredPrintedConsent(admission.admission_id);
+    }
+  }
   showToast({
     type: 'success',
     title: 'Cetak Dokumen Diproses',
-    message: `Dokumen ${documentType} untuk ${admission.patient_name} (${admission.medical_record_number}) berhasil dicetak (Simulasi).`
+    message: `Dokumen ${documentType} untuk ${admission?.patient_name || 'pasien'} (${admission?.medical_record_number || ''}) berhasil diproses cetak.`
   });
 };
 
@@ -283,21 +599,14 @@ const handleCloseNewAdmission = () => {
 };
 
 const handleSubmitNewAdmission = (newRecordData) => {
-  const res = addAdmission(newRecordData);
-  if (res.success) {
-    isNewAdmissionOpen.value = false;
-    selectedPatientForAdmission.value = null;
-    if (filters.guarantor !== 'all' && filters.guarantor !== res.record.guarantor_type) {
-      filters.guarantor = 'all';
-    }
-    searchQuery.value = '';
-    pagination.currentPage = 1;
-    showToast({
-      type: 'success',
-      title: 'Admisi Berhasil Didaftarkan',
-      message: `${res.record.patient_name} berhasil ditambahkan ke daftar pasien (${res.record.polyclinic}).`
-    });
-  }
+  isNewAdmissionOpen.value = false;
+  selectedPatientForAdmission.value = null;
+  showToast({
+    type: 'success',
+    title: 'Admisi Berhasil Didaftarkan',
+    message: `${newRecordData.patient_name || 'Pasien'} berhasil ditambahkan ke daftar pasien (${newRecordData.polyclinic || 'Poli'}).`
+  });
+  loadPatientTable();
 };
 </script>
 
@@ -332,12 +641,15 @@ const handleSubmitNewAdmission = (newRecordData) => {
           v-model:birthDate="patientBirthDate"
           :results="patientResults"
           :has-searched="hasSearchedPatient"
+          :loading="isSearchingPatient"
           :validation-error="searchValidationError"
           @search="handleSearchPatient"
           @reset="handleResetSearch"
           @register-new="handleNavigateRegisterNew"
           @open-kyc="handleOpenKyc"
           @view-detail="handleViewPatientDetail"
+          @edit-patient="handleOpenEditPatient"
+          @delete-patient="handleOpenDeletePatient"
           @admit-patient="handleAdmitFromSearch"
         />
 
@@ -350,29 +662,30 @@ const handleSubmitNewAdmission = (newRecordData) => {
         />
       </div>
 
-      <!-- Bottom Card: DAFTAR PASIEN -->
+      <!-- Bottom Card: DAFTAR PASIEN (Real Database Data) -->
       <RegistrationPatientListCard
-        :admissions="paginatedAdmissions"
-        :total-count="paginationInfo.total"
-        :current-page="paginationInfo.current_page"
-        :last-page="paginationInfo.last_page"
-        :per-page="pagination.perPage"
-        :from="paginationInfo.from"
-        :to="paginationInfo.to"
-        :guarantor-filter="filters.guarantor"
-        :table-search="searchQuery"
-        :sort-key="sort.key"
-        :sort-direction="sort.direction"
-        :loading="loading"
-        @update:guarantorFilter="handleGuarantorChange"
-        @update:perPage="setPerPage"
-        @update:tableSearch="handleTableSearchChange"
-        @page-change="setPage"
-        @sort="setSort"
+        :admissions="patientTableList"
+        :total-count="patientTablePagination.total"
+        :current-page="patientTablePagination.currentPage"
+        :last-page="patientTablePagination.lastPage"
+        :per-page="patientTablePagination.perPage"
+        :from="patientTablePagination.from"
+        :to="patientTablePagination.to"
+        :guarantor-filter="patientTableGuarantor"
+        :guarantor-options="guarantorList"
+        :loading-guarantors="loadingGuarantors"
+        :sort-key="patientTableSort.key"
+        :sort-direction="patientTableSort.direction"
+        :loading="patientTableLoading"
+        @update:guarantorFilter="handlePatientGuarantorChange"
+        @update:perPage="handlePatientPerPageChange"
+        @page-change="handlePatientPageChange"
+        @sort="handlePatientSort"
+        @admit-patient="handleAdmitPatient"
         @edit-admission="handleOpenEditAdmission"
         @delete-admission="handleOpenDeleteAdmission"
         @print-document="handleOpenPrintDocument"
-        @reset-filter="handleResetListFilter"
+        @reset-filter="handlePatientResetFilter"
       />
     </div>
 
@@ -389,6 +702,25 @@ const handleSubmitNewAdmission = (newRecordData) => {
       :patient="patientInDetail"
       @close="isPatientDetailOpen = false"
       @select="handleAdmitFromSearch"
+    />
+
+    <PatientEditModal
+      :is-open="isEditPatientOpen"
+      :patient="patientToEdit"
+      :guarantor-options="guarantorList"
+      @close="isEditPatientOpen = false"
+      @saved="handleSaveEditPatient"
+    />
+
+    <MasterDataDeleteDialog
+      :is-open="isDeletePatientOpen"
+      title="Konfirmasi Penonaktifan Pasien"
+      :item-name="patientToDelete ? `${patientToDelete.name} (${patientToDelete.medical_record_number})` : ''"
+      :is-submitting="isDeletingPatient"
+      warning-message="Pasien yang dinonaktifkan tidak akan muncul lagi pada pencarian aktif. Pasien dengan riwayat admisi/kunjungan tidak dapat dihapus demi integritas rekam medis."
+      confirm-text="Nonaktifkan Pasien"
+      @close="isDeletePatientOpen = false"
+      @confirm="handleConfirmDeletePatient"
     />
 
     <AdmissionNewModal
@@ -450,7 +782,17 @@ const handleSubmitNewAdmission = (newRecordData) => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
   gap: 1.25rem;
-  align-items: stretch;
+  align-items: start;
+}
+
+.top-cards-grid :deep(.registration-search-card) {
+  min-width: 0;
+  height: auto;
+}
+
+.top-cards-grid :deep(.registration-queue-card) {
+  height: fit-content;
+  align-self: start;
 }
 
 @media (max-width: 1024px) {

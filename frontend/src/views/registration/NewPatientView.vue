@@ -1,9 +1,12 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
-import { mockPatients } from '@/mocks/patients';
+import patientService from '@/services/patient.service';
+import lookupService from '@/services/lookup.service';
+import { guarantorsService } from '@/services/master-data/guarantors.service';
+import { occupationsService } from '@/services/master-data/occupations.service';
 
 const router = useRouter();
 
@@ -25,7 +28,7 @@ const closeToast = () => {
 
 // Form State
 const form = ref({
-  // Left Column
+  // Left Column: Identitas & Alamat Pasien
   nik: '',
   ihs_number: '',
   name: '',
@@ -35,11 +38,16 @@ const form = ref({
   nationality: 'WNI',
   address: '',
   region: '',
+  province_id: '',
+  regency_id: '',
+  district_id: '',
+  village_id: '',
   postal_code: '',
   phone: '',
   education: '',
+  education_id: '',
 
-  // Right Column
+  // Right Column: Informasi Medis & Sosial
   has_allergy: 'Tidak Ada',
   allergy_notes: '',
   is_fast_track: 'Tidak',
@@ -47,8 +55,11 @@ const form = ref({
   religion: 'ISLAM',
   marital_status: 'BELUM KAWIN',
   occupation: '',
+  occupation_id: '',
   guarantor: '',
+  guarantor_id: '',
   insurance_number: '',
+  hak_kelas: '',
 
   // Emergency Contact
   emergency_contact: {
@@ -69,41 +80,226 @@ const isSuccessModalOpen = ref(false);
 const registeredPatient = ref(null);
 const errors = ref({});
 
-// Wilayah Autocomplete Options
+// Master Data Lists (Database live via API)
+const educations = ref([]);
+const occupations = ref([]);
+const guarantorList = ref([]);
+
+const loadingEducations = ref(false);
+const loadingOccupations = ref(false);
+const loadingGuarantors = ref(false);
+
+// Wilayah Autocomplete State
 const wilayahSearchQuery = ref('');
 const isWilayahDropdownOpen = ref(false);
-const mockWilayahList = [
-  { kelurahan: 'Sosromenduran', kecamatan: 'Gedongtengen', kota: 'Kota Yogyakarta', provinsi: 'D.I. Yogyakarta', kodepos: '55271' },
-  { kelurahan: 'Caturtunggal', kecamatan: 'Depok', kota: 'Kabupaten Sleman', provinsi: 'D.I. Yogyakarta', kodepos: '55281' },
-  { kelurahan: 'Sinduharjo', kecamatan: 'Ngaglik', kota: 'Kabupaten Sleman', provinsi: 'D.I. Yogyakarta', kodepos: '55581' },
-  { kelurahan: 'Trihanggo', kecamatan: 'Gamping', kota: 'Kabupaten Sleman', provinsi: 'D.I. Yogyakarta', kodepos: '55291' },
-  { kelurahan: 'Banguntapan', kecamatan: 'Banguntapan', kota: 'Kabupaten Bantul', provinsi: 'D.I. Yogyakarta', kodepos: '55198' },
-  { kelurahan: 'Mantrijeron', kecamatan: 'Mantrijeron', kota: 'Kota Yogyakarta', provinsi: 'D.I. Yogyakarta', kodepos: '55143' },
-  { kelurahan: 'Kotagede', kecamatan: 'Kotagede', kota: 'Kota Yogyakarta', provinsi: 'D.I. Yogyakarta', kodepos: '55172' },
-  { kelurahan: 'Condongcatur', kecamatan: 'Depok', kota: 'Kabupaten Sleman', provinsi: 'D.I. Yogyakarta', kodepos: '55283' },
-  { kelurahan: 'Maguwoharjo', kecamatan: 'Depok', kota: 'Kabupaten Sleman', provinsi: 'D.I. Yogyakarta', kodepos: '55282' },
-  { kelurahan: 'Sariharjo', kecamatan: 'Ngaglik', kota: 'Kabupaten Sleman', provinsi: 'D.I. Yogyakarta', kodepos: '55581' }
-];
+const apiWilayahList = ref([]);
+const isSearchingWilayah = ref(false);
 
-const filteredWilayah = computed(() => {
-  if (!wilayahSearchQuery.value) return mockWilayahList;
-  const q = wilayahSearchQuery.value.toLowerCase();
-  return mockWilayahList.filter(w =>
-    w.kelurahan.toLowerCase().includes(q) ||
-    w.kecamatan.toLowerCase().includes(q) ||
-    w.kota.toLowerCase().includes(q)
-  );
+let wilayahSearchTimer = null;
+const handleWilayahInput = () => {
+  // Jika teks diketik ulang atau diubah setelah memilih, reset pilihan lama
+  if (form.value.village_id && wilayahSearchQuery.value !== form.value.region) {
+    form.value.village_id = '';
+    form.value.district_id = '';
+    form.value.regency_id = '';
+    form.value.province_id = '';
+    form.value.region = '';
+  }
+
+  isWilayahDropdownOpen.value = true;
+  clearTimeout(wilayahSearchTimer);
+  const q = wilayahSearchQuery.value.trim();
+  if (!q || q.length < 2) {
+    apiWilayahList.value = [];
+    return;
+  }
+  wilayahSearchTimer = setTimeout(async () => {
+    isSearchingWilayah.value = true;
+    try {
+      const res = await lookupService.getVillages({ search: q });
+      apiWilayahList.value = Array.isArray(res) ? res : [];
+    } catch {
+      apiWilayahList.value = [];
+    } finally {
+      isSearchingWilayah.value = false;
+    }
+  }, 250);
+};
+
+const handleWilayahFocus = () => {
+  if (apiWilayahList.value.length > 0) {
+    isWilayahDropdownOpen.value = true;
+  }
+};
+
+const displayWilayahList = computed(() => {
+  return apiWilayahList.value.map((v) => ({
+    id: v.id,
+    code: v.code,
+    name: v.name,
+    district_id: v.district_id,
+    district_name: v.district_name || v.district?.name || '-',
+    regency_id: v.regency_id || v.district?.regency?.id,
+    regency_name: v.regency_name || v.district?.regency?.name || '-',
+    province_id: v.province_id || v.district?.regency?.province?.id,
+    province_name: v.province_name || v.district?.regency?.province?.name || '',
+    kodepos: v.postal_code || (v.code ? String(v.code).slice(-5) : ''),
+  }));
 });
 
 const selectWilayah = (item) => {
-  form.value.region = `${item.kelurahan}, ${item.kecamatan}, ${item.kota}`;
+  const parts = [
+    item.name,
+    item.district_name ? `Kec. ${item.district_name}` : '',
+    item.regency_name,
+    item.province_name
+  ].filter(Boolean);
+
+  form.value.region = parts.join(' — ');
+  form.value.village_id = item.id ? String(item.id) : '';
+  form.value.district_id = item.district_id ? String(item.district_id) : '';
+  form.value.regency_id = item.regency_id ? String(item.regency_id) : '';
+  form.value.province_id = item.province_id ? String(item.province_id) : '';
   wilayahSearchQuery.value = form.value.region;
-  if (!form.value.postal_code) {
+
+  if (item.kodepos) {
     form.value.postal_code = item.kodepos;
   }
   isWilayahDropdownOpen.value = false;
   if (errors.value.region) delete errors.value.region;
+  if (errors.value.village_id) delete errors.value.village_id;
+  if (errors.value.district_id) delete errors.value.district_id;
+  if (errors.value.regency_id) delete errors.value.regency_id;
+  if (errors.value.province_id) delete errors.value.province_id;
 };
+
+const clearWilayah = () => {
+  form.value.region = '';
+  form.value.village_id = '';
+  form.value.district_id = '';
+  form.value.regency_id = '';
+  form.value.province_id = '';
+  wilayahSearchQuery.value = '';
+  apiWilayahList.value = [];
+  isWilayahDropdownOpen.value = false;
+  if (errors.value.region) delete errors.value.region;
+  if (errors.value.village_id) delete errors.value.village_id;
+  if (errors.value.district_id) delete errors.value.district_id;
+  if (errors.value.regency_id) delete errors.value.regency_id;
+  if (errors.value.province_id) delete errors.value.province_id;
+};
+
+const onEducationChange = () => {
+  const selected = educations.value.find((e) => String(e.id) === String(form.value.education_id));
+  form.value.education = selected ? (selected.name || selected.pendidikan) : '';
+  if (errors.value.education_id) delete errors.value.education_id;
+};
+
+const onOccupationChange = () => {
+  const selected = occupations.value.find((o) => String(o.id) === String(form.value.occupation_id));
+  form.value.occupation = selected ? (selected.name || selected.pekerjaan) : '';
+  if (errors.value.occupation_id) delete errors.value.occupation_id;
+};
+
+const selectedGuarantor = computed(() => {
+  return guarantorList.value.find((g) => String(g.id) === String(form.value.guarantor_id));
+});
+
+const isBpjsOrInsurance = computed(() => {
+  if (!selectedGuarantor.value) return false;
+  const t = String(selectedGuarantor.value.type || '').toUpperCase();
+  const n = String(selectedGuarantor.value.name || '').toUpperCase();
+  return t === 'BPJS' || t === 'PRIVATE' || n.includes('BPJS') || n.includes('JKN') || n.includes('ASURANSI');
+});
+
+const isCheckingBpjs = ref(false);
+const bpjsCheckError = ref('');
+
+const handleCheckBpjs = () => {
+  const card = form.value.insurance_number ? form.value.insurance_number.trim() : '';
+  if (!card || card.length < 8) {
+    bpjsCheckError.value = 'No.Kartu Tidak Sesuai';
+    return;
+  }
+  bpjsCheckError.value = '';
+  if (!form.value.hak_kelas) {
+    form.value.hak_kelas = 'Kelas 1';
+  }
+  if (errors.value.hak_kelas) delete errors.value.hak_kelas;
+};
+
+const onGuarantorChange = () => {
+  if (selectedGuarantor.value) {
+    form.value.guarantor = selectedGuarantor.value.name;
+  } else {
+    form.value.guarantor = '';
+  }
+  if (!isBpjsOrInsurance.value) {
+    form.value.insurance_number = '';
+    form.value.hak_kelas = '';
+    bpjsCheckError.value = '';
+  }
+  if (errors.value.guarantor_id) delete errors.value.guarantor_id;
+  if (errors.value.guarantor) delete errors.value.guarantor;
+};
+
+onMounted(async () => {
+  // Master Pendidikan
+  loadingEducations.value = true;
+  try {
+    const edus = await lookupService.getEducations();
+    educations.value = Array.isArray(edus) ? edus : [];
+  } catch (err) {
+    console.error('Gagal memuat master pendidikan:', err);
+  } finally {
+    loadingEducations.value = false;
+  }
+
+  // Master Pekerjaan (Pengambilan data dari Master Data => Data Dasar => Pekerjaan)
+  loadingOccupations.value = true;
+  try {
+    const res = await occupationsService.getOccupations({ per_page: 100, is_active: true, sort_by: 'name', sort_desc: false });
+    const rawData = res.data || res;
+    let list = Array.isArray(rawData) ? rawData : [];
+    if (list.length === 0) {
+      const fallback = await lookupService.getOccupations();
+      list = Array.isArray(fallback) ? fallback : [];
+    }
+    list.sort((a, b) => {
+      const nameA = String(a.name || a.pekerjaan || '').toLowerCase();
+      const nameB = String(b.name || b.pekerjaan || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'id');
+    });
+    occupations.value = list;
+  } catch (err) {
+    console.error('Gagal memuat master pekerjaan dari Master Data:', err);
+    try {
+      const fallback = await lookupService.getOccupations();
+      const list = Array.isArray(fallback) ? fallback : [];
+      list.sort((a, b) => {
+        const nameA = String(a.name || a.pekerjaan || '').toLowerCase();
+        const nameB = String(b.name || b.pekerjaan || '').toLowerCase();
+        return nameA.localeCompare(nameB, 'id');
+      });
+      occupations.value = list;
+    } catch {
+      occupations.value = [];
+    }
+  } finally {
+    loadingOccupations.value = false;
+  }
+
+  // Master Jenis Jaminan
+  loadingGuarantors.value = true;
+  try {
+    const res = await guarantorsService.getGuarantors({ per_page: 100, is_active: true });
+    guarantorList.value = res.data || [];
+  } catch (err) {
+    console.error('Gagal memuat master jenis jaminan:', err);
+  } finally {
+    loadingGuarantors.value = false;
+  }
+});
 
 // Auto Age Calculation
 const computedAge = computed(() => {
@@ -121,7 +317,7 @@ const computedAge = computed(() => {
   return `${years} Thn ${months} Bln`;
 });
 
-// Tarik Nomor IHS SatuSehat (Mock Service)
+// Tarik Nomor IHS SatuSehat
 const fetchIHS = () => {
   if (!form.value.nik || form.value.nik.length < 16) {
     showToast({
@@ -135,22 +331,24 @@ const fetchIHS = () => {
   isFetchingIHS.value = true;
   setTimeout(() => {
     isFetchingIHS.value = false;
-    const randomIhs = 'P' + Math.floor(1000000000 + Math.random() * 9000000000);
-    form.value.ihs_number = randomIhs;
     showToast({
-      type: 'success',
-      title: 'IHS SatuSehat Terverifikasi',
-      message: `Berhasil menarik No. IHS (${randomIhs}) dari Kemenkes SatuSehat.`
+      type: 'info',
+      title: 'Layanan SATUSEHAT Kemenkes',
+      message: 'Koneksi SATUSEHAT belum dikonfigurasi pada environment ini. Silakan masukkan No. IHS secara manual jika sudah tersedia.'
     });
-  }, 600);
+  }, 400);
 };
 
 // Form Validation
 const validateForm = () => {
   const err = {};
-  if (!form.value.nik || form.value.nik.trim().length !== 16) {
+  const nikTrimmed = (form.value.nik || '').trim();
+  if (!nikTrimmed || nikTrimmed.length !== 16) {
     err.nik = 'NIK wajib diisi 16 digit angka sesuai KTP/KIA.';
+  } else if (!/^[0-9]{16}$/.test(nikTrimmed)) {
+    err.nik = 'NIK harus berupa 16 digit angka.';
   }
+
   if (!form.value.name || !form.value.name.trim()) {
     err.name = 'Nama lengkap wajib diisi.';
   }
@@ -159,6 +357,11 @@ const validateForm = () => {
   }
   if (!form.value.birth_date) {
     err.birth_date = 'Tanggal lahir wajib diisi.';
+  } else {
+    const today = new Date().toISOString().split('T')[0];
+    if (form.value.birth_date > today) {
+      err.birth_date = 'Tanggal lahir tidak boleh melebihi hari ini.';
+    }
   }
   if (!form.value.gender) {
     err.gender = 'Jenis kelamin wajib dipilih.';
@@ -166,14 +369,20 @@ const validateForm = () => {
   if (!form.value.address || !form.value.address.trim()) {
     err.address = 'Alamat domisili wajib diisi.';
   }
-  if (!form.value.region || !form.value.region.trim()) {
-    err.region = 'Wilayah wajib dipilih/diisi.';
+  if (!form.value.region || !form.value.region.trim() || !form.value.village_id) {
+    err.region = 'Data wilayah belum lengkap atau tidak sesuai. Silakan pilih ulang wilayah dari hasil pencarian.';
   }
   if (!form.value.phone || !form.value.phone.trim()) {
     err.phone = 'Nomor HP wajib diisi.';
   }
-  if (!form.value.guarantor) {
-    err.guarantor = 'Jenis jaminan wajib dipilih.';
+  if (!form.value.guarantor_id && !form.value.guarantor) {
+    err.guarantor_id = 'Jenis jaminan wajib dipilih.';
+  }
+  if (isBpjsOrInsurance.value && (!form.value.insurance_number || !form.value.insurance_number.trim())) {
+    err.insurance_number = 'No. Jaminan / No. BPJS wajib diisi untuk penjamin BPJS/Asuransi.';
+  }
+  if (isBpjsOrInsurance.value && (!form.value.hak_kelas || !form.value.hak_kelas.trim())) {
+    err.hak_kelas = 'Hak kelas wajib diisi untuk penjamin non-Umum/Gratis.';
   }
 
   errors.value = err;
@@ -192,9 +401,14 @@ const handleReset = () => {
     nationality: 'WNI',
     address: '',
     region: '',
+    province_id: '',
+    regency_id: '',
+    district_id: '',
+    village_id: '',
     postal_code: '',
     phone: '',
     education: '',
+    education_id: '',
     has_allergy: 'Tidak Ada',
     allergy_notes: '',
     is_fast_track: 'Tidak',
@@ -202,7 +416,9 @@ const handleReset = () => {
     religion: 'ISLAM',
     marital_status: 'BELUM KAWIN',
     occupation: '',
+    occupation_id: '',
     guarantor: '',
+    guarantor_id: '',
     insurance_number: '',
     emergency_contact: {
       name: '',
@@ -213,11 +429,12 @@ const handleReset = () => {
     patient_category: 'PASIEN'
   };
   wilayahSearchQuery.value = '';
+  apiWilayahList.value = [];
   errors.value = {};
 };
 
 // Submit Handler
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!validateForm()) {
     showToast({
       type: 'danger',
@@ -228,53 +445,102 @@ const handleSubmit = () => {
   }
 
   isSubmitting.value = true;
+  errors.value = {};
 
-  setTimeout(() => {
-    isSubmitting.value = false;
-
-    const lastId = mockPatients.length > 0 ? Math.max(...mockPatients.map(p => p.id)) : 0;
-    const newId = lastId + 1;
-    const paddedNum = String(newId).padStart(6, '0');
-    const newRM = `RM-${paddedNum}`;
-
-    const newPatient = {
-      id: newId,
-      medical_record_number: newRM,
-      nik: form.value.nik,
-      name: form.value.name,
-      birth_place: form.value.birth_place,
+  try {
+    const payload = {
+      nik: form.value.nik ? form.value.nik.trim() : null,
+      ihs_number: form.value.ihs_number ? form.value.ihs_number.trim() : null,
+      name: form.value.name.trim(),
+      birth_place: form.value.birth_place.trim(),
       birth_date: form.value.birth_date,
       gender: form.value.gender,
       nationality: form.value.nationality,
-      phone: form.value.phone,
-      address: form.value.address,
-      region: form.value.region,
-      postal_code: form.value.postal_code,
-      education: form.value.education || '-',
-      occupation: form.value.occupation || '-',
+      address: form.value.address.trim(),
+      region: form.value.region || null,
+      province_id: form.value.province_id || null,
+      regency_id: form.value.regency_id || null,
+      district_id: form.value.district_id || null,
+      village_id: form.value.village_id || null,
+      postal_code: form.value.postal_code ? form.value.postal_code.trim() : null,
+      phone: form.value.phone.trim(),
+      education_id: form.value.education_id ? Number(form.value.education_id) : null,
+      education: educations.value.find((e) => String(e.id) === String(form.value.education_id))?.name || form.value.education || null,
+      occupation_id: form.value.occupation_id ? Number(form.value.occupation_id) : null,
+      occupation: occupations.value.find((o) => String(o.id) === String(form.value.occupation_id))?.name || form.value.occupation || null,
       religion: form.value.religion,
       marital_status: form.value.marital_status,
       blood_type: form.value.blood_type,
-      guarantor: form.value.guarantor,
-      insurance_number: form.value.insurance_number || '-',
-      allergies: form.value.has_allergy === 'Ada' ? (form.value.allergy_notes || 'Ada Alergi') : 'Tidak Ada',
-      is_fast_track: form.value.is_fast_track === 'Ya',
-      ihs_number: form.value.ihs_number || '-',
-      emergency_contact: { ...form.value.emergency_contact },
-      is_active: true,
-      registered_at: new Date().toISOString().split('T')[0]
+      guarantor_id: form.value.guarantor_id ? Number(form.value.guarantor_id) : null,
+      guarantor: selectedGuarantor.value?.name || form.value.guarantor || null,
+      insurance_number: form.value.insurance_number ? form.value.insurance_number.trim() : null,
+      hak_kelas: isBpjsOrInsurance.value ? (form.value.hak_kelas ? form.value.hak_kelas.trim() : null) : null,
+      has_allergy: form.value.has_allergy === 'Ada' ? 'ada' : 'tidak',
+      allergy_notes: form.value.has_allergy === 'Ada' ? (form.value.allergy_notes ? form.value.allergy_notes.trim() : '') : '',
+      is_fast_track: form.value.is_fast_track === 'Ya' ? 'ya' : 'tidak',
+      patient_category: form.value.patient_category || 'pasien_rs',
+      emergency_contact: {
+        name: form.value.emergency_contact?.name ? form.value.emergency_contact.name.trim() : null,
+        relationship: form.value.emergency_contact?.relationship || null,
+        phone: form.value.emergency_contact?.phone ? form.value.emergency_contact.phone.trim() : null,
+        address: form.value.emergency_contact?.address ? form.value.emergency_contact.address.trim() : null
+      }
     };
 
-    mockPatients.unshift(newPatient);
-    registeredPatient.value = newPatient;
+    const res = await patientService.createPatient(payload);
+    const createdPatient = res.data?.data || res.data;
+
+    registeredPatient.value = createdPatient;
     isSuccessModalOpen.value = true;
 
     showToast({
       type: 'success',
-      title: 'Pendaftaran Berhasil',
-      message: `Pasien ${newPatient.name} telah didaftarkan dengan No. RM ${newRM}.`
+      title: 'Notifications',
+      message: 'Registrasi berhasil. Silahkan admisi pasien, pilih jenis visit dan poliklinik yang tersedia'
     });
-  }, 500);
+
+    const targetPatientId = createdPatient?.id;
+    if (targetPatientId) {
+      setTimeout(() => {
+        router.push({
+          path: '/admisi/baru',
+          query: { patient_id: targetPatientId }
+        });
+      }, 500);
+    }
+  } catch (err) {
+    if (err.response?.status === 422 && err.response?.data?.errors) {
+      const backendErrors = err.response.data.errors;
+      const formattedErrors = {};
+      for (const key in backendErrors) {
+        formattedErrors[key] = backendErrors[key][0];
+      }
+      // Pastikan pesan error hierarki wilayah selalu muncul di input Wilayah
+      const regionErr =
+        formattedErrors.region ||
+        formattedErrors.village_id ||
+        formattedErrors.district_id ||
+        formattedErrors.regency_id ||
+        formattedErrors.province_id;
+      if (regionErr) {
+        formattedErrors.region = regionErr;
+      }
+      errors.value = formattedErrors;
+      showToast({
+        type: 'danger',
+        title: 'Validasi Gagal',
+        message: err.response.data.message || 'Periksa kembali data yang dimasukkan.'
+      });
+    } else {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Menyimpan Data Pasien',
+        message: err.response?.data?.message || 'Terjadi kesalahan sistem saat menghubungi server.'
+      });
+    }
+  } finally {
+    isSubmitting.value = false;
+  }
 };
 
 const handleBatal = () => {
@@ -289,7 +555,12 @@ const handleBatal = () => {
 
 const navigateToAdmission = () => {
   isSuccessModalOpen.value = false;
-  router.push('/admisi');
+  const patId = registeredPatient.value?.id;
+  if (patId) {
+    router.push({ path: '/admisi/baru', query: { patient_id: patId } });
+  } else {
+    router.push('/admisi/baru');
+  }
 };
 
 const registerAnother = () => {
@@ -534,10 +805,10 @@ const registerAnother = () => {
                 <span v-if="errors.address" class="error-message">{{ errors.address }}</span>
               </div>
 
-              <!-- Wilayah (by Kelurahan/Kecamatan) -->
-              <div class="form-group wilayah-picker-group" :class="{ 'has-error': errors.region }">
+              <!-- 9. Wilayah (*) Autocomplete Terpadu -->
+              <div class="form-group wilayah-picker-group" :class="{ 'has-error': errors.region || errors.village_id || errors.district_id || errors.regency_id || errors.province_id }">
                 <label class="form-label" for="wilayah">
-                  Wilayah (by Kelurahan/Kecamatan) <span class="required-mark">*</span>
+                  Wilayah <span class="required-mark">*</span>
                 </label>
                 <div class="search-input-box">
                   <input
@@ -545,37 +816,51 @@ const registerAnother = () => {
                     v-model="wilayahSearchQuery"
                     type="text"
                     class="form-input"
-                    placeholder="Cari Wilayah (by Kelurahan/Kecamatan)"
+                    placeholder="Ketik nama kelurahan / desa untuk mencari wilayah..."
                     autocomplete="off"
-                    @focus="isWilayahDropdownOpen = true"
-                    @input="isWilayahDropdownOpen = true"
+                    @focus="handleWilayahFocus"
+                    @input="handleWilayahInput"
                   />
-                  <svg class="search-trailing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <button
+                    v-if="wilayahSearchQuery"
+                    type="button"
+                    class="btn-clear-inline"
+                    title="Hapus Wilayah"
+                    @click="clearWilayah"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                  <svg v-else class="search-trailing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                   </svg>
                 </div>
 
-                <!-- Hasil Dropdown Wilayah -->
-                <div v-if="isWilayahDropdownOpen" class="wilayah-popover">
+                <!-- Hasil Dropdown Wilayah Popover -->
+                <div v-if="isWilayahDropdownOpen && displayWilayahList.length > 0" class="wilayah-popover">
                   <div
-                    v-for="(w, idx) in filteredWilayah"
+                    v-for="(w, idx) in displayWilayahList"
                     :key="idx"
                     class="wilayah-row"
                     @click="selectWilayah(w)"
                   >
                     <div class="row-main">
-                      <strong>{{ w.kelurahan }}</strong>, Kec. {{ w.kecamatan }}
+                      <strong>{{ w.name }}</strong> — Kec. {{ w.district_name }}
                     </div>
                     <div class="row-sub">
-                      {{ w.kota }}, {{ w.provinsi }} &bull; <span class="kodepos-tag">Kode Pos: {{ w.kodepos }}</span>
+                      {{ w.regency_name }} — {{ w.province_name }} &bull; <span class="kodepos-tag">Kode Pos: {{ w.kodepos || '—' }}</span>
                     </div>
                   </div>
-                  <div v-if="filteredWilayah.length === 0" class="wilayah-empty-notice">
-                    Wilayah tidak ditemukan di daftar cepat. Anda dapat mengetik manual.
-                  </div>
                 </div>
-                <span v-if="errors.region" class="error-message">{{ errors.region }}</span>
+                <div v-else-if="isWilayahDropdownOpen && wilayahSearchQuery.length >= 2 && !isSearchingWilayah" class="wilayah-popover wilayah-empty-notice">
+                  <span>Wilayah tidak ditemukan. Periksa kata kunci kelurahan/desa.</span>
+                </div>
+                <span v-if="errors.region || errors.village_id || errors.district_id || errors.regency_id || errors.province_id" class="error-message">
+                  {{ errors.region || errors.village_id || errors.district_id || errors.regency_id || errors.province_id }}
+                </span>
               </div>
 
               <!-- Kode Pos & No. HP -->
@@ -609,20 +894,16 @@ const registerAnother = () => {
                 </div>
               </div>
 
-              <!-- Tingkat Pendidikan -->
-              <div class="form-group">
+              <!-- Tingkat Pendidikan (Master Data dari Database) -->
+              <div class="form-group" :class="{ 'has-error': errors.education_id }">
                 <label class="form-label" for="education">Tingkat Pendidikan</label>
-                <select id="education" v-model="form.education" class="form-select">
-                  <option value="">-- silahkan pilih --</option>
-                  <option value="TIDAK / BELUM SEKOLAH">TIDAK / BELUM SEKOLAH</option>
-                  <option value="SD / SEDERAJAT">SD / SEDERAJAT</option>
-                  <option value="SMP / MTS">SMP / MTS</option>
-                  <option value="SMA / SMK / MA">SMA / SMK / MA</option>
-                  <option value="DIPLOMA (D1 - D3)">DIPLOMA (D1 - D3)</option>
-                  <option value="SARJANA (D4 / S1)">SARJANA (D4 / S1)</option>
-                  <option value="MAGISTER (S2)">MAGISTER (S2)</option>
-                  <option value="DOKTOR (S3)">DOKTOR (S3)</option>
+                <select id="education" v-model="form.education_id" @change="onEducationChange" class="form-select" :disabled="loadingEducations">
+                  <option value="">{{ loadingEducations ? 'Memuat Master Pendidikan...' : '-- silahkan pilih --' }}</option>
+                  <option v-for="edu in educations" :key="edu.id" :value="edu.id">
+                    {{ edu.name || edu.pendidikan }}
+                  </option>
                 </select>
+                <span v-if="errors.education_id" class="error-message">{{ errors.education_id }}</span>
               </div>
             </div>
 
@@ -727,54 +1008,99 @@ const registerAnother = () => {
               </div>
 
               <!-- Pekerjaan -->
-              <div class="form-group">
+              <div class="form-group" :class="{ 'has-error': errors.occupation_id }">
                 <label class="form-label" for="occupation">Pekerjaan</label>
-                <select id="occupation" v-model="form.occupation" class="form-select">
-                  <option value="">-- silahkan pilih --</option>
-                  <option value="PNS / ASN">PNS / ASN</option>
-                  <option value="TNI / POLRI">TNI / POLRI</option>
-                  <option value="PEGAWAI BUMN / BUMD">PEGAWAI BUMN / BUMD</option>
-                  <option value="PEGAWAI SWASTA">PEGAWAI SWASTA</option>
-                  <option value="WIRASWASTA">WIRASWASTA / PEDAGANG</option>
-                  <option value="PETANI / PETERNAK / NELAYAN">PETANI / PETERNAK / NELAYAN</option>
-                  <option value="BURUH HARIAN LEPAS">BURUH HARIAN LEPAS</option>
-                  <option value="IBU RUMAH TANGGA">IBU RUMAH TANGGA</option>
-                  <option value="PELAJAR / MAHASISWA">PELAJAR / MAHASISWA</option>
-                  <option value="PENSIUNAN">PENSIUNAN</option>
-                  <option value="BELUM / TIDAK BEKERJA">BELUM / TIDAK BEKERJA</option>
-                  <option value="LAINNYA">LAINNYA</option>
+                <select
+                  id="occupation"
+                  v-model="form.occupation_id"
+                  @change="onOccupationChange"
+                  class="form-select"
+                  :disabled="loadingOccupations"
+                >
+                  <option value="">{{ loadingOccupations ? 'Memuat Master Pekerjaan...' : '-- silahkan pilih --' }}</option>
+                  <option v-for="occ in occupations" :key="occ.id" :value="occ.id">
+                    {{ occ.name || occ.pekerjaan }}
+                  </option>
                 </select>
+                <span v-if="errors.occupation_id" class="error-message">{{ errors.occupation_id }}</span>
               </div>
 
               <!-- Jenis Jaminan & No. Jaminan -->
               <div class="form-row-2">
-                <div class="form-group" :class="{ 'has-error': errors.guarantor }">
+                <div class="form-group" :class="{ 'has-error': errors.guarantor_id || errors.guarantor }">
                   <label class="form-label" for="guarantor">
                     Jenis Jaminan <span class="required-mark">*</span>
                   </label>
-                  <select id="guarantor" v-model="form.guarantor" class="form-select">
-                    <option value="">-- silahkan pilih --</option>
-                    <option value="UMUM">UMUM (Bayar Mandiri)</option>
-                    <option value="BPJS Kesehatan">BPJS Kesehatan (JKN)</option>
-                    <option value="BPJS Ketenagakerjaan">BPJS Ketenagakerjaan</option>
-                    <option value="Asuransi Swasta">Asuransi Swasta</option>
-                    <option value="Jaminan Perusahaan">Jaminan Perusahaan</option>
-                    <option value="JAMKESDA">JAMKESDA</option>
-                    <option value="LAIN-LAIN">LAIN-LAIN</option>
+                  <select
+                    id="guarantor"
+                    v-model="form.guarantor_id"
+                    @change="onGuarantorChange"
+                    class="form-select"
+                    :disabled="loadingGuarantors"
+                  >
+                    <option value="">{{ loadingGuarantors ? 'Memuat Master Jaminan...' : '-- silahkan pilih --' }}</option>
+                    <option v-for="g in guarantorList" :key="g.id" :value="g.id">
+                      {{ g.name }}
+                    </option>
                   </select>
-                  <span v-if="errors.guarantor" class="error-message">{{ errors.guarantor }}</span>
+                  <span v-if="errors.guarantor_id || errors.guarantor" class="error-message">
+                    {{ errors.guarantor_id || errors.guarantor }}
+                  </span>
                 </div>
 
-                <div class="form-group">
-                  <label class="form-label" for="insurance_number">No. Jaminan</label>
+                <div class="form-group" :class="{ 'has-error': errors.insurance_number }">
+                  <label class="form-label" for="insurance_number">
+                    No. Jaminan
+                    <span v-if="isBpjsOrInsurance" class="required-mark">*</span>
+                  </label>
+                  <div class="input-action-group">
+                    <input
+                      id="insurance_number"
+                      v-model="form.insurance_number"
+                      type="text"
+                      class="form-input"
+                      :placeholder="isBpjsOrInsurance ? 'No jaminan' : 'Tidak diperlukan untuk pasien Umum'"
+                      autocomplete="off"
+                      @input="bpjsCheckError = ''"
+                    />
+                    <button
+                      v-if="isBpjsOrInsurance"
+                      type="button"
+                      class="btn-action-cek"
+                      :disabled="isCheckingBpjs"
+                      @click="handleCheckBpjs"
+                      title="Klik untuk mengecek kartu dan mengisi hak kelas"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                      <span>Cek</span>
+                    </button>
+                  </div>
+                  <span v-if="errors.insurance_number" class="error-message">{{ errors.insurance_number }}</span>
+                  <div v-if="bpjsCheckError" class="bpjs-warning-box">
+                    <span>{{ bpjsCheckError }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hak Kelas (Khusus Penjamin Non-Umum/Gratis) -->
+              <div v-if="isBpjsOrInsurance" class="form-row-2 hak-kelas-row">
+                <div class="form-group"></div>
+                <div class="form-group" :class="{ 'has-error': errors.hak_kelas }">
+                  <label class="form-label" for="hak_kelas">
+                    Hak Kelas <span class="required-mark">*</span>
+                  </label>
                   <input
-                    id="insurance_number"
-                    v-model="form.insurance_number"
+                    id="hak_kelas"
+                    v-model="form.hak_kelas"
                     type="text"
                     class="form-input"
-                    placeholder="No. Jaminan"
+                    placeholder="Hak Kelas"
                     autocomplete="off"
                   />
+                  <span class="field-hint-text text-danger-hint">*) Klik tombol Cek untuk mengisi hak kelas</span>
+                  <span v-if="errors.hak_kelas" class="error-message">{{ errors.hak_kelas }}</span>
                 </div>
               </div>
 
@@ -1295,6 +1621,56 @@ const registerAnother = () => {
   transform: translateY(-1px);
 }
 
+.btn-action-cek {
+  height: 40px;
+  padding: 0 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: #e05260;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(224, 82, 96, 0.25);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.btn-action-cek svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-action-cek:hover:not(:disabled) {
+  background: #c53b49;
+  box-shadow: 0 4px 10px rgba(224, 82, 96, 0.35);
+  transform: translateY(-1px);
+}
+
+.bpjs-warning-box {
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.85rem;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.text-danger-hint {
+  font-size: 0.78rem;
+  color: #dc2626;
+  font-style: italic;
+  margin-top: 0.35rem;
+  display: block;
+}
+
 .btn-refresh-ihs:disabled {
   opacity: 0.65;
   cursor: not-allowed;
@@ -1475,6 +1851,33 @@ const registerAnother = () => {
   height: 16px;
   color: var(--color-text-secondary);
   pointer-events: none;
+}
+
+.btn-clear-inline {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-clear-inline:hover {
+  color: #ef4444;
+  background-color: #fee2e2;
+}
+
+.btn-clear-inline svg {
+  width: 14px;
+  height: 14px;
 }
 
 .wilayah-popover {

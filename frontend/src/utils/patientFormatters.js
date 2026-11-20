@@ -45,6 +45,25 @@ export function formatDateIndo(dateStr) {
 }
 
 /**
+ * Formats date-time string to Indonesian standard: "12 Mei 1986 • 14:30 WIB"
+ * @param {string} dateTimeStr
+ * @returns {string}
+ */
+export function formatDateTimeIndo(dateTimeStr) {
+  if (!dateTimeStr) return '—';
+  const cleanStr = String(dateTimeStr).replace(' ', 'T');
+  const d = new Date(cleanStr);
+  if (isNaN(d.getTime())) return dateTimeStr;
+
+  const day = d.getDate();
+  const month = INDO_MONTHS[d.getMonth()];
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day} ${month} ${year} • ${hours}:${minutes} WIB`;
+}
+
+/**
  * Formats birthdate and age: "12 Mei 1986 (40 th)"
  * @param {string} birthDateStr 
  * @returns {string}
@@ -84,4 +103,48 @@ export function formatGender(gender) {
   if (upper === 'L' || upper === 'LAKI-LAKI') return 'Laki-laki';
   if (upper === 'P' || upper === 'PEREMPUAN') return 'Perempuan';
   return gender;
+}
+
+/**
+ * Returns single letter gender code: 'L' or 'P'
+ * @param {string} gender
+ * @returns {string}
+ */
+export function formatGenderCode(gender) {
+  if (!gender) return '-';
+  const upper = String(gender).trim().toUpperCase();
+  if (upper.startsWith('L')) return 'L';
+  if (upper.startsWith('P') || upper.startsWith('W')) return 'P';
+  return upper.slice(0, 1);
+}
+
+/**
+ * Calculates detailed age in years, months, and days: "27 Th 2 Bl 8 hr"
+ * @param {string} birthDateStr
+ * @param {Date} [referenceDate]
+ * @returns {string}
+ */
+export function calculateDetailedAge(birthDateStr, referenceDate = new Date()) {
+  if (!birthDateStr) return '—';
+  const birth = new Date(birthDateStr);
+  if (isNaN(birth.getTime())) return '—';
+
+  const ref = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+
+  let years = ref.getFullYear() - birth.getFullYear();
+  let months = ref.getMonth() - birth.getMonth();
+  let days = ref.getDate() - birth.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const prevMonthDays = new Date(ref.getFullYear(), ref.getMonth(), 0).getDate();
+    days += prevMonthDays;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  return `${Math.max(0, years)} Th ${Math.max(0, months)} Bl ${Math.max(0, days)} hr`;
 }

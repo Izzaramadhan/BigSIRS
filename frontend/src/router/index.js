@@ -41,10 +41,24 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/pendaftaran/pasien/:id/edit',
+      alias: ['/pendaftaran/edit/:id', '/pasien/:id/edit'],
+      name: 'registration.patient-edit',
+      component: () => import('../views/registration/PatientEditView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/admisi',
       alias: ['/pendaftaran/admisi', '/admisi-rawat-jalan'],
       name: 'registration.admission',
       component: () => import('../views/admission/AdmissionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/admisi/baru',
+      alias: ['/admisi/tambah', '/admisi-rawat-jalan/baru', '/pendaftaran/admisi/baru'],
+      name: 'registration.admission-create',
+      component: () => import('../views/admission/AdmissionCreateView.vue'),
       meta: { requiresAuth: true }
     },
     {

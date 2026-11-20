@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue';
-import { maskNik, formatGender } from '@/utils/patientFormatters';
+import { ref, computed, watch } from 'vue';
+import { calculateDetailedAge, formatGenderCode } from '@/utils/patientFormatters';
 
 const props = defineProps({
   keyword: {
@@ -35,10 +35,23 @@ const emit = defineEmits([
   'search',
   'reset',
   'select-patient',
+  'view-detail',
   'register-new'
 ]);
 
 const isBirthDateFocused = ref(false);
+const perPage = ref(5);
+const currentPage = ref(1);
+
+// Sort state
+const sortKey = ref('no');
+const sortOrder = ref('asc');
+
+// Toast notification for unpaid bills
+const showUnpaidToast = ref(false);
+const unpaidToastMessage = ref(
+  'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
+);
 
 const internalKeyword = computed({
   get: () => props.keyword,
@@ -52,87 +65,165 @@ const internalBirthDate = computed({
 
 const isDateInputMode = computed(() => isBirthDateFocused.value || Boolean(props.birthDate));
 
-const hasInputOrResults = computed(() => {
-  return Boolean(props.keyword.trim() || props.birthDate || props.hasSearched);
+// Reset page when results change
+watch(
+  () => props.results,
+  (newResults) => {
+    currentPage.value = 1;
+    // If any patient has unpaid bills, display the legacy notification toast
+    if (newResults && newResults.some((p) => p.has_unpaid_bills)) {
+      showUnpaidToast.value = true;
+    } else {
+      showUnpaidToast.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+// Watch perPage changes to reset to page 1
+watch(perPage, () => {
+  currentPage.value = 1;
 });
 
-const formatDateIndo = (isoDate) => {
-  if (!isoDate) return '—';
-  const parts = String(isoDate).split('-');
-  if (parts.length !== 3) return isoDate;
-  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+// Sorted results
+const sortedResults = computed(() => {
+  if (!props.results || props.results.length === 0) return [];
+  const list = [...props.results];
+
+  return list.sort((a, b) => {
+    let valA = '';
+    let valB = '';
+
+    if (sortKey.value === 'rm') {
+      valA = String(a.medical_record_number || a.no_rm || '');
+      valB = String(b.medical_record_number || b.no_rm || '');
+    } else if (sortKey.value === 'ktp') {
+      valA = String(a.no_ktp || a.nik || '');
+      valB = String(b.no_ktp || b.nik || '');
+    } else if (sortKey.value === 'name') {
+      valA = String(a.name || a.nama || '').toLowerCase();
+      valB = String(b.name || b.nama || '').toLowerCase();
+    } else if (sortKey.value === 'birth') {
+      valA = String(a.birth_date || a.tgl_lahir || '');
+      valB = String(b.birth_date || b.tgl_lahir || '');
+    } else if (sortKey.value === 'address') {
+      valA = String(a.address || a.alamat || '').toLowerCase();
+      valB = String(b.address || b.alamat || '').toLowerCase();
+    } else {
+      valA = a.id || 0;
+      valB = b.id || 0;
+    }
+
+    if (valA < valB) return sortOrder.value === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder.value === 'asc' ? 1 : -1;
+    return 0;
+  });
+});
+
+// Paginated results
+const totalEntries = computed(() => sortedResults.value.length);
+const totalPages = computed(() => Math.ceil(totalEntries.value / perPage.value) || 1);
+
+const startIndex = computed(() => (currentPage.value - 1) * perPage.value);
+const endIndex = computed(() => Math.min(startIndex.value + perPage.value, totalEntries.value));
+
+const paginatedList = computed(() => {
+  return sortedResults.value.slice(startIndex.value, endIndex.value);
+});
+
+const showingFrom = computed(() => (totalEntries.value === 0 ? 0 : startIndex.value + 1));
+const showingTo = computed(() => endIndex.value);
+
+const handleSort = (key) => {
+  if (sortKey.value === key) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortKey.value = key;
+    sortOrder.value = 'asc';
+  }
 };
 
-const clearKeyword = () => {
-  emit('update:keyword', '');
-  if (!props.birthDate && props.hasSearched) {
-    emit('reset');
+const goToPage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
   }
 };
 
 const handleSubmit = () => {
-  emit('search');
+  emit('search', {
+    keyword: internalKeyword.value,
+    birthDate: internalBirthDate.value
+  });
 };
 
-const handleReset = () => {
-  emit('reset');
+let unpaidToastTimer = null;
+
+const handleSelectPatient = (patient) => {
+  if (patient.has_unpaid_bills) {
+    unpaidToastMessage.value =
+      patient.unpaid_billing_message ||
+      'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.';
+    showUnpaidToast.value = true;
+    if (unpaidToastTimer) clearTimeout(unpaidToastTimer);
+    unpaidToastTimer = setTimeout(() => {
+      showUnpaidToast.value = false;
+    }, 8000);
+    return;
+  }
+  showUnpaidToast.value = false;
+  emit('select-patient', patient);
+};
+
+const handleViewDetail = (patient) => {
+  emit('view-detail', patient);
+};
+
+const closeUnpaidToast = () => {
+  if (unpaidToastTimer) clearTimeout(unpaidToastTimer);
+  showUnpaidToast.value = false;
 };
 </script>
 
 <template>
   <div class="card admission-search-card">
-    <!-- Card Header -->
+    <!-- Card Header: Title with search icon, no subtitle -->
     <div class="card-header-bar">
       <div class="header-left">
-        <div class="header-icon-box" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-        </div>
-        <div>
-          <h2 class="card-title">FORM PENCARIAN PASIEN LAMA</h2>
-          <p class="card-subtitle">Cari pasien terdaftar berdasarkan NIK, No. Rekam Medis, Nama Pasien, atau Tanggal Lahir</p>
-        </div>
+        <svg
+          class="header-search-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <h2 class="card-title">FORM PENCARIAN PASIEN LAMA</h2>
       </div>
     </div>
 
-    <!-- Search Form Body -->
+    <!-- Search Form Bar -->
     <div class="search-card-body">
       <form autocomplete="off" class="old-patient-search-form" @submit.prevent="handleSubmit">
         <div class="search-controls-row">
-          <!-- Input 1: NIK / No. RM / Nama Pasien -->
+          <!-- Text Input (NIK / No. RM / Nama Pasien) -->
           <div class="search-input-group">
-            <svg class="input-leading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
             <input
               id="old-patient-query"
               v-model="internalKeyword"
               type="text"
               class="form-input old-patient-input"
               :class="{ 'has-error': Boolean(validationError) }"
-              placeholder="Masukkan Data Pasien (NIK / No. Rekam Medis / Nama Pasien)"
-              aria-label="Masukkan Data Pasien (NIK / No. Rekam Medis / Nama Pasien)"
+              placeholder="Masukkan Data Pasien (No. KTP / NIK / No. RM / Nama Pasien)"
+              aria-label="Masukkan Data Pasien (No. KTP / NIK / No. RM / Nama Pasien)"
               autocomplete="off"
             />
-            <button
-              v-if="internalKeyword"
-              type="button"
-              class="btn-clear-input"
-              @click="clearKeyword"
-              title="Hapus kata kunci"
-              aria-label="Hapus kata kunci"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
           </div>
 
-          <!-- Input 2: Tanggal Lahir -->
+          <!-- Date Input (Tanggal Lahir) -->
           <div class="date-input-group">
             <input
               id="old-patient-birthdate"
@@ -162,33 +253,27 @@ const handleReset = () => {
             </svg>
           </div>
 
-          <!-- Action Buttons -->
+          <!-- Search Button (Blue button without Reset button) -->
           <div class="search-action-buttons">
             <button
               type="submit"
               class="btn-primary btn-search-old"
               :disabled="loading"
             >
-              <svg v-if="!loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                v-if="!loading"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
               <span v-else class="btn-spinner"></span>
               <span>Cari</span>
-            </button>
-
-            <button
-              v-if="hasInputOrResults"
-              type="button"
-              class="btn-cancel btn-reset-old"
-              @click="handleReset"
-              title="Reset Pencarian"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                <path d="M3 3v5h5"></path>
-              </svg>
-              <span>Reset</span>
             </button>
           </div>
         </div>
@@ -205,256 +290,350 @@ const handleReset = () => {
       </form>
     </div>
 
-    <!-- Expandable Results Area (only after user executes search) -->
-    <Transition name="fade">
-      <div v-if="hasSearched" class="search-results-panel">
-        <div class="results-header-bar">
-          <div class="results-title-group">
-            <span class="results-heading">Hasil Pencarian Pasien Lama</span>
-            <span class="results-count-pill">Ditemukan {{ results.length }} pasien</span>
+    <!-- Divider Line -->
+    <div v-if="hasSearched" class="card-divider"></div>
+
+    <!-- Results Panel: Shown after search has been executed -->
+    <div v-if="hasSearched" class="search-results-panel">
+      <template v-if="results && results.length > 0">
+        <!-- Entries selector on top-left (no header banner) -->
+        <div class="entries-control-row">
+          <div class="entries-selector">
+            <select id="entries-per-page" v-model.number="perPage" class="entries-select" aria-label="Entries per page">
+              <option :value="5">5</option>
+              <option :value="10">10</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+            <span class="entries-label">entries</span>
           </div>
-          <button type="button" class="btn-close-results" @click="handleReset">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-            <span>Tutup Hasil</span>
-          </button>
         </div>
 
-        <div v-if="results.length > 0" class="results-table-wrap">
-          <table class="results-table" aria-label="Hasil Pencarian Pasien Lama">
+        <!-- Table Section: Exactly 7 columns -->
+        <div class="results-table-wrap">
+          <table class="results-table legacy-table" aria-label="Tabel Pencarian Pasien Lama">
             <thead>
               <tr>
-                <th>No. RM</th>
-                <th>NIK</th>
-                <th>Nama Pasien</th>
-                <th>Tgl Lahir / Gender</th>
-                <th>No. HP</th>
-                <th>Jaminan</th>
-                <th class="text-center">Aksi</th>
+                <th class="th-sortable col-no" @click="handleSort('no')">
+                  <div class="th-content">
+                    <span>No.</span>
+                    <span class="sort-arrows" :class="{ active: sortKey === 'no' }">
+                      <span :class="{ 'arrow-active': sortKey === 'no' && sortOrder === 'asc' }">&#9650;</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="th-sortable col-rm" @click="handleSort('rm')">
+                  <div class="th-content">
+                    <span>No. RM</span>
+                    <span class="sort-arrows" :class="{ active: sortKey === 'rm' }">
+                      <span :class="{ 'arrow-active': sortKey === 'rm' && sortOrder === 'asc' }">&#9650;</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="th-sortable col-ktp" @click="handleSort('ktp')">
+                  <div class="th-content">
+                    <span>No. KTP</span>
+                    <span class="sort-arrows" :class="{ active: sortKey === 'ktp' }">
+                      <span :class="{ 'arrow-active': sortKey === 'ktp' && sortOrder === 'asc' }">&#9650;</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="th-sortable col-name" @click="handleSort('name')">
+                  <div class="th-content">
+                    <span>Nama Lengkap</span>
+                    <span class="sort-arrows" :class="{ active: sortKey === 'name' }">
+                      <span :class="{ 'arrow-active': sortKey === 'name' && sortOrder === 'asc' }">&#9650;</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="th-sortable col-birth" @click="handleSort('birth')">
+                  <div class="th-content">
+                    <span>Lahir</span>
+                    <span class="sort-arrows" :class="{ active: sortKey === 'birth' }">
+                      <span :class="{ 'arrow-active': sortKey === 'birth' && sortOrder === 'asc' }">&#9650;</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="th-sortable col-address" @click="handleSort('address')">
+                  <div class="th-content">
+                    <span>Alamat</span>
+                    <span class="sort-arrows" :class="{ active: sortKey === 'address' }">
+                      <span :class="{ 'arrow-active': sortKey === 'address' && sortOrder === 'asc' }">&#9650;</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="th-sortable col-action text-center">
+                  <div class="th-content justify-center">
+                    <span>Aksi</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="patient in results" :key="patient.id">
-                <td>
-                  <span class="rm-badge font-mono">{{ patient.medical_record_number }}</span>
+              <tr v-for="(patient, idx) in paginatedList" :key="patient.id || idx">
+                <!-- Column 1: No. -->
+                <td class="col-no text-center">
+                  {{ startIndex + idx + 1 }}
                 </td>
-                <td class="font-mono text-secondary">{{ maskNik(patient.nik) }}</td>
-                <td>
-                  <div class="patient-result-name">{{ patient.name }}</div>
-                  <div class="patient-result-address" :title="patient.address">{{ patient.address }}</div>
+
+                <!-- Column 2: No. RM -->
+                <td class="col-rm font-mono">
+                  {{ patient.medical_record_number || patient.no_rm || '—' }}
                 </td>
-                <td>
-                  <div>{{ formatDateIndo(patient.birth_date) }}</div>
-                  <div class="text-muted-sm">{{ formatGender(patient.gender) }}</div>
+
+                <!-- Column 3: No. KTP -->
+                <td class="col-ktp font-mono">
+                  {{ patient.no_ktp || patient.nik || '—' }}
                 </td>
-                <td>{{ patient.phone || '—' }}</td>
-                <td>
-                  <span class="guarantor-chip">{{ patient.guarantor || 'UMUM' }}</span>
+
+                <!-- Column 4: Nama Lengkap -->
+                <td class="col-name">
+                  <div class="patient-name-title">
+                    {{ patient.name || patient.nama || '—' }},
+                  </div>
+                  <div class="patient-age-gender">
+                    ({{ calculateDetailedAge(patient.birth_date || patient.tgl_lahir) }}) ({{ formatGenderCode(patient.gender) }})
+                  </div>
                 </td>
-                <td class="text-center">
-                  <button
-                    type="button"
-                    class="btn-admit-patient"
-                    @click="emit('select-patient', patient)"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    <span>Daftarkan Admisi</span>
-                  </button>
+
+                <!-- Column 5: Lahir -->
+                <td class="col-birth">
+                  <div v-if="patient.birth_place || patient.tempat_lahir" class="patient-birth-place">
+                    {{ patient.birth_place || patient.tempat_lahir }},
+                  </div>
+                  <div class="patient-birth-date font-mono">
+                    {{ patient.birth_date || patient.tgl_lahir || '—' }}
+                  </div>
+                </td>
+
+                <!-- Column 6: Alamat -->
+                <td class="col-address">
+                  <div class="patient-address-text">
+                    {{ patient.address || patient.alamat || '—' }}
+                  </div>
+                </td>
+
+                <!-- Column 7: Aksi -->
+                <td class="col-action text-center">
+                  <div class="action-btn-group">
+                    <!-- Button 1: Eye icon (Detail / View) -->
+                    <button
+                      type="button"
+                      class="btn-action-view"
+                      title="Lihat Detail Pasien"
+                      aria-label="Lihat Detail Pasien"
+                      @click="handleViewDetail(patient)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    </button>
+
+                    <!-- Button 2: Paper plane icon (Green square button for Admit) -->
+                    <button
+                      type="button"
+                      class="btn-action-admit btn-admit-patient"
+                      title="Daftarkan Admisi"
+                      aria-label="Daftarkan Admisi"
+                      @click="handleSelectPatient(patient)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                      </svg>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <!-- Empty Search State -->
-        <div v-else class="results-empty-state">
-          <div class="empty-info">
-            <strong>Pasien lama tidak ditemukan.</strong>
-            <span>Periksa kembali NIK, No. Rekam Medis, Nama, atau Tanggal Lahir yang dimasukkan.</span>
+        <!-- Footer: Showing entries & Pagination -->
+        <div class="results-footer-bar">
+          <div class="entries-info-text">
+            Showing {{ showingFrom }} to {{ showingTo }} of {{ totalEntries }} entries
           </div>
-          <button type="button" class="btn-primary btn-register-fallback" @click="emit('register-new')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <line x1="19" y1="8" x2="19" y2="14"></line>
-              <line x1="22" y1="11" x2="16" y2="11"></line>
-            </svg>
-            <span>Registrasi Pasien Baru</span>
-          </button>
+
+          <div v-if="totalPages > 1" class="pagination-buttons">
+            <button
+              type="button"
+              class="btn-page-nav"
+              :disabled="currentPage <= 1"
+              aria-label="Halaman Sebelumnya"
+              @click="goToPage(currentPage - 1)"
+            >
+              &lt;
+            </button>
+
+            <button
+              v-for="page in totalPages"
+              :key="page"
+              type="button"
+              class="btn-page-number"
+              :class="{ active: page === currentPage }"
+              @click="goToPage(page)"
+            >
+              {{ page }}
+            </button>
+
+            <button
+              type="button"
+              class="btn-page-nav"
+              :disabled="currentPage >= totalPages"
+              aria-label="Halaman Berikutnya"
+              @click="goToPage(currentPage + 1)"
+            >
+              &gt;
+            </button>
+          </div>
         </div>
+      </template>
+
+      <!-- Empty Search State -->
+      <div v-else class="results-empty-state">
+        <div class="empty-info">
+          <strong>Pasien lama tidak ditemukan.</strong>
+          <span>Periksa kembali NIK, No. Rekam Medis, Nama, atau Tanggal Lahir yang dimasukkan.</span>
+        </div>
+        <button type="button" class="btn-primary btn-register-fallback" @click="emit('register-new')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <line x1="19" y1="8" x2="19" y2="14"></line>
+            <line x1="22" y1="11" x2="16" y2="11"></line>
+          </svg>
+          <span>Registrasi Pasien Baru</span>
+        </button>
       </div>
-    </Transition>
+    </div>
+
+    <!-- Floating Red Notification Toast: Legacy Notification (Bottom Right) -->
+    <Teleport to="body">
+      <Transition name="slide-fade">
+        <div v-if="showUnpaidToast" class="unpaid-billing-toast" role="alert">
+          <div class="toast-header">
+            <div class="toast-title-text">Notifications</div>
+            <button type="button" class="toast-close-btn" aria-label="Tutup notifikasi" @click="closeUnpaidToast">
+              &times;
+            </button>
+          </div>
+          <div class="toast-body">
+            <div class="toast-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <div class="toast-message-content">
+              {{ unpaidToastMessage }}
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
 .admission-search-card {
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-border-soft);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
 }
 
+/* Header */
 .card-header-bar {
+  padding: 16px 20px 12px 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1.15rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  background: #ffffff;
-  gap: 1rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 8px;
 }
 
-.header-icon-box {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.header-icon-box svg {
-  width: 19px;
-  height: 19px;
+.header-search-icon {
+  width: 18px;
+  height: 18px;
+  color: #1e293b;
 }
 
 .card-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--color-text-navy);
-  letter-spacing: -0.01em;
+  color: #1e293b;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
-.card-subtitle {
-  margin: 0.15rem 0 0 0;
-  font-size: 0.825rem;
-  color: var(--color-text-secondary);
-}
-
+/* Form */
 .search-card-body {
-  padding: 1.5rem 1.75rem;
-}
-
-.old-patient-search-form {
-  max-width: 920px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+  padding: 0 20px 18px 20px;
 }
 
 .search-controls-row {
   display: flex;
+  gap: 12px;
   align-items: center;
-  gap: 0.75rem;
 }
 
 .search-input-group {
-  position: relative;
   flex: 1;
-}
-
-.input-leading-icon {
-  position: absolute;
-  left: 0.9rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 17px;
-  height: 17px;
-  color: #94a3b8;
-  pointer-events: none;
 }
 
 .old-patient-input {
   width: 100%;
-  height: 40px;
-  padding: 0 2.35rem 0 2.55rem;
-  font-size: 0.875rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-navy);
-  background: #ffffff;
-  box-sizing: border-box;
-  font-family: inherit;
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  background-color: #ffffff;
+  transition: border-color 0.15s ease-in-out;
 }
 
-.old-patient-input::placeholder {
-  color: #94a3b8;
-}
-
-.btn-clear-input {
-  position: absolute;
-  right: 0.6rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: #94a3b8;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.15s ease;
-}
-
-.btn-clear-input:hover {
-  background: #f1f5f9;
-  color: var(--color-text-navy);
-}
-
-.btn-clear-input svg {
-  width: 14px;
-  height: 14px;
+.old-patient-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
 .date-input-group {
   position: relative;
-  width: 210px;
-  flex-shrink: 0;
+  width: 200px;
 }
 
 .birth-date-input {
   width: 100%;
-  height: 40px;
-  padding: 0 0.85rem;
-  font-size: 0.875rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-navy);
-  background: #ffffff;
-  box-sizing: border-box;
-  font-family: inherit;
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  background-color: #ffffff;
 }
 
-.birth-date-input::placeholder {
-  color: #94a3b8;
+.birth-date-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
 .date-trailing-icon {
   position: absolute;
-  right: 0.8rem;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
   width: 16px;
@@ -466,340 +645,489 @@ const handleReset = () => {
 .search-action-buttons {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
 }
 
 .btn-search-old {
-  height: 40px;
-  padding: 0 1.35rem;
+  height: 38px;
+  padding: 0 18px;
+  background-color: #337ab7;
+  border: 1px solid #2e6da4;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  border-radius: 8px;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
+  gap: 6px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(8, 127, 120, 0.2);
-  transition: all 0.15s ease;
-  font-family: inherit;
-  white-space: nowrap;
+  transition: background-color 0.15s ease-in-out;
 }
 
 .btn-search-old:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-  box-shadow: 0 4px 12px rgba(8, 127, 120, 0.3);
-  transform: translateY(-1px);
+  background-color: #286090;
+  border-color: #204d74;
+}
+
+.btn-search-old:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .btn-search-old svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.validation-alert {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.validation-alert svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
 }
 
-.btn-reset-old {
-  height: 40px;
-  padding: 0 1rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-soft);
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-.btn-reset-old:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: var(--color-text-navy);
-}
-
-.btn-reset-old svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-
-.btn-spinner {
-  width: 15px;
-  height: 15px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.validation-alert {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.825rem;
-  color: var(--color-danger);
-  background: var(--color-danger-bg);
-  padding: 0.45rem 0.75rem;
-  border-radius: 6px;
-  width: fit-content;
-}
-
-.validation-alert svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
+/* Divider Line */
+.card-divider {
+  height: 1px;
+  background-color: #e2e8f0;
+  margin: 0;
 }
 
 /* Results Panel */
 .search-results-panel {
-  border-top: 1px solid var(--color-border-soft);
-  background: #f8fafc;
+  padding: 16px 20px 20px 20px;
 }
 
-.results-header-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.85rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  background: #f8fafc;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.results-title-group {
+.entries-control-row {
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
-  gap: 0.65rem;
 }
 
-.results-heading {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-}
-
-.results-count-pill {
-  background: var(--color-primary-light);
-  color: var(--color-primary-dark);
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.15rem 0.6rem;
-  border-radius: 9999px;
-}
-
-.btn-close-results {
+.entries-selector {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.3rem 0.65rem;
-  border-radius: 6px;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.entries-select {
+  height: 32px;
+  padding: 0 24px 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background-color: #ffffff;
+  color: #1e293b;
+  font-size: 13px;
   cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s ease;
 }
 
-.btn-close-results:hover {
-  background: #f1f5f9;
-  color: var(--color-text-navy);
+.entries-label {
+  font-size: 13px;
+  color: #475569;
 }
 
-.btn-close-results svg {
-  width: 14px;
-  height: 14px;
-}
-
+/* Table Styling matching Legacy DataTables */
 .results-table-wrap {
-  width: 100%;
   overflow-x: auto;
-  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
 }
 
-.results-table {
+.legacy-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
-  min-width: 780px;
-}
-
-.results-table th {
-  background: #f8fafc;
-  padding: 0.75rem 1rem;
+  font-size: 13px;
   text-align: left;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border-soft);
-  white-space: nowrap;
 }
 
-.results-table td {
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  color: var(--color-text-navy);
-  vertical-align: middle;
-}
-
-.results-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.results-table tbody tr:hover {
-  background: #f8fafc;
-}
-
-.rm-badge {
-  display: inline-block;
-  background: var(--color-primary-light);
-  color: var(--color-primary-dark);
-  font-size: 0.78rem;
+.legacy-table th {
+  padding: 10px 12px;
+  border-bottom: 2px solid #cbd5e1;
+  color: #1e293b;
   font-weight: 700;
-  padding: 0.2rem 0.5rem;
-  border-radius: 5px;
-}
-
-.patient-result-name {
-  font-weight: 600;
-  color: var(--color-text-navy);
-}
-
-.patient-result-address {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  max-width: 240px;
+  font-size: 13px;
   white-space: nowrap;
+  user-select: none;
+}
+
+.th-sortable {
+  cursor: pointer;
+}
+
+.th-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.sort-arrows {
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 9px;
+  color: #94a3b8;
+  opacity: 0.5;
+}
+
+.sort-arrows.active {
+  opacity: 1;
+}
+
+.arrow-active {
+  color: #2563eb;
+}
+
+.legacy-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: #334155;
+}
+
+.legacy-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12.5px;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* Column specific widths */
+.col-no {
+  width: 50px;
+}
+
+.col-rm {
+  width: 90px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.col-ktp {
+  width: 160px;
+  color: #334155;
+}
+
+.col-name {
+  min-width: 180px;
+}
+
+.patient-name-title {
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.3;
+}
+
+.patient-age-gender {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.col-birth {
+  min-width: 130px;
+}
+
+.patient-birth-place {
+  color: #1e293b;
+  line-height: 1.3;
+}
+
+.patient-birth-date {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.col-address {
+  min-width: 160px;
+  color: #334155;
+}
+
+.patient-address-text {
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 0.1rem;
-}
-
-.text-muted-sm {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-}
-
-.guarantor-chip {
-  display: inline-block;
-  background: #f1f5f9;
-  color: var(--color-text-navy);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.2rem 0.55rem;
-  border-radius: 9999px;
   white-space: nowrap;
 }
 
-.btn-admit-patient {
+/* Action Buttons */
+.col-action {
+  width: 100px;
+}
+
+.action-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.btn-action-view {
+  width: 32px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  height: 32px;
-  padding: 0 0.8rem;
-  border-radius: 6px;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  font-size: 0.78rem;
-  font-weight: 600;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
   cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: all 0.15s;
 }
 
-.btn-admit-patient:hover {
-  background: var(--color-primary-dark);
+.btn-action-view:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
-.btn-admit-patient svg {
-  width: 14px;
-  height: 14px;
+.btn-action-view svg {
+  width: 16px;
+  height: 16px;
 }
 
-.results-empty-state {
+.btn-action-admit {
+  width: 32px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #10b981;
+  border: 1px solid #059669;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-action-admit:hover {
+  background-color: #059669;
+  border-color: #047857;
+}
+
+.btn-action-admit svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Footer / Pagination */
+.results-footer-bar {
+  margin-top: 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  padding: 1.25rem 1.5rem;
-  background: #ffffff;
+}
+
+.entries-info-text {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.pagination-buttons {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.btn-page-nav,
+.btn-page-number {
+  height: 32px;
+  min-width: 34px;
+  padding: 0 10px;
+  background-color: #ffffff;
+  border: none;
+  border-right: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s;
+}
+
+.btn-page-nav:last-child,
+.btn-page-number:last-child {
+  border-right: none;
+}
+
+.btn-page-nav:hover:not(:disabled),
+.btn-page-number:hover:not(.active) {
+  background-color: #f1f5f9;
+}
+
+.btn-page-nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-page-number.active {
+  background-color: #337ab7;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: default;
+}
+
+/* Empty State */
+.results-empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  background-color: #f8fafc;
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
 }
 
 .empty-info {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.85rem;
-  color: var(--color-text-navy);
+  gap: 4px;
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 14px;
 }
 
-.empty-info span {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
+.empty-info strong {
+  color: #1e293b;
+  font-size: 14px;
 }
 
 .btn-register-fallback {
-  height: 38px;
-  padding: 0 1rem;
-  font-size: 0.825rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #0d9488;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
-.font-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+.btn-register-fallback svg {
+  width: 16px;
+  height: 16px;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.18s ease;
+/* Red Floating Notification Toast (Legacy bottom-right toast) */
+.unpaid-billing-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 320px;
+  background-color: #d9534f;
+  color: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  overflow: hidden;
+  font-family: inherit;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.toast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.toast-title-text {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: #ffffff;
+}
+
+.toast-close-btn {
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.8;
+  padding: 0 4px;
+}
+
+.toast-close-btn:hover {
+  opacity: 1;
+}
+
+.toast-body {
+  padding: 12px 14px 14px 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.toast-icon-wrap {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-icon-wrap svg {
+  width: 22px;
+  height: 22px;
+}
+
+.toast-message-content {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #ffffff;
+}
+
+/* Transitions */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.25s ease-out;
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateY(12px);
   opacity: 0;
 }
-
-@media (max-width: 768px) {
-  .search-card-body {
-    padding: 1.25rem;
-  }
-
-  .search-controls-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .date-input-group {
-    width: 100%;
-  }
-
-  .search-action-buttons {
-    width: 100%;
-  }
-
-  .btn-search-old,
-  .btn-reset-old {
-    flex: 1;
-  }
-}
 </style>
-

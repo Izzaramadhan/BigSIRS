@@ -15,6 +15,26 @@ class LookupService {
     return response.data
   }
 
+  async getDoctorsByPolyclinic(polyclinicId, params = {}) {
+    const queryParams = {
+      polyclinic_id: polyclinicId,
+      is_active: true,
+      per_page: 100,
+      ...params
+    }
+    const response = await axios.get('/lookups/doctors', { params: queryParams })
+    const collection = extractCollection(response)
+    if (response?.data?.meta) {
+      collection.meta = response.data.meta
+    }
+    return collection
+  }
+
+  async getReferralSources(params = {}) {
+    const response = await axios.get('/lookups/referral-sources', { params })
+    return extractCollection(response)
+  }
+
   async getSpecializations(params = {}) {
     const response = await axios.get('/lookups/specializations', { params })
     return extractCollection(response)

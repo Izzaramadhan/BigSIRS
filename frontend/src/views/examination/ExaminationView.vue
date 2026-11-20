@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
@@ -23,8 +23,13 @@ const {
   setPage,
   setPerPage,
   startExamination,
-  replayQueueAudio
+  replayQueueAudio,
+  fetchExaminations
 } = useExaminations();
+
+onMounted(async () => {
+  await fetchExaminations();
+});
 
 // Toast notification state
 const toast = ref({

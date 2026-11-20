@@ -26,6 +26,7 @@ import {
   mockIbsSurgeryOptions,
   calculateAge
 } from '@/mocks/examinations';
+import examinationService from '@/services/examination.service';
 
 // Frontend-only session clinical state for patient examination views
 const sessionExaminationData = reactive({});
@@ -385,6 +386,29 @@ export function useExaminations() {
     });
   };
 
+  const fetchExaminations = async (params = {}) => {
+    loading.value = true;
+    try {
+      const apiParams = {
+        page: pagination.currentPage,
+        per_page: pagination.perPage,
+        ...params
+      };
+      if (searchQuery.value) {
+        apiParams.q = searchQuery.value;
+      }
+      const res = await examinationService.getExaminations(apiParams);
+      const data = res.data?.data;
+      if (Array.isArray(data) && data.length > 0) {
+        examinations.value = data;
+      }
+    } catch {
+      // Keep in-memory data on error or offline/unit tests
+    } finally {
+      loading.value = false;
+    }
+  };
+
   return {
     examinations,
     searchQuery,
@@ -434,6 +458,7 @@ export function useExaminations() {
     startExamination,
     enterClinic,
     callNextQueue,
-    replayQueueAudio
+    replayQueueAudio,
+    fetchExaminations
   };
 }

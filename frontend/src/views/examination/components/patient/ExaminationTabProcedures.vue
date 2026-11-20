@@ -36,7 +36,7 @@ const showSuggestions = ref(false);
 const searchBoxRef = ref(null);
 
 const doctorOptions = computed(() => {
-  const list = new Set([...props.doctors]);
+  const list = new Set(props.doctors);
   if (props.defaultDoctor && props.defaultDoctor !== '-') {
     list.add(props.defaultDoctor);
   }

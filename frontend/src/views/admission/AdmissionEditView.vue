@@ -3,6 +3,11 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
+import admissionService from '@/services/admission.service';
+import patientService from '@/services/patient.service';
+import lookupService from '@/services/lookup.service';
+import { polyclinicService } from '@/services/polyclinic';
+import { guarantorsService } from '@/services/master-data/guarantors.service';
 import { useAdmissions } from '@/composables/useAdmissions';
 
 const route = useRoute();
@@ -54,17 +59,60 @@ const normalizeGuarantor = (val) => {
   return val;
 };
 
+// Master Data State
+const guarantorList = ref([]);
+const polyclinicList = ref([]);
+const backendDoctorList = ref([]);
+const referralSourceList = ref([]);
+
+const initialPolyclinic = ref('');
+const recordVisitId = ref(null);
+let cachedInsuranceNumber = '';
+
+const normalizeCaseType = (val) => {
+  if (!val) return 'Pemeriksaan Kasus Baru';
+  const clean = String(val).trim().toLowerCase();
+  if (clean.includes('kronis') || clean.includes('akut')) {
+    return 'Riwayat Penyakit Kronis atau Akut';
+  }
+  if (clean.includes('lanjutan') || clean.includes('kontrol') || clean.includes('lama')) {
+    return 'Perawatan Lanjutan';
+  }
+  return 'Pemeriksaan Kasus Baru';
+};
+
+const hasPolyclinicChanged = computed(() => {
+  return Boolean(initialPolyclinic.value && form.value.polyclinic && initialPolyclinic.value !== form.value.polyclinic);
+});
+const canChangeClinic = ref(true);
+const cannotChangeReason = ref('');
+const isServiceLocked = ref(false);
+
 const polyclinicOptions = computed(() => {
-  const base = new Set([
-    ...mockPolyclinics,
-    'Poliklinik Obstetri dan Ginekologi'
-  ]);
+  const base = new Set();
+  if (polyclinicList.value.length > 0) {
+    polyclinicList.value.forEach((p) => {
+      const name = p.name || p.nama || p.nama_poliklinik;
+      if (name) base.add(name);
+    });
+  } else {
+    mockPolyclinics.forEach((p) => base.add(p));
+    base.add('Poliklinik Obstetri dan Ginekologi');
+  }
   if (form.value.polyclinic) base.add(form.value.polyclinic);
   return Array.from(base);
 });
 
 const doctorOptions = computed(() => {
-  const base = new Set([...mockDoctors]);
+  const base = new Set();
+  if (backendDoctorList.value.length > 0) {
+    backendDoctorList.value.forEach((d) => {
+      const name = d.name || d.nama || d.nama_lengkap;
+      if (name) base.add(name);
+    });
+  } else {
+    mockDoctors.forEach((d) => base.add(d));
+  }
   if (form.value.doctor) base.add(form.value.doctor);
   return Array.from(base);
 });
@@ -82,21 +130,27 @@ const patientSummary = ref({
 
 const form = ref({
   admission_datetime: '',
+  guarantor_id: 2,
   guarantor_type: 'UMUM',
   insurance_number: '',
   nik: '',
-  referral_source: 'FKT Primer',
+  referral_source_id: 3,
+  referral_source: 'Datang Sendiri',
   referral_name: '',
 
-  visit_type: 'Rawat Jalan',
+  visit_type: 'IGD',
+  polyclinic_id: null,
   polyclinic: '',
+  service_type: 'Umum',
   case_type: 'Pemeriksaan Kasus Baru',
+  doctor_id: null,
   doctor: '',
 
   family_name: '',
-  family_relationship: '',
+  family_relationship: 'IBU',
   family_phone: '',
-  family_address: ''
+  family_address: '',
+  notes: ''
 });
 
 const errors = ref({});
@@ -117,11 +171,48 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
-const loadRecord = () => {
+// Fetch doctors for clinic
+const loadDoctorsForClinic = async (polyId) => {
+  if (!polyId) return;
+  try {
+    const docs = await lookupService.getDoctorsByPolyclinic(polyId);
+    if (Array.isArray(docs)) {
+      backendDoctorList.value = docs;
+    }
+  } catch {
+    backendDoctorList.value = [];
+  }
+};
+
+// Master Data Loaders
+const loadMasterData = async () => {
+  try {
+    const [guarantorRes, polyclinicRes, referralRes] = await Promise.allSettled([
+      guarantorsService.getGuarantors({ is_active: true, per_page: 100 }),
+      polyclinicService.getPolyclinics({ is_active: true }),
+      lookupService.getReferralSources()
+    ]);
+
+    if (guarantorRes.status === 'fulfilled') {
+      guarantorList.value = guarantorRes.value.data || guarantorRes.value || [];
+    }
+    if (polyclinicRes.status === 'fulfilled') {
+      polyclinicList.value = polyclinicRes.value.data || polyclinicRes.value || [];
+    }
+    if (referralRes.status === 'fulfilled') {
+      referralSourceList.value = referralRes.value.data || referralRes.value || [];
+    }
+  } catch {
+    // Fail-safe
+  }
+};
+
+const loadRecordFromLocal = () => {
   const targetId = route.params.id;
   const record = getAdmissionById(targetId) || admissionsList.value[0];
   if (!record) return;
 
+  recordVisitId.value = record.visit_id || null;
   patientSummary.value = {
     id: record.id,
     queue_number: record.queue_number || '-',
@@ -133,43 +224,197 @@ const loadRecord = () => {
     address: record.address || '-'
   };
 
-  const datePart = formatDateDMY(record.admission_date);
-  const timePart = formatTimeHMS(record.admission_time);
+  const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
+  const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
   const normalizedGuarantor = normalizeGuarantor(record.guarantor_type);
 
   form.value = {
     admission_datetime: datePart ? `${datePart} ${timePart}` : timePart,
+    guarantor_id: record.guarantor_id || (normalizedGuarantor === 'UMUM' ? 2 : 1),
     guarantor_type: normalizedGuarantor,
     insurance_number: normalizedGuarantor === 'UMUM' ? '' : (record.insurance_number || record.guarantor_detail || ''),
     nik: record.nik || '',
-    referral_source: record.referral_source || 'FKT Primer',
+    referral_source_id: record.referral_source_id || 3,
+    referral_source: record.referral_source || 'Datang Sendiri',
     referral_name: record.referral_name || '',
 
-    visit_type: record.visit_type || 'Rawat Jalan',
+    visit_type: record.visit_type || 'IGD',
+    polyclinic_id: record.polyclinic_id || null,
     polyclinic: record.polyclinic || '',
+    service_type: record.service_type || 'Umum',
     case_type: record.case_type || 'Pemeriksaan Kasus Baru',
+    doctor_id: record.doctor_id || null,
     doctor: record.doctor || '',
 
-    family_name: record.emergency_contact?.name || '',
-    family_relationship: record.emergency_contact?.relationship || 'Saudara',
-    family_phone: record.emergency_contact?.phone || '',
-    family_address: record.emergency_contact?.address || ''
+    family_name: record.family_name || record.emergency_contact?.name || '',
+    family_relationship: record.family_relationship || record.emergency_contact?.relationship || 'IBU',
+    family_phone: record.family_phone || record.emergency_contact?.phone || '',
+    family_address: record.family_address || record.emergency_contact?.address || '',
+    notes: record.notes || ''
   };
 };
+
+const fetchBackendRecord = async () => {
+  const targetId = route.params.id;
+  const queryPatientId = route.query.patient_id;
+  if (!targetId && !queryPatientId) return;
+
+  let loadedAdmission = false;
+
+  try {
+    if (targetId && admissionService && typeof admissionService.getAdmission === 'function') {
+      const res = await admissionService.getAdmission(targetId);
+      const record = res.data?.data || res.data;
+      if (record) {
+        loadedAdmission = true;
+        recordVisitId.value = record.visit_id || null;
+        canChangeClinic.value = record.can_change_clinic !== false;
+        cannotChangeReason.value = record.cannot_change_reason || '';
+
+        const vStatus = String(record.service_status || record.status || '').toLowerCase();
+        isServiceLocked.value = vStatus === 'selesai' || vStatus === 'ya';
+
+        const pat = record.patient || {};
+        patientSummary.value = {
+          id: record.id,
+          queue_number: record.queue_number || '-',
+          medical_record_number: pat.medical_record_number || pat.no_rm || record.medical_record_number || '-',
+          patient_name: pat.name || pat.nama || record.patient_name || '-',
+          gender: pat.gender || record.gender || 'L',
+          birth_place: pat.birth_place || pat.tempat_lahir || record.birth_place || 'Yogyakarta',
+          birth_date: pat.birth_date || pat.tgl_lahir || record.birth_date || '',
+          address: pat.address || pat.alamat || record.address || '-'
+        };
+
+        const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
+        const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
+        const normalizedGuarantor = normalizeGuarantor(record.guarantor_type || record.guarantor);
+
+        form.value.admission_datetime = record.admission_datetime || (datePart ? `${datePart} ${timePart}` : timePart);
+        form.value.guarantor_id = record.guarantor_id || (normalizedGuarantor === 'UMUM' ? 2 : 1);
+        form.value.guarantor_type = normalizedGuarantor;
+        form.value.insurance_number = normalizedGuarantor === 'UMUM' ? '' : (record.insurance_number || record.guarantor_detail || '');
+        form.value.nik = record.nik || pat.nik || pat.no_ktp || '';
+        form.value.referral_source_id = record.referral_source_id || 3;
+        form.value.referral_source = record.referral_source || 'Datang Sendiri';
+        form.value.referral_name = record.referral_name || '';
+        form.value.visit_type = record.visit_type || 'IGD';
+        form.value.polyclinic_id = record.polyclinic_id || null;
+        form.value.polyclinic = record.polyclinic || '';
+        form.value.service_type = record.service_type || 'Umum';
+        form.value.case_type = record.case_type || 'Pemeriksaan Kasus Baru';
+        form.value.doctor_id = record.doctor_id || null;
+        form.value.doctor = record.doctor || '';
+        form.value.family_name = record.family_name || record.emergency_contact?.name || pat.emergency_contact?.name || '';
+        form.value.family_relationship = record.family_relationship || record.emergency_contact?.relationship || pat.emergency_contact?.relationship || 'IBU';
+        form.value.family_phone = record.family_phone || record.emergency_contact?.phone || pat.emergency_contact?.phone || '';
+        form.value.family_address = record.family_address || record.emergency_contact?.address || pat.emergency_contact?.address || '';
+        form.value.notes = record.notes || '';
+
+        if (record.polyclinic_id) {
+          loadDoctorsForClinic(record.polyclinic_id);
+        }
+      }
+    }
+  } catch {
+    // Fail-safe
+  }
+
+  // Fallback to patient service if admission record wasn't found or patientSummary incomplete
+  const patIdToFetch = queryPatientId || (!loadedAdmission ? targetId : null);
+  if (patIdToFetch && (!loadedAdmission || patientSummary.value.patient_name === '-')) {
+    try {
+      if (patientService && typeof patientService.getPatient === 'function') {
+        const pRes = await patientService.getPatient(patIdToFetch);
+        const pat = pRes.data?.data || pRes.data;
+        if (pat) {
+          patientSummary.value = {
+            id: pat.id,
+            queue_number: pat.queue_number || '-',
+            medical_record_number: pat.medical_record_number || pat.no_rm || '-',
+            patient_name: pat.name || pat.nama || '-',
+            gender: pat.gender || 'L',
+            birth_place: pat.birth_place || pat.tempat_lahir || 'Yogyakarta',
+            birth_date: pat.birth_date || pat.tgl_lahir || '',
+            address: pat.address || pat.alamat || '-'
+          };
+
+          if (pat.nik || pat.no_ktp) form.value.nik = pat.nik || pat.no_ktp;
+          if (pat.emergency_contact?.name) form.value.family_name = pat.emergency_contact.name;
+          if (pat.emergency_contact?.relationship) form.value.family_relationship = pat.emergency_contact.relationship;
+          if (pat.emergency_contact?.phone) form.value.family_phone = pat.emergency_contact.phone;
+          if (pat.emergency_contact?.address) form.value.family_address = pat.emergency_contact.address;
+          if (pat.guarantor) {
+            form.value.guarantor_id = pat.guarantor.id || form.value.guarantor_id;
+            form.value.guarantor_type = normalizeGuarantor(pat.guarantor.name);
+          }
+          if (pat.insurance_number) form.value.insurance_number = pat.insurance_number;
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal memuat detail pasien untuk edit form:', e);
+    }
+  }
+};
+
+loadRecordFromLocal();
 
 watch(
   () => form.value.guarantor_type,
   (val) => {
     if (val === 'UMUM') {
       form.value.insurance_number = '';
+      form.value.guarantor_id = 2;
+    } else {
+      const match = guarantorList.value.find((g) => (g.name || g.jenis_asuransi) === val);
+      if (match) form.value.guarantor_id = match.id;
     }
   }
 );
 
-watch(() => route.params.id, loadRecord);
+watch(
+  () => form.value.referral_source,
+  (val) => {
+    if (val === 'Datang Sendiri') {
+      form.value.referral_name = '';
+      form.value.referral_source_id = 3;
+    } else {
+      const match = referralSourceList.value.find((r) => (r.name || r.nama) === val);
+      if (match) form.value.referral_source_id = match.id;
+    }
+  }
+);
 
-onMounted(() => {
-  loadRecord();
+watch(
+  () => form.value.polyclinic,
+  (val) => {
+    const match = polyclinicList.value.find((p) => (p.name || p.nama || p.nama_poliklinik) === val);
+    if (match) {
+      form.value.polyclinic_id = match.id;
+      loadDoctorsForClinic(match.id);
+    }
+  }
+);
+
+watch(
+  () => form.value.doctor,
+  (val) => {
+    const match = backendDoctorList.value.find((d) => (d.name || d.nama || d.nama_lengkap) === val);
+    if (match) {
+      form.value.doctor_id = match.id;
+    }
+  }
+);
+
+watch(() => route.params.id, async () => {
+  loadRecordFromLocal();
+  await fetchBackendRecord();
+});
+
+onMounted(async () => {
+  loadRecordFromLocal();
+  await loadMasterData();
+  await fetchBackendRecord();
 });
 
 const validateForm = () => {
@@ -222,7 +467,7 @@ const parseAdmissionDateTime = (str, fallbackDate, fallbackTime) => {
   };
 };
 
-const handleUpdate = () => {
+const handleUpdate = async () => {
   if (!validateForm()) {
     showToast({
       type: 'warning',
@@ -233,6 +478,8 @@ const handleUpdate = () => {
   }
 
   isSubmitting.value = true;
+  errors.value = {};
+
   const currentRecord = getAdmissionById(patientSummary.value.id) || admissionsList.value[0];
   const parsedTime = parseAdmissionDateTime(
     form.value.admission_datetime,
@@ -240,45 +487,121 @@ const handleUpdate = () => {
     currentRecord?.admission_time
   );
 
+  // Resolve guarantor_id
+  let guarantorId = form.value.guarantor_id;
+  if (!guarantorId) {
+    const matchG = guarantorList.value.find((g) => (g.name || g.jenis_asuransi) === form.value.guarantor_type);
+    guarantorId = matchG ? matchG.id : (form.value.guarantor_type === 'UMUM' ? 2 : 1);
+  }
+
+  // Resolve polyclinic_id
+  let polyclinicId = form.value.polyclinic_id;
+  if (!polyclinicId) {
+    const matchP = polyclinicList.value.find((p) => (p.name || p.nama || p.nama_poliklinik) === form.value.polyclinic);
+    polyclinicId = matchP ? matchP.id : 1;
+  }
+
+  // Resolve doctor_id
+  let doctorId = form.value.doctor_id;
+  if (!doctorId) {
+    const matchD = backendDoctorList.value.find((d) => (d.name || d.nama || d.nama_lengkap) === form.value.doctor);
+    doctorId = matchD ? matchD.id : 1;
+  }
+
+  // Resolve referral_source_id
+  let referralSourceId = form.value.referral_source_id;
+  if (!referralSourceId) {
+    const matchR = referralSourceList.value.find((r) => (r.name || r.nama) === form.value.referral_source);
+    referralSourceId = matchR ? matchR.id : (form.value.referral_source === 'Datang Sendiri' ? 3 : 1);
+  }
+
   const payload = {
-    admission_date: parsedTime.admission_date,
-    admission_time: parsedTime.admission_time,
-    guarantor_type: form.value.guarantor_type,
-    guarantor_detail: form.value.guarantor_type === 'UMUM'
-      ? 'Mandiri / Pribadi'
-      : (form.value.insurance_number || form.value.guarantor_type),
-    insurance_number: form.value.insurance_number,
-    nik: form.value.nik.trim(),
+    visit_id: recordVisitId.value,
+    guarantor_id: Number(guarantorId),
+    insurance_number: form.value.guarantor_type === 'UMUM' ? '' : form.value.insurance_number,
+    referral_source_id: Number(referralSourceId),
     referral_source: form.value.referral_source,
-    referral_name: form.value.referral_name.trim(),
-    visit_type: form.value.visit_type,
-    polyclinic: form.value.polyclinic,
+    referral_name: form.value.referral_source === 'Datang Sendiri' ? '' : form.value.referral_name.trim(),
+    polyclinic_id: Number(polyclinicId),
+    doctor_id: Number(doctorId),
     case_type: form.value.case_type,
-    doctor: form.value.doctor,
-    emergency_contact: {
-      name: form.value.family_name.trim(),
-      relationship: form.value.family_relationship.trim(),
-      phone: form.value.family_phone.trim(),
-      address: form.value.family_address.trim()
-    }
+    notes: form.value.notes || '',
+    family_name: form.value.family_name.trim(),
+    family_relationship: form.value.family_relationship.trim(),
+    family_phone: form.value.family_phone.trim(),
+    family_address: form.value.family_address.trim(),
+    reason: 'Update data admisi dan visit poliklinik'
   };
 
-  saveSessionAdmissionEdit(patientSummary.value.id, payload);
-  isSubmitting.value = false;
+  try {
+    const targetId = patientSummary.value.id || route.params.id;
 
-  showToast({
-    type: 'success',
-    title: 'Data Admisi Diperbarui',
-    message: `Data admisi ${patientSummary.value.patient_name} berhasil diperbarui.`
-  });
+    if (admissionService && typeof admissionService.updateAdmission === 'function') {
+      try {
+        await admissionService.updateAdmission(targetId, payload);
+      } catch (apiErr) {
+        if (apiErr.response?.status === 422) {
+          const errData = apiErr.response.data;
+          errors.value = errData.errors || {};
+          showToast({
+            type: 'danger',
+            title: 'Pembatasan / Validasi Gagal',
+            message: errData.message || 'Data tidak dapat diperbarui karena pembatasan pelayanan.'
+          });
+          isSubmitting.value = false;
+          return;
+        }
+      }
+    }
 
-  setTimeout(() => {
-    router.push('/admisi');
-  }, 550);
+    // Update in-memory session store
+    saveSessionAdmissionEdit(patientSummary.value.id, {
+      ...payload,
+      admission_date: parsedTime.admission_date,
+      admission_time: parsedTime.admission_time,
+      guarantor_type: form.value.guarantor_type,
+      guarantor_detail: form.value.guarantor_type === 'UMUM' ? 'Mandiri / Pribadi' : (form.value.insurance_number || form.value.guarantor_type),
+      polyclinic: form.value.polyclinic,
+      doctor: form.value.doctor,
+      emergency_contact: {
+        name: form.value.family_name.trim(),
+        relationship: form.value.family_relationship.trim(),
+        phone: form.value.family_phone.trim(),
+        address: form.value.family_address.trim()
+      }
+    });
+
+    isSubmitting.value = false;
+
+    showToast({
+      type: 'success',
+      title: 'Data Admisi Diperbarui',
+      message: `Data admisi ${patientSummary.value.patient_name} berhasil diperbarui.`
+    });
+
+    setTimeout(() => {
+      if (route.query.from === 'pendaftaran') {
+        router.push('/pendaftaran');
+      } else {
+        router.push('/admisi');
+      }
+    }, 550);
+  } catch (err) {
+    isSubmitting.value = false;
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memperbarui Admisi',
+      message: err.response?.data?.message || err.message || 'Terjadi kesalahan sistem saat menyimpan pembaruan admisi.'
+    });
+  }
 };
 
 const handleCancel = () => {
-  router.push('/admisi');
+  if (route.query.from === 'pendaftaran') {
+    router.push('/pendaftaran');
+  } else {
+    router.push('/admisi');
+  }
 };
 </script>
 
@@ -299,7 +622,7 @@ const handleCancel = () => {
       subtitle="Perbarui rincian data admisi pasien, kunjungan poliklinik, asal rujukan, dan data keluarga terdekat."
       :breadcrumbs="[
         { label: 'Home', active: false },
-        { label: 'Data Admisi Pasien', active: false },
+        { label: route.query.from === 'pendaftaran' ? 'Pendaftaran Pasien' : 'Data Admisi Pasien', active: false },
         { label: 'Edit Data Admisi', active: true }
       ]"
       badge="Admisi Pasien"
@@ -313,7 +636,7 @@ const handleCancel = () => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
-          <span>Kembali ke Data Admisi</span>
+          <span>{{ route.query.from === 'pendaftaran' ? 'Kembali ke Pendaftaran' : 'Kembali ke Data Admisi' }}</span>
         </button>
       </template>
     </MasterDataPageHeader>
@@ -322,18 +645,14 @@ const handleCancel = () => {
     <div class="page-content">
       <!-- Card 1: DATA PASIEN -->
       <div class="card patient-info-card">
-        <div class="card-header-bar">
+        <div class="card-header-bar patient-info-header">
           <div class="header-left">
-            <div class="header-icon-box" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
+            <div class="header-icon-user" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
               </svg>
             </div>
-            <div>
-              <h2 class="card-title">DATA PASIEN</h2>
-              <p class="card-subtitle">Ringkasan identitas pasien yang sedang diperbarui data admisinya</p>
-            </div>
+            <h2 class="card-title patient-card-title">DATA PASIEN</h2>
           </div>
 
           <div class="queue-pill-wrap">
@@ -346,9 +665,7 @@ const handleCancel = () => {
             <div class="kv-row">
               <span class="kv-label">No. RM</span>
               <span class="kv-colon">:</span>
-              <span class="kv-value">
-                <span class="rm-tag font-mono">{{ patientSummary.medical_record_number }}</span>
-              </span>
+              <span class="kv-value font-mono">{{ patientSummary.medical_record_number }}</span>
             </div>
             <div class="kv-row">
               <span class="kv-label">Nama</span>
@@ -371,36 +688,47 @@ const handleCancel = () => {
 
       <!-- Card 2: FORM EDIT -->
       <div class="card form-edit-card">
-        <div class="card-header-bar">
+        <div class="card-header-bar form-edit-header">
           <div class="header-left">
-            <div class="header-icon-box" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            <div class="header-icon-box-layers" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
               </svg>
             </div>
-            <div>
-              <h2 class="card-title">FORM EDIT</h2>
-              <p class="card-subtitle">Sesuaikan data admisi, data visit poliklinik, dan keluarga terdekat pasien</p>
-            </div>
+            <h2 class="card-title form-edit-title">FORM EDIT</h2>
           </div>
 
-          <div class="header-right">
-            <span class="required-hint"><span class="required-mark">*</span> Wajib diisi</span>
+          <div class="header-tools-icons">
+            <button type="button" class="btn-card-tool" title="Collapse / Minimize">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <button type="button" class="btn-card-tool" title="Refresh" @click="fetchBackendRecord">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+            <button type="button" class="btn-card-tool" title="Close" @click="handleCancel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
 
         <form autocomplete="off" class="edit-admission-form" @submit.prevent="handleUpdate">
-          <div class="edit-form-grid">
-            <!-- Left Column: Data Admisi Pasien -->
-            <div class="sub-panel">
-              <div class="section-title-bar">
-                <span class="section-badge">1</span>
-                <span class="section-heading">Data Admisi Pasien</span>
-              </div>
-
-              <div class="panel-fields">
-                <!-- Waktu Admisi -->
+          <div class="edit-form-columns">
+            <!-- Kolom Kiri: Data Admisi Pasien -->
+            <div class="edit-form-col left-col">
+              <h3 class="category-title">Data Admisi Pasien</h3>
+              <div class="category-box">
+                <!-- 1. Waktu Admisi -->
                 <div class="h-form-row" :class="{ 'has-error': errors.admission_datetime }">
                   <label class="h-label" for="edit-admission-datetime">
                     Waktu Admisi <span class="required-mark">*</span>
@@ -410,15 +738,15 @@ const handleCancel = () => {
                       id="edit-admission-datetime"
                       v-model="form.admission_datetime"
                       type="text"
-                      class="form-input font-mono"
-                      placeholder="DD-MM-YYYY HH:mm:ss"
+                      class="form-input"
+                      placeholder="18-11-2026 09:25:00"
                       autocomplete="off"
                     />
                     <span v-if="errors.admission_datetime" class="error-message">{{ errors.admission_datetime }}</span>
                   </div>
                 </div>
 
-                <!-- Jenis Asuransi -->
+                <!-- 2. Jenis Asuransi -->
                 <div class="h-form-row" :class="{ 'has-error': errors.guarantor_type }">
                   <label class="h-label" for="edit-guarantor">
                     Jenis Asuransi <span class="required-mark">*</span>
@@ -430,6 +758,14 @@ const handleCancel = () => {
                         <option value="BPJS Kesehatan">BPJS Kesehatan</option>
                         <option value="BPJS Ketenagakerjaan">BPJS Ketenagakerjaan</option>
                         <option value="Asuransi Swasta">Asuransi Swasta</option>
+                        <template v-for="g in guarantorList" :key="g.id">
+                          <option
+                            v-if="!['UMUM', 'BPJS Kesehatan', 'BPJS Ketenagakerjaan', 'Asuransi Swasta'].includes(g.name || g.jenis_asuransi)"
+                            :value="g.name || g.jenis_asuransi"
+                          >
+                            {{ g.name || g.jenis_asuransi }}
+                          </option>
+                        </template>
                       </select>
                       <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 12 15 18 9"></polyline>
@@ -439,7 +775,7 @@ const handleCancel = () => {
                   </div>
                 </div>
 
-                <!-- No. Asuransi -->
+                <!-- 3. No. Asuransi -->
                 <div class="h-form-row">
                   <label class="h-label" for="edit-insurance-number">No. Asuransi</label>
                   <div class="h-control">
@@ -449,13 +785,13 @@ const handleCancel = () => {
                       type="text"
                       class="form-input"
                       :disabled="form.guarantor_type === 'UMUM'"
-                      :placeholder="form.guarantor_type === 'UMUM' ? 'No Asuransi' : 'Masukkan Nomor Kartu Asuransi / BPJS'"
+                      placeholder="No Asuransi"
                       autocomplete="off"
                     />
                   </div>
                 </div>
 
-                <!-- NIK / No. KIA -->
+                <!-- 4. NIK / No. KIA -->
                 <div class="h-form-row" :class="{ 'has-error': errors.nik }">
                   <label class="h-label" for="edit-nik">NIK / No. KIA</label>
                   <div class="h-control">
@@ -464,15 +800,15 @@ const handleCancel = () => {
                       v-model="form.nik"
                       type="text"
                       maxlength="16"
-                      class="form-input font-mono"
-                      placeholder="NIK / No. KIA (16 Digit)"
+                      class="form-input"
+                      placeholder="3333332121212345"
                       autocomplete="off"
                     />
                     <span v-if="errors.nik" class="error-message">{{ errors.nik }}</span>
                   </div>
                 </div>
 
-                <!-- Asal Rujukan -->
+                <!-- 5. Asal Rujukan -->
                 <div class="h-form-row" :class="{ 'has-error': errors.referral_source }">
                   <label class="h-label" for="edit-referral-source">
                     Asal Rujukan <span class="required-mark">*</span>
@@ -480,13 +816,21 @@ const handleCancel = () => {
                   <div class="h-control">
                     <div class="select-wrap">
                       <select id="edit-referral-source" v-model="form.referral_source" class="form-select custom-select">
-                        <option value="FKT Primer">FKT Primer</option>
                         <option value="Datang Sendiri">Datang Sendiri</option>
+                        <option value="FKT Primer">FKT Primer</option>
                         <option value="Puskesmas">Puskesmas</option>
                         <option value="Klinik Pratama">Klinik Pratama</option>
                         <option value="Dokter Praktek Mandiri">Dokter Praktek Mandiri</option>
                         <option value="RS Lain / Rujukan Lanjutan">RS Lain / Rujukan Lanjutan</option>
                         <option value="IGD">IGD</option>
+                        <template v-for="r in referralSourceList" :key="r.id">
+                          <option
+                            v-if="!['Datang Sendiri', 'FKT Primer', 'Puskesmas', 'Klinik Pratama', 'Dokter Praktek Mandiri', 'RS Lain / Rujukan Lanjutan', 'IGD'].includes(r.name || r.nama)"
+                            :value="r.name || r.nama"
+                          >
+                            {{ r.name || r.nama }}
+                          </option>
+                        </template>
                       </select>
                       <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 12 15 18 9"></polyline>
@@ -496,17 +840,16 @@ const handleCancel = () => {
                   </div>
                 </div>
 
-                <!-- Nama Asal Rujukan -->
+                <!-- 6. Nama Asal Rujukan -->
                 <div class="h-form-row" :class="{ 'has-error': errors.referral_name }">
-                  <label class="h-label" for="edit-referral-name">
-                    Nama Asal Rujukan <span v-if="form.referral_source !== 'Datang Sendiri'" class="required-mark">*</span>
-                  </label>
+                  <label class="h-label" for="edit-referral-name">Nama Asal Rujukan</label>
                   <div class="h-control">
                     <input
                       id="edit-referral-name"
                       v-model="form.referral_name"
                       type="text"
                       class="form-input"
+                      :disabled="form.referral_source === 'Datang Sendiri'"
                       placeholder="Nama Asal Rujukan"
                       autocomplete="off"
                     />
@@ -516,164 +859,199 @@ const handleCancel = () => {
               </div>
             </div>
 
-            <!-- Right Column: Data Visit Pasien + Data Keluarga Terdekat Pasien -->
-            <div class="right-panels-stack">
-              <!-- Sub-Panel 2: Data Visit Pasien -->
-              <div class="sub-panel">
-                <div class="section-title-bar">
-                  <span class="section-badge">2</span>
-                  <span class="section-heading">Data Visit Pasien</span>
+            <!-- Kolom Kanan: Data Visit Pasien & Data Keluarga Terdekat Pasien -->
+            <div class="edit-form-col right-col">
+              <!-- Bagian 1: Data Visit Pasien -->
+              <h3 class="category-title">Data Visit Pasien</h3>
+              <div class="category-box mb-4">
+                <!-- Restriction Warning Alert -->
+                <div v-if="!canChangeClinic" class="clinic-restriction-banner" role="alert">
+                  <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  <div class="restriction-body">
+                    <strong class="restriction-title">Pembatasan Perubahan Pelayanan:</strong>
+                    <span class="restriction-desc">{{ cannotChangeReason }}</span>
+                  </div>
                 </div>
 
-                <div class="panel-fields">
-                  <!-- Jenis Visit -->
-                  <div class="h-form-row" :class="{ 'has-error': errors.visit_type }">
-                    <label class="h-label" for="edit-visit-type">
-                      Jenis Visit <span class="required-mark">*</span>
-                    </label>
-                    <div class="h-control">
-                      <div class="select-wrap">
-                        <select id="edit-visit-type" v-model="form.visit_type" class="form-select custom-select">
-                          <option value="Rawat Jalan">Rawat Jalan</option>
-                          <option value="Rawat Inap">Rawat Inap</option>
-                          <option value="IGD">IGD</option>
-                          <option value="Penunjang Medis">Penunjang Medis</option>
-                        </select>
-                        <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </div>
-                      <span v-if="errors.visit_type" class="error-message">{{ errors.visit_type }}</span>
+                <!-- 1. Jenis Visit -->
+                <div class="h-form-row" :class="{ 'has-error': errors.visit_type }">
+                  <label class="h-label" for="edit-visit-type">
+                    Jenis Visit <span class="required-mark">*</span>
+                  </label>
+                  <div class="h-control">
+                    <div class="select-wrap">
+                      <select id="edit-visit-type" v-model="form.visit_type" class="form-select custom-select">
+                        <option value="IGD">IGD</option>
+                        <option value="Rawat Jalan">Rawat Jalan</option>
+                        <option value="Rawat Inap">Rawat Inap</option>
+                        <option value="Penunjang Medis">Penunjang Medis</option>
+                      </select>
+                      <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </div>
+                    <span v-if="errors.visit_type" class="error-message">{{ errors.visit_type }}</span>
+                  </div>
+                </div>
+
+                <!-- 2. Klinik -->
+                <div class="h-form-row" :class="{ 'has-error': errors.polyclinic }">
+                  <label class="h-label" for="edit-clinic">
+                    Klinik <span class="required-mark">*</span>
+                  </label>
+                  <div class="h-control">
+                    <div class="select-wrap" :class="{ 'is-disabled': !canChangeClinic }">
+                      <select
+                        id="edit-clinic"
+                        v-model="form.polyclinic"
+                        class="form-select custom-select"
+                        :disabled="!canChangeClinic"
+                      >
+                        <option value="">-- silahkan pilih --</option>
+                        <option v-for="poly in polyclinicOptions" :key="poly" :value="poly">{{ poly }}</option>
+                      </select>
+                      <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </div>
+                    <span v-if="errors.polyclinic" class="error-message">{{ errors.polyclinic }}</span>
+                  </div>
+                </div>
+
+                <!-- 3. Jenis Layanan -->
+                <div class="h-form-row">
+                  <label class="h-label" for="edit-service-type">
+                    Jenis Layanan
+                  </label>
+                  <div class="h-control">
+                    <div class="select-wrap">
+                      <select id="edit-service-type" v-model="form.service_type" class="form-select custom-select">
+                        <option value="Umum">Umum</option>
+                        <option value="Spesialis">Spesialis</option>
+                        <option value="Sub-Spesialis">Sub-Spesialis</option>
+                        <option value="Gawat Darurat">Gawat Darurat</option>
+                      </select>
+                      <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
                     </div>
                   </div>
+                </div>
 
-                  <!-- Klinik -->
-                  <div class="h-form-row" :class="{ 'has-error': errors.polyclinic }">
-                    <label class="h-label" for="edit-clinic">
-                      Klinik <span class="required-mark">*</span>
-                    </label>
-                    <div class="h-control">
-                      <div class="select-wrap">
-                        <select id="edit-clinic" v-model="form.polyclinic" class="form-select custom-select">
-                          <option value="">-- silahkan pilih --</option>
-                          <option v-for="poly in polyclinicOptions" :key="poly" :value="poly">{{ poly }}</option>
-                        </select>
-                        <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </div>
-                      <span v-if="errors.polyclinic" class="error-message">{{ errors.polyclinic }}</span>
+                <!-- 4. Kasus -->
+                <div class="h-form-row" :class="{ 'has-error': errors.case_type }">
+                  <label class="h-label" for="edit-case-type">
+                    Kasus <span class="required-mark">*</span>
+                  </label>
+                  <div class="h-control">
+                    <div class="select-wrap">
+                      <select id="edit-case-type" v-model="form.case_type" class="form-select custom-select">
+                        <option value="Pemeriksaan Kasus Baru">Pemeriksaan Kasus Baru</option>
+                        <option value="Pemeriksaan Kasus Lama">Pemeriksaan Kasus Lama</option>
+                        <option value="Kontrol Ulang">Kontrol Ulang</option>
+                        <option value="Konsultasi">Konsultasi</option>
+                        <option value="Akut">Akut</option>
+                        <option value="Kronis">Kronis</option>
+                        <option value="Riwayat Penyakit Kronis atau Akut">Riwayat Penyakit Kronis atau Akut</option>
+                        <option value="Perawatan Lanjutan">Perawatan Lanjutan</option>
+                      </select>
+                      <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
                     </div>
+                    <span v-if="errors.case_type" class="error-message">{{ errors.case_type }}</span>
                   </div>
+                </div>
 
-                  <!-- Kasus -->
-                  <div class="h-form-row" :class="{ 'has-error': errors.case_type }">
-                    <label class="h-label" for="edit-case-type">
-                      Kasus <span class="required-mark">*</span>
-                    </label>
-                    <div class="h-control">
-                      <div class="select-wrap">
-                        <select id="edit-case-type" v-model="form.case_type" class="form-select custom-select">
-                          <option value="Pemeriksaan Kasus Baru">Pemeriksaan Kasus Baru</option>
-                          <option value="Pemeriksaan Kasus Lama">Pemeriksaan Kasus Lama</option>
-                          <option value="Kontrol Ulang">Kontrol Ulang</option>
-                          <option value="Konsultasi">Konsultasi</option>
-                        </select>
-                        <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </div>
-                      <span v-if="errors.case_type" class="error-message">{{ errors.case_type }}</span>
+                <!-- 5. Dokter Klinik -->
+                <div class="h-form-row" :class="{ 'has-error': errors.doctor }">
+                  <label class="h-label" for="edit-doctor">
+                    Dokter Klinik <span class="required-mark">*</span>
+                  </label>
+                  <div class="h-control">
+                    <div class="select-wrap" :class="{ 'is-disabled': isServiceLocked }">
+                      <select
+                        id="edit-doctor"
+                        v-model="form.doctor"
+                        class="form-select custom-select"
+                        :disabled="isServiceLocked"
+                      >
+                        <option value="">-- silahkan pilih --</option>
+                        <option v-for="doc in doctorOptions" :key="doc" :value="doc">{{ doc }}</option>
+                      </select>
+                      <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
                     </div>
-                  </div>
-
-                  <!-- Dokter Klinik -->
-                  <div class="h-form-row" :class="{ 'has-error': errors.doctor }">
-                    <label class="h-label" for="edit-doctor">
-                      Dokter Klinik <span class="required-mark">*</span>
-                    </label>
-                    <div class="h-control">
-                      <div class="select-wrap">
-                        <select id="edit-doctor" v-model="form.doctor" class="form-select custom-select">
-                          <option value="">-- silahkan pilih --</option>
-                          <option v-for="doc in doctorOptions" :key="doc" :value="doc">{{ doc }}</option>
-                        </select>
-                        <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </div>
-                      <span v-if="errors.doctor" class="error-message">{{ errors.doctor }}</span>
-                    </div>
+                    <span v-if="errors.doctor" class="error-message">{{ errors.doctor }}</span>
                   </div>
                 </div>
               </div>
 
-              <!-- Sub-Panel 3: Data Keluarga Terdekat Pasien -->
-              <div class="sub-panel">
-                <div class="section-title-bar">
-                  <span class="section-badge">3</span>
-                  <span class="section-heading">Data Keluarga Terdekat Pasien</span>
+              <!-- Bagian 2: Data Keluarga Terdekat Pasien -->
+              <h3 class="category-title">Data Keluarga Terdekat Pasien</h3>
+              <div class="category-box">
+                <!-- 1. Nama -->
+                <div class="h-form-row">
+                  <label class="h-label" for="edit-family-name">Nama</label>
+                  <div class="h-control">
+                    <input
+                      id="edit-family-name"
+                      v-model="form.family_name"
+                      type="text"
+                      class="form-input"
+                      placeholder="Nama keluarga terdekat"
+                      autocomplete="off"
+                    />
+                  </div>
                 </div>
 
-                <div class="panel-fields">
-                  <!-- Nama -->
-                  <div class="h-form-row">
-                    <label class="h-label" for="edit-family-name">Nama</label>
-                    <div class="h-control">
-                      <input
-                        id="edit-family-name"
-                        v-model="form.family_name"
-                        type="text"
-                        class="form-input"
-                        placeholder="Nama keluarga terdekat"
-                        autocomplete="off"
-                      />
-                    </div>
+                <!-- 2. Hubungan -->
+                <div class="h-form-row">
+                  <label class="h-label" for="edit-family-relationship">Hubungan</label>
+                  <div class="h-control">
+                    <input
+                      id="edit-family-relationship"
+                      v-model="form.family_relationship"
+                      type="text"
+                      class="form-input"
+                      placeholder="IBU"
+                      autocomplete="off"
+                    />
                   </div>
+                </div>
 
-                  <!-- Hubungan -->
-                  <div class="h-form-row">
-                    <label class="h-label" for="edit-family-relationship">Hubungan</label>
-                    <div class="h-control">
-                      <input
-                        id="edit-family-relationship"
-                        v-model="form.family_relationship"
-                        type="text"
-                        class="form-input"
-                        placeholder="Contoh: Saudara, Suami, Istri, Orang Tua"
-                        autocomplete="off"
-                      />
-                    </div>
+                <!-- 3. No. HP -->
+                <div class="h-form-row">
+                  <label class="h-label" for="edit-family-phone">No. HP</label>
+                  <div class="h-control">
+                    <input
+                      id="edit-family-phone"
+                      v-model="form.family_phone"
+                      type="tel"
+                      class="form-input"
+                      placeholder="089787656782"
+                      autocomplete="off"
+                    />
                   </div>
+                </div>
 
-                  <!-- No. HP -->
-                  <div class="h-form-row">
-                    <label class="h-label" for="edit-family-phone">No. HP</label>
-                    <div class="h-control">
-                      <input
-                        id="edit-family-phone"
-                        v-model="form.family_phone"
-                        type="tel"
-                        class="form-input"
-                        placeholder="No. HP keluarga terdekat"
-                        autocomplete="off"
-                      />
-                    </div>
-                  </div>
-
-                  <!-- Alamat -->
-                  <div class="h-form-row">
-                    <label class="h-label" for="edit-family-address">Alamat</label>
-                    <div class="h-control">
-                      <input
-                        id="edit-family-address"
-                        v-model="form.family_address"
-                        type="text"
-                        class="form-input"
-                        placeholder="Alamat keluarga terdekat"
-                        autocomplete="off"
-                      />
-                    </div>
+                <!-- 4. Alamat -->
+                <div class="h-form-row">
+                  <label class="h-label" for="edit-family-address">Alamat</label>
+                  <div class="h-control">
+                    <input
+                      id="edit-family-address"
+                      v-model="form.family_address"
+                      type="text"
+                      class="form-input"
+                      placeholder="PURWOREJO"
+                      autocomplete="off"
+                    />
                   </div>
                 </div>
               </div>
@@ -684,10 +1062,10 @@ const handleCancel = () => {
           <div class="form-footer-bar">
             <button
               type="button"
-              class="btn-cancel btn-batal"
+              class="btn-batal"
               @click="handleCancel"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
@@ -696,7 +1074,7 @@ const handleCancel = () => {
 
             <button
               type="submit"
-              class="btn-primary btn-save btn-update"
+              class="btn-update"
               :disabled="isSubmitting"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -729,422 +1107,448 @@ const handleCancel = () => {
   }
 }
 
-.btn-header-back {
-  height: 40px;
-  padding: 0 1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  background: #ffffff;
-  color: var(--color-text-navy);
-  border: 1px solid var(--color-border-soft);
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-  white-space: nowrap;
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
-.btn-header-back:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.btn-header-back svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-/* Shared Card Header */
-.patient-info-card,
-.form-edit-card {
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-border-soft);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+/* Card Common */
+.card {
+  background-color: #ffffff;
+  border: 1px solid #d2d6de;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   overflow: hidden;
 }
 
 .card-header-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1.15rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  background: #ffffff;
-  gap: 1rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background-color: #ffffff;
+  border-bottom: 1px solid #f4f4f4;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.5rem;
 }
 
-.header-icon-box {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+/* Card 1: DATA PASIEN */
+.header-icon-user {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  color: #3c8dbc;
+  width: 20px;
+  height: 20px;
 }
 
-.header-icon-box svg {
-  width: 19px;
-  height: 19px;
+.header-icon-user svg {
+  width: 18px;
+  height: 18px;
 }
 
-.card-title {
+.patient-card-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  color: var(--color-text-navy);
-  letter-spacing: -0.01em;
-}
-
-.card-subtitle {
-  margin: 0.12rem 0 0 0;
-  font-size: 0.825rem;
-  color: var(--color-text-secondary);
+  color: #3c8dbc;
+  letter-spacing: 0.02em;
 }
 
 .queue-badge-chip {
-  display: inline-flex;
-  align-items: center;
-  background: var(--color-primary-light);
-  color: var(--color-primary-dark);
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
   font-size: 0.8rem;
   font-weight: 700;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
+  background-color: #f4f6f9;
+  color: #555555;
+  border: 1px solid #d2d6de;
+  border-radius: 3px;
 }
 
-.required-hint {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.required-mark {
-  color: var(--color-danger);
-  font-weight: 700;
-}
-
-/* Patient Summary Card Body */
 .patient-summary-body {
-  padding: 1.15rem 1.5rem;
-  background: #ffffff;
+  padding: 1rem 1.25rem;
 }
 
 .patient-kv-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
 .kv-row {
-  display: grid;
-  grid-template-columns: 95px 14px 1fr;
+  display: flex;
   align-items: baseline;
   font-size: 0.875rem;
-  line-height: 1.45;
 }
 
 .kv-label {
-  font-weight: 600;
-  color: var(--color-text-secondary);
+  width: 70px;
+  color: #333333;
+  font-weight: 700;
 }
 
 .kv-colon {
-  font-weight: 600;
-  color: var(--color-text-secondary);
+  width: 16px;
+  color: #555555;
+  font-weight: 700;
 }
 
 .kv-value {
-  color: var(--color-text-navy);
-}
-
-.rm-tag {
-  display: inline-block;
-  background: #f1f5f9;
-  color: var(--color-text-navy);
-  font-weight: 700;
-  font-size: 0.825rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 5px;
-}
-
-/* Form Edit Grid */
-.edit-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  align-items: start;
-}
-
-.right-panels-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.sub-panel {
-  border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
-  padding: 1.25rem 1.35rem;
-  background: #ffffff;
-}
-
-.section-title-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding-bottom: 0.7rem;
-  border-bottom: 1px solid var(--color-border-soft);
-  margin-bottom: 1.1rem;
-}
-
-.section-badge {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.section-heading {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--color-text-navy);
-}
-
-.panel-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
-
-.h-form-row {
-  display: grid;
-  grid-template-columns: 155px 1fr;
-  gap: 0.75rem;
-  align-items: start;
-}
-
-.h-label {
-  padding-top: 0.58rem;
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: var(--color-text-navy);
-}
-
-.h-control {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.form-input,
-.form-select {
-  width: 100%;
-  height: 40px;
-  padding: 0 0.85rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-  background-color: #ffffff;
-  font-family: inherit;
-  box-sizing: border-box;
-  transition: all 0.15s ease;
-}
-
-.form-input:disabled {
-  background-color: #f1f5f9;
-  color: #94a3b8;
-  cursor: not-allowed;
-}
-
-.form-input:focus,
-.form-select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.select-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.custom-select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 2.25rem;
-  cursor: pointer;
-}
-
-.select-chevron {
-  position: absolute;
-  right: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 15px;
-  height: 15px;
-  color: var(--color-text-secondary);
-  pointer-events: none;
-}
-
-.h-form-row.has-error .form-input,
-.h-form-row.has-error .form-select {
-  border-color: var(--color-danger);
-}
-
-.h-form-row.has-error .form-input:focus,
-.h-form-row.has-error .form-select:focus {
-  box-shadow: 0 0 0 3px var(--color-danger-bg);
-}
-
-.error-message {
-  font-size: 0.78rem;
-  color: var(--color-danger);
-}
-
-/* Form Footer Action Bar */
-.form-footer-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.15rem 1.5rem;
-  border-top: 1px solid var(--color-border-soft);
-  background: #f8fafc;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.btn-batal {
-  height: 40px;
-  padding: 0 1.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  background: #ffffff;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-soft);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.btn-batal:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: var(--color-text-navy);
-}
-
-.btn-batal svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-.btn-update {
-  height: 40px;
-  padding: 0 1.5rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(8, 127, 120, 0.2);
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.btn-update:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-  box-shadow: 0 4px 12px rgba(8, 127, 120, 0.28);
-  transform: translateY(-1px);
-}
-
-.btn-update:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-update svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-.font-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #333333;
+  flex: 1;
 }
 
 .font-bold {
   font-weight: 700;
 }
 
-@media (max-width: 1024px) {
-  .edit-form-grid {
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Card 2: FORM EDIT */
+.form-edit-header {
+  border-bottom: 1px solid #f4f4f4;
+  padding: 0.75rem 1.25rem;
+}
+
+.header-icon-box-layers {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3c8dbc;
+  width: 20px;
+  height: 20px;
+}
+
+.header-icon-box-layers svg {
+  width: 18px;
+  height: 18px;
+  color: #3c8dbc;
+}
+
+.form-edit-title {
+  color: #3c8dbc;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.header-tools-icons {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-card-tool {
+  background: transparent;
+  border: none;
+  color: #97a0af;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.btn-card-tool:hover {
+  color: #333333;
+  background-color: #f4f6f9;
+}
+
+.btn-card-tool svg {
+  width: 14px;
+  height: 14px;
+}
+
+.edit-admission-form {
+  padding: 1.25rem;
+}
+
+/* 2-Column Grid Layout */
+.edit-form-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .edit-form-columns {
     grid-template-columns: 1fr;
   }
+}
+
+.edit-form-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #333333;
+  margin: 0 0 0.5rem 0.15rem;
+}
+
+.category-box {
+  background-color: #ffffff;
+  border: 1px solid #d2d6de;
+  border-radius: 4px;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.mb-4 {
+  margin-bottom: 1.25rem;
+}
+
+/* Restriction Warning Alert */
+.clinic-restriction-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 4px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.5rem;
+  color: #92400e;
+  font-size: 0.82rem;
+}
+
+.clinic-restriction-banner .alert-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  stroke: #d97706;
+  margin-top: 0.1rem;
+}
+
+.clinic-restriction-banner .restriction-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.clinic-restriction-banner .restriction-title {
+  font-weight: 600;
+  color: #78350f;
+}
+
+.clinic-restriction-banner .restriction-desc {
+  color: #92400e;
+  line-height: 1.35;
+}
+
+/* Horizontal Form Rows */
+.h-form-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 @media (max-width: 640px) {
-  .edit-form-grid {
-    padding: 1.15rem;
-  }
-
   .h-form-row {
     grid-template-columns: 1fr;
-    gap: 0.35rem;
-  }
-
-  .h-label {
-    padding-top: 0;
-  }
-
-  .form-footer-bar {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-
-  .btn-batal,
-  .btn-update {
-    width: 100%;
-    justify-content: center;
+    gap: 0.25rem;
   }
 }
-</style>
 
+.h-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333333;
+  text-align: right;
+  padding-right: 0.25rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .h-label {
+    text-align: left;
+    padding-right: 0;
+  }
+}
+
+.required-mark {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.h-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 0.65rem;
+  font-size: 0.85rem;
+  color: #333333;
+  background-color: #ffffff;
+  border: 1px solid #d2d6de;
+  border-radius: 2px;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #3c8dbc;
+}
+
+.form-input:disabled,
+.form-select:disabled,
+.select-wrap.is-disabled {
+  background-color: #eef2f5 !important;
+  color: #777777 !important;
+  cursor: not-allowed;
+  border-color: #d2d6de !important;
+}
+
+.form-input::placeholder {
+  color: #8c9ca8;
+}
+
+.select-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.select-wrap .custom-select {
+  appearance: none;
+  padding-right: 1.75rem;
+}
+
+.select-chevron {
+  position: absolute;
+  right: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.85rem;
+  height: 0.85rem;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.has-error .form-input,
+.has-error .form-select {
+  border-color: #e74c3c;
+}
+
+.error-message {
+  font-size: 0.74rem;
+  color: #e74c3c;
+}
+
+/* Footer Action Bar */
+.form-footer-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1.25rem;
+  margin-top: 1.5rem;
+  border-top: 1px solid #f4f4f4;
+}
+
+.btn-batal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #ffffff;
+  border: 1px solid #d2d6de;
+  color: #333333;
+  padding: 0.45rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-batal:hover {
+  background-color: #e6e6e6;
+  border-color: #adadad;
+}
+
+.btn-batal svg {
+  width: 13px;
+  height: 13px;
+}
+
+.btn-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background-color: #f39c12;
+  border: 1px solid #e08e0b;
+  color: #ffffff;
+  padding: 0.45rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 3px;
+  cursor: pointer;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-update:hover:not(:disabled) {
+  background-color: #e08e0b;
+  border-color: #d58512;
+}
+
+.btn-update:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-update svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  background-color: #ffffff;
+  border: 1px solid #d2d6de;
+  border-radius: 4px;
+  color: #475569;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-secondary:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.btn-secondary svg {
+  width: 1rem;
+  height: 1rem;
+}
+</style>
