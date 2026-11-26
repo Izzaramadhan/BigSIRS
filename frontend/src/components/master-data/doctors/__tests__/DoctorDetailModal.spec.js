@@ -1,51 +1,81 @@
-import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
-import DoctorDetailModal from '@/components/master-data/doctors/DoctorDetailModal.vue';
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import DoctorDetailModal from '@/components/master-data/doctors/DoctorDetailModal.vue'
+
+function mountDetailModal(props = {}) {
+  return mount(DoctorDetailModal, {
+    props: {
+      open: true,
+      loading: false,
+      detail: null,
+      ...props,
+    },
+    global: {
+      stubs: {
+        Teleport: true,
+      },
+    },
+  })
+}
 
 describe('DoctorDetailModal', () => {
-  it('Semua section detail dirender dan nilai null dirender sebagai —', () => {
-    const wrapper = mount(DoctorDetailModal, {
-      props: {
-        open: true,
-        loading: false,
-        detail: {
-          person: {
-            name: 'dr. Andi',
-            gender: 'L',
-            blood_type: null // To test null
-          },
-          professional: {
-            is_active: true,
-            str_number: null
-          }
-        }
-      }
-    });
+  it('merender seluruh section detail (termasuk Alergi dan Nomor HP) serta nilai kosong sebagai —', () => {
+    const wrapper = mountDetailModal({
+      detail: {
+        person: {
+          name: 'dr. Andi',
+          gender: 'L',
+          blood_type: null,
+          allergies: 'Amoxicillin',
+          phone: '081234567890',
+        },
+        professional: {
+          is_active: true,
+          str_number: null,
+        },
+      },
+    })
 
-    const fullText = wrapper.text();
-    expect(fullText).toContain('Identitas Person/Pegawai');
-    expect(fullText).toContain('Alamat dan Kontak');
-    expect(fullText).toContain('Profil Profesional Dokter');
+    const fullText = wrapper.text()
+    expect(fullText).toContain('Identitas Person / Pegawai')
+    expect(fullText).toContain('Alamat & Kontak')
+    expect(fullText).toContain('Profil Profesional Dokter')
+    expect(fullText).toContain('dr. Andi')
+    expect(fullText).toContain('Laki-laki')
+    expect(fullText).toContain('Amoxicillin')
+    expect(fullText).toContain('081234567890')
 
-    expect(fullText).toContain('dr. Andi');
-    expect(fullText).toContain('Laki-laki');
-    
-    // Test that empty fields render as '—'
-    const values = wrapper.findAll('.detail-value');
-    const emptyValues = values.filter(v => v.text() === '—');
-    expect(emptyValues.length).toBeGreaterThan(0);
-  });
+    const values = wrapper.findAll('dd')
+    const emptyValues = values.filter((v) => v.text() === '—')
+    expect(emptyValues.length).toBeGreaterThan(0)
+  })
 
-  it('Loading detail tampil', () => {
-    const wrapper = mount(DoctorDetailModal, {
-      props: {
-        open: true,
-        loading: true,
-        detail: null
-      }
-    });
+  it('menampilkan indikator loading detail dan errorMessage jika gagal memuat', async () => {
+    const loadingWrapper = mountDetailModal({ loading: true, detail: null })
+    expect(loadingWrapper.text()).toContain('Memuat detail dokter...')
+    expect(loadingWrapper.find('svg.animate-spin').exists()).toBe(true)
 
-    expect(wrapper.text()).toContain('Memuat detail dokter...');
-    expect(wrapper.find('.spinner').exists()).toBe(true);
-  });
-});
+    const errorWrapper = mountDetailModal({
+      loading: false,
+      detail: null,
+      errorMessage: 'Gagal memuat detail dokter.',
+    })
+    expect(errorWrapper.get('[role="alert"]').text()).toContain('Gagal memuat detail dokter.')
+  })
+
+  it('memancarkan event edit dan close dari tombol footer', async () => {
+    const wrapper = mountDetailModal({
+      detail: {
+        person: { name: 'dr. Andi', gender: 'L' },
+        professional: { is_active: true },
+      },
+    })
+
+    const buttons = wrapper.findAll('button')
+    await buttons.find((b) => b.text().trim() === 'Edit Dokter').trigger('click')
+    expect(wrapper.emitted('edit')).toBeTruthy()
+
+    await buttons.find((b) => b.text().trim() === 'Tutup').trigger('click')
+    expect(wrapper.emitted('close')).toBeTruthy()
+  })
+})

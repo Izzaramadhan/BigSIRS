@@ -1,184 +1,125 @@
 <script setup>
-import { reactive, watch } from 'vue'
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue'
+import { computed, reactive, ref, useId, watch } from 'vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import {
+  BUILDING_NAME_MAX_LENGTH,
+  createBuildingForm,
+  toBuildingPayload,
+  validateBuildingForm,
+} from './building.helpers'
 
 const props = defineProps({
-  isOpen: {
+  open: {
     type: Boolean,
-    default: false,
+    required: true,
   },
+  /** null = mode tambah, object = mode edit. */
   building: {
     type: Object,
     default: null,
   },
-  isSubmitting: {
+  saving: {
     type: Boolean,
     default: false,
   },
-  errors: {
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
     type: Object,
     default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal. */
+  generalError: {
+    type: String,
+    default: '',
   },
 })
 
 const emit = defineEmits(['close', 'submit'])
 
-const form = reactive({
-  name: '',
-  description: '',
-})
+const formId = useId()
+const form = reactive(createBuildingForm())
+const clientErrors = ref({})
 
-const populateForm = (data) => {
-  form.name = data.name || ''
-  form.description = data.description || ''
-}
-
-const resetForm = () => {
-  form.name = ''
-  form.description = ''
-}
+const isEdit = computed(() => Boolean(props.building))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
 
 watch(
-  () => props.isOpen,
-  (isOpen) => {
+  [() => props.open, () => props.building],
+  ([isOpen]) => {
     if (!isOpen) return
-
-    if (props.building) {
-      populateForm(props.building)
-    } else {
-      resetForm()
-    }
+    Object.assign(form, createBuildingForm(props.building))
+    clientErrors.value = {}
   },
   { immediate: true },
 )
 
-const handleSubmit = () => {
-  const payload = {
-    name: form.name.trim(),
-    description: form.description ? form.description.trim() : null,
-  }
-  emit('submit', payload)
-}
+watch(
+  () => form.name,
+  () => {
+    if (clientErrors.value.name) {
+      const next = { ...clientErrors.value }
+      delete next.name
+      clientErrors.value = next
+    }
+  },
+)
 
-const fieldError = (field) => props.errors?.[field]?.[0] || null
+function handleSubmit() {
+  if (props.saving) return
+  clientErrors.value = validateBuildingForm(form)
+  if (Object.keys(clientErrors.value).length > 0) return
+  emit('submit', toBuildingPayload(form))
+}
 </script>
 
 <template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="building ? 'Edit Gedung' : 'Tambah Gedung'"
-    :submit-text="building ? 'Simpan Perubahan' : 'Simpan'"
-    :is-submitting="isSubmitting"
-    size="md"
-    @close="$emit('close')"
-    @submit="handleSubmit"
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Gedung' : 'Tambah Gedung'"
+    :persistent="saving"
+    @close="emit('close')"
   >
-    <div class="modal-form">
-      <!-- General error alert -->
-      <div v-if="errors.general" class="alert-error">
-        {{ errors.general }}
-      </div>
+    <form :id="formId" class="flex flex-col gap-5" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
 
-      <div class="form-group">
-        <label for="building-name" class="form-label required">Nama Gedung</label>
-        <input autocomplete="off"
-          id="building-name"
+      <BaseField
+        v-slot="field"
+        label="Nama Gedung"
+        required
+        :error="errors.name"
+        :hint="`Maksimal ${BUILDING_NAME_MAX_LENGTH} karakter.`"
+      >
+        <BaseInput
+          v-bind="field"
           v-model="form.name"
-          type="text"
-          class="form-control"
-          :class="{ 'is-invalid': fieldError('name') }"
-          placeholder="Masukkan nama gedung"
-          required
+          placeholder="Contoh: Gedung Teratai"
+          :maxlength="BUILDING_NAME_MAX_LENGTH"
+          :disabled="saving"
         />
-        <div v-if="fieldError('name')" class="invalid-feedback">
-          {{ fieldError('name') }}
-        </div>
-      </div>
+      </BaseField>
 
-      <div class="form-group">
-        <label for="building-description" class="form-label">Deskripsi Gedung</label>
-        <textarea
-          id="building-description"
+      <BaseField v-slot="field" label="Deskripsi" :error="errors.description">
+        <BaseTextarea
+          v-bind="field"
           v-model="form.description"
-          class="form-control form-textarea"
-          :class="{ 'is-invalid': fieldError('description') }"
-          placeholder="Masukkan deskripsi gedung"
-          rows="3"
-        ></textarea>
-        <div v-if="fieldError('description')" class="invalid-feedback">
-          {{ fieldError('description') }}
-        </div>
-      </div>
-    </div>
-  </MasterDataFormModal>
+          placeholder="Opsional, mis. gedung ruang operasi terpadu"
+          :disabled="saving"
+        />
+      </BaseField>
+    </form>
+
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="emit('close')">Batal</BaseButton>
+      <BaseButton type="submit" :form="formId" :loading="saving">
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
-
-<style scoped>
-.modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.alert-error {
-  background-color: #fee2e2;
-  border-left: 4px solid #ef4444;
-  color: #b91c1c;
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-label {
-  font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
-}
-
-.required::after {
-  content: ' *';
-  color: #ef4444;
-}
-
-.form-control {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.95rem;
-  transition: all 0.2s;
-  background-color: #fff;
-  width: 100%;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.is-invalid {
-  border-color: #ef4444;
-}
-
-.is-invalid:focus {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-.invalid-feedback {
-  font-size: 0.8rem;
-  color: #ef4444;
-  margin-top: 0.25rem;
-}
-</style>

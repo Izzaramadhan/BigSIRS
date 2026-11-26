@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
 import AdmissionView from '../AdmissionView.vue';
 import AdmissionEditView from '../AdmissionEditView.vue';
 import AdmissionOldPatientSearchCard from '../components/AdmissionOldPatientSearchCard.vue';
@@ -9,6 +9,7 @@ import AdmissionStatsCards from '../components/AdmissionStatsCards.vue';
 import AdmissionQueueCard from '../components/AdmissionQueueCard.vue';
 import { mockAdmissions, mockLoketInfo } from '@/mocks/admissions';
 import { mockPatients } from '@/mocks/patients';
+import lookupService from '@/services/lookup.service';
 
 const mockPush = vi.fn();
 vi.mock('vue-router', async (importOriginal) => {
@@ -89,7 +90,25 @@ vi.mock('@/services/admission.service', () => ({
   }
 }));
 
+vi.mock('@/services/lookup.service', () => ({
+  default: {
+    getGuarantors: vi.fn()
+  }
+}));
+
+const mockMasterGuarantors = [
+  { id: 2, code: 'UMM', name: 'UMUM', type: 'self_pay', is_active: true },
+  { id: 1, code: 'BPJS', name: 'BPJS Kesehatan', type: 'bpjs', is_active: true },
+  { id: 3, code: 'PRV', name: 'Asuransi Swasta', type: 'private_insurance', is_active: true },
+  { id: 8, code: 'NEW-CORP', name: 'Asuransi Perusahaan Baru', type: 'private_insurance', is_active: true }
+];
+
 describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lookupService.getGuarantors.mockResolvedValue(mockMasterGuarantors);
+  });
+
   it('renders FORM PENCARIAN PASIEN LAMA and DAFTAR PASIEN with 6 standardized columns', () => {
     const wrapper = mount(AdmissionView, {
       global: {
@@ -197,7 +216,7 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
     expect(wrapper.find('input#add-patient-name').exists()).toBe(false);
   });
 
-  it('filters DAFTAR PASIEN by Jenis Asuransi dropdown (UMUM / BPJS Kesehatan)', async () => {
+  it('filters DAFTAR PASIEN by Jenis Asuransi dropdown loaded from Master Data (UMUM / dynamic guarantors)', async () => {
     const wrapper = mount(AdmissionView, {
       global: {
         stubs: {
@@ -206,9 +225,13 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
         }
       }
     });
+    await flushPromises();
 
     await flushPromises();
     const guarantorSelect = wrapper.find('select#admission-guarantor-filter');
+    const optionTexts = guarantorSelect.findAll('option').map((opt) => opt.text().trim());
+    expect(optionTexts).toContain('Asuransi Perusahaan Baru');
+
     await guarantorSelect.setValue('UMUM');
     await flushPromises();
 
@@ -340,7 +363,12 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
 });
 
 describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
-  it('renders DATA PASIEN card and FORM EDIT with 3 sub-panels', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lookupService.getGuarantors.mockResolvedValue(mockMasterGuarantors);
+  });
+
+  it('renders DATA PASIEN card and FORM EDIT with 3 sub-panels', async () => {
     const wrapper = mount(AdmissionEditView, {
       global: {
         stubs: {
@@ -348,6 +376,7 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
         }
       }
     });
+    await flushPromises();
 
     expect(wrapper.text()).toContain('DATA PASIEN');
     expect(wrapper.text()).toContain('No. RM');
@@ -363,7 +392,14 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
     expect(wrapper.find('.btn-update').text()).toContain('Update');
   });
 
-  it('disables No. Asuransi for UMUM, enables for BPJS, and validates required fields', async () => {
+  it('disables No. Asuransi for self_pay guarantor, enables for BPJS/private, and preserves historical guarantor', async () => {
+    // Include scenario where historical guarantor on admission record is NOT returned by active lookup
+    lookupService.getGuarantors.mockResolvedValue([
+      { id: 2, code: 'UMM', name: 'UMUM', type: 'self_pay', is_active: true },
+      { id: 1, code: 'BPJS', name: 'BPJS Kesehatan', type: 'bpjs', is_active: true },
+      { id: 99, code: 'OLD', name: 'Asuransi Arsip', type: 'private_insurance', is_active: false }
+    ]);
+
     const wrapper = mount(AdmissionEditView, {
       global: {
         stubs: {
@@ -371,14 +407,17 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
         }
       }
     });
+    await flushPromises();
 
     const guarantorSelect = wrapper.find('#edit-guarantor');
     const insuranceInput = wrapper.find('#edit-insurance-number');
+    const optionTexts = guarantorSelect.findAll('option').map((opt) => opt.text().trim());
+    expect(optionTexts).toContain('Asuransi Arsip (Nonaktif / Historis)');
 
-    await guarantorSelect.setValue('UMUM');
+    await guarantorSelect.setValue('2');
     expect(insuranceInput.element.disabled).toBe(true);
 
-    await guarantorSelect.setValue('BPJS Kesehatan');
+    await guarantorSelect.setValue('1');
     expect(insuranceInput.element.disabled).toBe(false);
 
     await wrapper.find('#edit-referral-source').setValue('FKT Primer');
@@ -386,6 +425,28 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
     await wrapper.find('form').trigger('submit');
 
     expect(wrapper.find('.error-message').text()).toContain('Nama Asal Rujukan wajib diisi.');
+  });
+
+  it('shows API error and retry button when guarantor lookup fails in AdmissionEditView', async () => {
+    lookupService.getGuarantors
+      .mockRejectedValueOnce(new Error('Server 500'))
+      .mockResolvedValueOnce(mockMasterGuarantors);
+
+    const wrapper = mount(AdmissionEditView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Gagal memuat data penjamin');
+    await wrapper.find('.btn-retry-guarantor').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('Gagal memuat data penjamin');
+    expect(wrapper.findAll('#edit-guarantor option').map((o) => o.text().trim())).toContain('Asuransi Perusahaan Baru');
   });
 
   it('saves edit changes on Update and navigates back to /admisi', async () => {

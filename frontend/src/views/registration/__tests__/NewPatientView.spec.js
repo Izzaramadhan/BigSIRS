@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import NewPatientView from '../NewPatientView.vue';
 import lookupService from '@/services/lookup.service';
-import { guarantorsService } from '@/services/master-data/guarantors.service';
 import { occupationsService } from '@/services/master-data/occupations.service';
 import patientService from '@/services/patient.service';
 
@@ -27,12 +26,7 @@ vi.mock('@/services/lookup.service', () => ({
   default: {
     getEducations: vi.fn(),
     getOccupations: vi.fn(),
-    getVillages: vi.fn()
-  }
-}));
-
-vi.mock('@/services/master-data/guarantors.service', () => ({
-  guarantorsService: {
+    getVillages: vi.fn(),
     getGuarantors: vi.fn()
   }
 }));
@@ -48,6 +42,12 @@ vi.mock('@/services/patient.service', () => ({
     createPatient: vi.fn()
   }
 }));
+
+const defaultGuarantors = [
+  { id: 2, code: 'UMM', name: 'UMUM', type: 'self_pay', is_active: true },
+  { id: 3, code: 'BPJS', name: 'BPJS Kesehatan', type: 'bpjs', is_active: true },
+  { id: 7, code: 'CORP-1', name: 'Jaminan PT Maju Sejahtera', type: 'private_insurance', is_active: true }
+];
 
 describe('NewPatientView', () => {
   beforeEach(() => {
@@ -70,13 +70,7 @@ describe('NewPatientView', () => {
         { id: 12, name: 'Wiraswasta' }
       ]
     });
-    guarantorsService.getGuarantors.mockResolvedValue({
-      data: [
-        { id: 2, name: 'UMUM', type: 'UMUM' },
-        { id: 3, name: 'BPJS Kesehatan', type: 'BPJS' },
-        { id: 4, name: 'Asuransi Sinarmas', type: 'PRIVATE' }
-      ]
-    });
+    lookupService.getGuarantors.mockResolvedValue(defaultGuarantors);
   });
 
   it('renders FORM TAMBAH card header and all key fields from reference image', async () => {
@@ -115,6 +109,56 @@ describe('NewPatientView', () => {
     expect(wrapper.find('.btn-batal').exists()).toBe(true);
     expect(wrapper.find('.btn-simpan').exists()).toBe(true);
     expect(wrapper.find('.category-select').exists()).toBe(true);
+
+    // Master Data guarantors rendered dynamically
+    const optionTexts = wrapper.findAll('select#guarantor option').map((o) => o.text().trim());
+    expect(optionTexts).toContain('Jaminan PT Maju Sejahtera');
+    expect(lookupService.getGuarantors).toHaveBeenCalled();
+  });
+
+  it('disables insurance_number for self_pay guarantor and handles API error + retry cleanly', async () => {
+    lookupService.getGuarantors
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce(defaultGuarantors);
+
+    const wrapper = mount(NewPatientView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: true
+        }
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Gagal memuat data penjamin');
+    await wrapper.find('.btn-retry-guarantor').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('Gagal memuat data penjamin');
+
+    // Selecting self_pay disables insurance_number
+    await wrapper.find('select#guarantor').setValue('2');
+    expect(wrapper.find('input#insurance_number').element.disabled).toBe(true);
+
+    // Selecting corporate guarantor enables insurance_number
+    await wrapper.find('select#guarantor').setValue('7');
+    expect(wrapper.find('input#insurance_number').element.disabled).toBe(false);
+  });
+
+  it('shows empty state hint when no active master guarantors exist', async () => {
+    lookupService.getGuarantors.mockResolvedValue([]);
+    const wrapper = mount(NewPatientView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: true
+        }
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Belum ada data penjamin aktif di Master Data.');
   });
 
   it('populates master data dropdowns for pendidikan, pekerjaan, and jenis jaminan', async () => {

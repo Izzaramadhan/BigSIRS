@@ -1,296 +1,263 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useDoctors } from '@/composables/useDoctors';
-import DoctorTable from '@/components/master-data/doctors/DoctorTable.vue';
-import DoctorFilters from '@/components/master-data/doctors/DoctorFilters.vue';
-import DoctorFormModal from '@/components/master-data/doctors/DoctorFormModal.vue';
-import DoctorDetailModal from '@/components/master-data/doctors/DoctorDetailModal.vue';
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
-import AppToast from '@/components/common/AppToast.vue';
-import DoctorService from '@/services/master-data/doctors.service';
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import DoctorDetailModal from '@/components/master-data/doctors/DoctorDetailModal.vue'
+import DoctorFilters from '@/components/master-data/doctors/DoctorFilters.vue'
+import DoctorFormModal from '@/components/master-data/doctors/DoctorFormModal.vue'
+import DoctorTable from '@/components/master-data/doctors/DoctorTable.vue'
+import {
+  formatDoctorName,
+  getSafeDoctorErrorMessage,
+} from '@/components/master-data/doctors/doctor.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useDoctors } from '@/composables/useDoctors'
+import doctorService from '@/services/master-data/doctors.service'
+import { normalizeApiError } from '@/utils/http-error'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
-  sort,
   loading,
-  error,
-  fetchDoctors,
-  deleteDoctor,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
-  setSort
-} = useDoctors();
+  setFilters,
+  create,
+  update,
+  remove,
+} = useDoctors()
+const toast = useToast()
 
-const isEditOpen = ref(false);
-const isDetailOpen = ref(false);
-const deleteDialogOpen = ref(false);
-const formErrors = ref({});
-const formMode = ref('create');
-const selectedDoctorId = ref(null);
-const doctorDetail = ref(null);
-const detailLoading = ref(false);
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingDoctor = ref(null)
+const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
-});
+function openForm(doctor = null) {
+  editingDoctor.value = doctor
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message };
-};
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingDoctor.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
 
-const closeToast = () => {
-  toast.value.show = false;
-};
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
 
-const openCreateDoctor = () => {
-  formMode.value = 'create';
-  selectedDoctorId.value = null;
-  doctorDetail.value = null;
-  formErrors.value = {};
-  isEditOpen.value = true;
-};
+  const isEdit = Boolean(editingDoctor.value)
+  const fallback = isEdit ? 'Data dokter gagal diperbarui.' : 'Data dokter gagal ditambahkan.'
+  const result = isEdit ? await update(editingDoctor.value.id, payload) : await create(payload)
 
-const openDoctorDetail = async (row) => {
-  selectedDoctorId.value = row.id;
-  isDetailOpen.value = true;
-  detailLoading.value = true;
-  
+  if (!result.ok) {
+    const safeMessage = getSafeDoctorErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
+  }
+
+  closeForm()
+  toast.success(isEdit ? 'Data dokter berhasil diperbarui.' : 'Data dokter berhasil ditambahkan.')
+}
+
+// ── Detail ────────────────────────────────────────────────────────────
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detailError = ref('')
+const doctorDetail = ref(null)
+
+async function openDetail(row) {
+  detailOpen.value = true
+  detailLoading.value = true
+  detailError.value = ''
+  doctorDetail.value = null
+
   try {
-    const response = await DoctorService.getDoctor(row.id);
-    const detail = response.data?.data || response.data || response;
-
+    const detail = await doctorService.getDoctor(row.id)
     if (!detail?.id) {
-      throw new Error('Detail Dokter tidak valid');
+      detailError.value = 'Detail dokter tidak valid.'
+      return
     }
-
-    doctorDetail.value = detail;
-  } catch (err) {
-    showToast({ type: 'error', title: 'Error', message: 'Gagal memuat detail Dokter.' });
-    console.error(err);
-    isDetailOpen.value = false;
+    doctorDetail.value = detail
+  } catch (error) {
+    const safeMessage = getSafeDoctorErrorMessage(
+      normalizeApiError(error, 'Gagal memuat detail dokter.'),
+      'Gagal memuat detail dokter.',
+    )
+    detailError.value = safeMessage
+    toast.error(safeMessage)
   } finally {
-    detailLoading.value = false;
+    detailLoading.value = false
   }
-};
+}
 
-const openEditDoctor = async (row) => {
-  selectedDoctorId.value = row.id;
-  detailLoading.value = true;
-  formErrors.value = {};
-  
-  try {
-    const response = await DoctorService.getDoctor(row.id);
-    const detail = response.data?.data || response.data || response;
+function closeDetail() {
+  detailOpen.value = false
+}
 
-    if (!detail?.id) {
-      throw new Error('Detail Dokter tidak valid');
-    }
+function openEditFromDetail() {
+  if (!doctorDetail.value) return
+  const target = doctorDetail.value
+  detailOpen.value = false
+  openForm(target)
+}
 
-    doctorDetail.value = detail;
-    formMode.value = 'edit';
-    isEditOpen.value = true;
-  } catch (err) {
-    showToast({ type: 'error', title: 'Error', message: 'Gagal memuat data Dokter untuk diedit.' });
-    console.error(err);
-  } finally {
-    detailLoading.value = false;
-  }
-};
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingDoctor = ref(null)
 
-const openEditFromDetail = () => {
-  if (doctorDetail.value) {
-    isDetailOpen.value = false;
-    formMode.value = 'edit';
-    isEditOpen.value = true;
-  }
-};
+const deleteMessage = computed(() => {
+  if (!deletingDoctor.value) return ''
+  return `Apakah Anda yakin ingin menghapus data dokter “${formatDoctorName(deletingDoctor.value)}”?`
+})
 
-const closeDoctorForm = () => {
-  isEditOpen.value = false;
-};
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingDoctor.value = null
+}
 
-const closeDoctorDetail = () => {
-  isDetailOpen.value = false;
-};
+async function handleDelete() {
+  if (saving.value || !deletingDoctor.value) return
+  const result = await remove(deletingDoctor.value.id)
+  deletingDoctor.value = null
 
-const handleFilter = ({ key, value }) => {
-  filters[key] = value;
-  pagination.current_page = 1;
-  fetchDoctors();
-};
-
-const handleResetFilters = () => {
-  filters.search = '';
-  filters.specialization_id = null;
-  pagination.current_page = 1;
-  fetchDoctors();
-};
-
-const handleDoctorSaved = () => {
-  isEditOpen.value = false;
-  showToast({
-    type: 'success',
-    title: 'Berhasil',
-    message: formMode.value === 'edit' ? 'Data dokter berhasil diperbarui.' : 'Data dokter berhasil ditambahkan.'
-  });
-  fetchDoctors();
-};
-
-const openDeleteDialog = (item) => {
-  selectedDoctorId.value = item.id;
-  doctorDetail.value = item;
-  deleteDialogOpen.value = true;
-};
-
-const handleDeleteConfirm = async () => {
-  const result = await deleteDoctor(selectedDoctorId.value);
-  if (result.success) {
-    deleteDialogOpen.value = false;
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data dokter berhasil dihapus.'
-    });
-    // Adjust pagination if needed
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--;
-    }
-    fetchDoctors();
+  if (result.ok) {
+    toast.success('Data dokter berhasil dihapus.')
   } else {
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: 'Terjadi kesalahan saat menghapus data dokter.'
-    });
-    deleteDialogOpen.value = false;
+    toast.error(getSafeDoctorErrorMessage(result.error, 'Data dokter gagal dihapus.'))
   }
-};
+}
 
-onMounted(() => {
-  fetchDoctors();
-});
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast 
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader 
+  <div class="space-y-6">
+    <BasePageHeader
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Dokter', 'Dokter']"
       title="Dokter"
-      subtitle="Kelola data dokter, spesialisasi, dan informasi profesional lainnya."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Dokter', active: false },
-        { label: 'Dokter', active: true }
-      ]"
+      description="Kelola data dokter, spesialisasi, dan informasi profesional lainnya."
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openCreateDoctor">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <Plus class="size-4" aria-hidden="true" />
           Tambah Dokter
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <DoctorFilters 
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @reset="handleResetFilters"
-        @refresh="fetchDoctors"
-      />
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error" 
-        @retry="fetchDoctors" 
-      />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && items.length === 0" 
-          :is-search="!!filters.search || filters.specialization_id !== null"
-        >
-          <template #action v-if="!filters.search && filters.specialization_id === null">
-            <button class="btn-primary" @click="openCreateDoctor">Tambah Dokter</button>
-          </template>
-        </MasterDataEmptyState>
-        
-        <template v-else>
-          <DoctorTable 
-            :items="items"
-            :pagination="pagination"
-            :sort="sort"
-            :loading="loading"
-            @sort="setSort"
-            @view="openDoctorDetail"
-            @edit="openEditDoctor"
-            @delete="openDeleteDialog"
-          />
-          
-          <MasterDataPagination 
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <DoctorFormModal 
-      v-if="isEditOpen"
-      :key="`${formMode}-${selectedDoctorId ?? 'new'}`"
-      :open="isEditOpen"
-      :mode="formMode"
-      :initial-data="doctorDetail"
-      @close="closeDoctorForm"
-      @saved="handleDoctorSaved"
+    <DoctorFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
-    
+
+    <DoctorTable
+      :items="items"
+      :loading="loading"
+      :offset="(meta.page - 1) * meta.perPage"
+      @view="openDetail"
+      @edit="openForm($event)"
+      @delete="deletingDoctor = $event"
+    >
+      <template #empty>
+        <BaseEmptyState
+          v-if="loadError"
+          :icon="CircleAlert"
+          tone="danger"
+          title="Gagal memuat data dokter"
+          :description="loadError"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="fetchItems">Muat Ulang</BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else-if="filters.search"
+          :icon="SearchX"
+          title="Dokter tidak ditemukan"
+          :description="`Tidak ada dokter yang cocok dengan pencarian “${filters.search}”.`"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="setFilters({ search: '' })">
+              Reset Pencarian
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else
+          :icon="Inbox"
+          title="Belum ada data dokter"
+          description="Tambahkan data dokter pertama untuk mulai mengelola profil tenaga medis."
+        >
+          <template #action>
+            <BaseButton @click="openForm()">
+              <Plus class="size-4" aria-hidden="true" />
+              Tambah Dokter
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+      </template>
+    </DoctorTable>
+
+    <BasePagination
+      :page="meta.page"
+      :last-page="meta.lastPage"
+      :total="meta.total"
+      :from="meta.from"
+      :to="meta.to"
+      :disabled="loading"
+      @change="setPage"
+    />
+
+    <DoctorFormModal
+      :open="formOpen"
+      :doctor="editingDoctor"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
     <DoctorDetailModal
-      v-if="isDetailOpen"
-      :open="isDetailOpen"
+      :open="detailOpen"
       :loading="detailLoading"
       :detail="doctorDetail"
-      @close="closeDoctorDetail"
+      :error-message="detailError"
+      @close="closeDetail"
       @edit="openEditFromDetail"
     />
-    
-    <MasterDataDeleteDialog 
-      :is-open="deleteDialogOpen"
-      title="Hapus Dokter?"
-      :item-name="doctorDetail ? doctorDetail.name : ''"
-      warning-message="Data dokter yang dihapus mungkin tidak dapat dikembalikan. Lanjutkan?"
-      :is-submitting="detailLoading"
-      @close="deleteDialogOpen = false"
-      @confirm="handleDeleteConfirm"
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingDoctor)"
+      title="Hapus Data Dokter"
+      :message="deleteMessage"
+      confirm-text="Ya, Hapus"
+      :loading="saving"
+      @close="closeDeleteDialog"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-/* Inherits global styles or MasterData shared component styles */
-</style>

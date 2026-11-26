@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests\Registration;
 
+use App\Models\Legacy\LegacyPatient;
+use App\Support\GuarantorValidation;
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdatePatientRequest extends FormRequest
 {
@@ -37,6 +41,7 @@ class UpdatePatientRequest extends FormRequest
             'religion' => ['nullable', 'string'],
             'marital_status' => ['nullable', 'string'],
             'guarantor_id' => ['sometimes', 'required', 'integer'],
+            'guarantor' => ['sometimes', 'nullable', 'string', 'max:100'],
             'insurance_number' => ['nullable', 'string', 'max:50'],
             'hak_kelas' => ['nullable', 'string', 'max:50'],
             'has_allergy' => ['nullable', 'string'],
@@ -48,6 +53,24 @@ class UpdatePatientRequest extends FormRequest
             'emergency_contact.phone' => ['nullable', 'string', 'max:50'],
             'emergency_contact.address' => ['nullable', 'string'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $v) {
+            if (! $this->has('guarantor_id')) {
+                return;
+            }
+
+            $currentGuarantorId = null;
+            $patientId = $this->route('id');
+            if ($patientId && LegacyAccess::isAvailable('ref_pasien')) {
+                $current = LegacyPatient::find($patientId);
+                $currentGuarantorId = $current?->id_jenis_asuransi ? (int) $current->id_jenis_asuransi : null;
+            }
+
+            GuarantorValidation::validateGuarantorId($v, $this->input('guarantor_id'), $currentGuarantorId);
+        });
     }
 }
 

@@ -1,35 +1,29 @@
-import api from '@/utils/axios'
+import { createResourceService } from '@/services/core/createResourceService'
 
-const BASE_URL = '/master-data/educations'
+const resource = createResourceService('/master-data/educations')
 
-export const educationsService = {
-  async getEducations(params = {}) {
-    const response = await api.get(BASE_URL, { params })
-    return response.data
-  },
-
-  async getEducation(id) {
-    const response = await api.get(`${BASE_URL}/${id}`)
-    return response.data
-  },
-
-  async createEducation(data) {
-    const response = await api.post(BASE_URL, data)
-    return response.data
-  },
-
-  async updateEducation(id, data) {
-    const response = await api.put(`${BASE_URL}/${id}`, data)
-    return response.data
-  },
-
-  async deleteEducation(id) {
-    const response = await api.delete(`${BASE_URL}/${id}`)
-    return response.data
-  },
-
-  async updateStatus(id, isActive) {
-    const response = await api.patch(`${BASE_URL}/${id}/status`, { is_active: isActive })
-    return response.data
+function mapListParams(params = {}) {
+  if (!params || (!('sort' in params) && !('direction' in params))) {
+    return params
+  }
+  const { sort, direction, ...rest } = params
+  return {
+    ...rest,
+    ...(sort ? { sort_by: sort } : {}),
+    ...(direction ? { sort_desc: direction === 'desc' } : {}),
   }
 }
+
+export const educationsService = {
+  ...resource,
+  // Backend EducationController::index membaca sort_by & sort_desc.
+  list: (params) => resource.list(mapListParams(params)),
+  // Alias kompatibilitas untuk caller atau pengujian lama.
+  getEducations: (params) => resource.list(mapListParams(params)),
+  getEducation: (id) => resource.get(id),
+  createEducation: (data) => resource.create(data),
+  updateEducation: (id, data) => resource.update(id, data),
+  deleteEducation: (id) => resource.remove(id),
+}
+
+export default educationsService

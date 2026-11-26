@@ -1,115 +1,116 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import InsuranceTypeFormModal from '../InsuranceTypeFormModal.vue'
+import { INACBG_ID_MAX_LENGTH, INSURANCE_NAME_MAX_LENGTH } from '../insurance-type.helpers'
 
 describe('InsuranceTypeFormModal.vue', () => {
-  it('renders correctly for add new mode', () => {
-    const wrapper = mount(InsuranceTypeFormModal, {
+  const mountModal = (propsData = {}) =>
+    mount(InsuranceTypeFormModal, {
       props: {
-        isOpen: true,
+        open: true,
         insuranceType: null,
-        isSubmitting: false,
-        errors: {}
+        saving: false,
+        ...propsData,
       },
       global: {
         stubs: {
-          Teleport: true
-        }
-      }
+          Teleport: true,
+        },
+      },
     })
 
-    expect(wrapper.text()).toContain('Tambah Jenis Asuransi')
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders correctly for add new mode without status checkbox', () => {
+    const wrapper = mountModal()
+
+    expect(wrapper.find('h2').text()).toBe('Tambah Jenis Asuransi')
     expect(wrapper.text()).toContain('Simpan')
     expect(wrapper.text()).not.toContain('Simpan Perubahan')
-
-    // Confirm Status field is not present
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Aktif')
     expect(wrapper.text()).not.toContain('Nonaktif')
   })
 
-  it('renders correctly for edit mode with initial data', () => {
-    const wrapper = mount(InsuranceTypeFormModal, {
-      props: {
-        isOpen: true,
-        insuranceType: {
-          id: 5,
-          name: 'BPJS Pensiunan',
-          is_government: true,
-          inacbg_id: '12'
-        },
-        isSubmitting: false,
-        errors: {}
+  it('renders correctly for edit mode and preserves legacy code/type on submit', async () => {
+    const wrapper = mountModal({
+      insuranceType: {
+        id: 5,
+        code: 'ASR-05',
+        type: 'bpjs',
+        name: 'BPJS Pensiunan',
+        is_government: true,
+        inacbg_id: '12',
       },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
     })
 
-    expect(wrapper.text()).toContain('Edit Jenis Asuransi')
+    expect(wrapper.find('h2').text()).toBe('Edit Jenis Asuransi')
     expect(wrapper.text()).toContain('Simpan Perubahan')
+    expect(wrapper.get('input#name').element.value).toBe('BPJS Pensiunan')
+    expect(wrapper.get('input#inacbg_id').element.value).toBe('12')
 
-    const nameInput = wrapper.find('input#name')
-    expect(nameInput.element.value).toBe('BPJS Pensiunan')
+    await wrapper.get('input#name').setValue('BPJS Pensiunan PNS')
+    await wrapper.get('form').trigger('submit.prevent')
 
-    const inacbgInput = wrapper.find('input#inacbg_id')
-    expect(inacbgInput.element.value).toBe('12')
-
-    // Confirm Status field is not present
-    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(wrapper.emitted('submit')[0][0]).toEqual({
+      name: 'BPJS Pensiunan PNS',
+      is_government: true,
+      inacbg_id: '12',
+      code: 'ASR-05',
+      type: 'bpjs',
+    })
   })
 
-  it('emits submit event with proper payload', async () => {
-    const wrapper = mount(InsuranceTypeFormModal, {
-      props: {
-        isOpen: true,
-        insuranceType: null,
-        isSubmitting: false,
-        errors: {}
-      },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
+  it('validates empty name and field max lengths before submit', async () => {
+    const wrapper = mountModal()
+
+    await wrapper.get('form').trigger('submit.prevent')
+    expect(wrapper.text()).toContain('Nama jenis asuransi wajib diisi.')
+    expect(wrapper.emitted('submit')).toBeFalsy()
+
+    await wrapper.get('input#name').setValue('X'.repeat(INSURANCE_NAME_MAX_LENGTH + 1))
+    await wrapper.get('input#inacbg_id').setValue('1'.repeat(INACBG_ID_MAX_LENGTH + 1))
+    await wrapper.get('form').trigger('submit.prevent')
+
+    expect(wrapper.text()).toContain(`maksimal ${INSURANCE_NAME_MAX_LENGTH} karakter`)
+    expect(wrapper.text()).toContain(`maksimal ${INACBG_ID_MAX_LENGTH} karakter`)
+    expect(wrapper.emitted('submit')).toBeFalsy()
+  })
+
+  it('emits normalized payload for new record and displays server errors', async () => {
+    const wrapper = mountModal({
+      serverErrors: { name: 'Nama jenis asuransi sudah digunakan.' },
+      generalError: 'Gagal menyimpan data.',
     })
 
-    await wrapper.find('input#name').setValue('Asuransi ABC')
+    expect(wrapper.text()).toContain('Nama jenis asuransi sudah digunakan.')
+    expect(wrapper.text()).toContain('Gagal menyimpan data.')
+
+    await wrapper.get('input#name').setValue('  Asuransi ABC  ')
     const radios = wrapper.findAll('input[type="radio"]')
-    // Set is_government = true
     await radios[1].setValue(true)
-    await wrapper.find('input#inacbg_id').setValue('99')
+    await wrapper.get('input#inacbg_id').setValue(' 99 ')
+    await wrapper.get('form').trigger('submit.prevent')
 
-    await wrapper.find('form').trigger('submit')
-
-    expect(wrapper.emitted()).toHaveProperty('submit')
     expect(wrapper.emitted('submit')[0][0]).toEqual({
       name: 'Asuransi ABC',
       is_government: true,
-      inacbg_id: '99'
+      inacbg_id: '99',
     })
   })
 
-  it('emits close event when Batal button is clicked', async () => {
-    const wrapper = mount(InsuranceTypeFormModal, {
-      props: {
-        isOpen: true,
-        insuranceType: null,
-        isSubmitting: false,
-        errors: {}
-      },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
-    })
+  it('emits close on Batal and blocks close/submit while saving', async () => {
+    const idleWrapper = mountModal()
+    const batalBtn = idleWrapper.findAll('button').find((b) => b.text().trim() === 'Batal')
+    await batalBtn.trigger('click')
+    expect(idleWrapper.emitted('close')).toBeTruthy()
 
-    const cancelBtn = wrapper.find('.btn-cancel')
-    await cancelBtn.trigger('click')
-
-    expect(wrapper.emitted()).toHaveProperty('close')
+    const savingWrapper = mountModal({ saving: true })
+    await savingWrapper.get('input#name').setValue('UMUM')
+    await savingWrapper.get('form').trigger('submit.prevent')
+    await savingWrapper.get('button[aria-label="Tutup"]').trigger('click')
+    expect(savingWrapper.emitted('submit')).toBeFalsy()
+    expect(savingWrapper.emitted('close')).toBeFalsy()
   })
 })

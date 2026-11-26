@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyDoctor;
+use App\Models\Legacy\LegacyEmployee;
 use App\Support\LegacyAccess;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -16,18 +19,38 @@ class UpdateDoctorRequest extends FormRequest
     public function rules(): array
     {
         $isLegacy = LegacyAccess::isAvailable('ref_dokter');
+        $employeeTable = $isLegacy ? 'legacy.ref_pegawai' : 'employees';
         $specializationTable = $isLegacy ? 'legacy.ref_spesialisasi' : 'specializations';
-        
+
         $doctor = $this->route('doctor');
         $doctorId = is_object($doctor) ? $doctor->id : $doctor;
         $employeeId = is_object($doctor) ? ($doctor->employee_id ?? null) : null;
 
+        $employeeRules = ['nullable', 'integer', "exists:{$employeeTable},id"];
         $nationalIdRule = ['nullable', 'string', 'max:20'];
         $sipRule = ['nullable', 'string', 'max:255'];
 
         if ($isLegacy) {
+            $employeeRules[] = function (string $attribute, mixed $value, Closure $fail) use ($doctorId): void {
+                if ($value === null || $value === '') {
+                    return;
+                }
+                $employee = LegacyEmployee::find($value);
+                if (
+                    $employee &&
+                    $employee->id_mpi &&
+                    LegacyDoctor::where('id_mpi', $employee->id_mpi)
+                        ->where('id', '!=', $doctorId)
+                        ->exists()
+                ) {
+                    $fail('Pegawai ini sudah terdaftar sebagai dokter.');
+                }
+            };
             $sipRule[] = Rule::unique('legacy.ref_dokter', 'sip')->ignore($doctorId);
         } else {
+            $employeeRules[] = Rule::unique('doctors', 'employee_id')
+                ->whereNull('deleted_at')
+                ->ignore($doctorId);
             if ($employeeId) {
                 $nationalIdRule[] = Rule::unique('employees', 'national_id')->ignore($employeeId);
             }
@@ -35,6 +58,7 @@ class UpdateDoctorRequest extends FormRequest
         }
 
         return [
+            'employee_id' => $employeeRules,
             'person' => ['required', 'array'],
             'person.national_id' => $nationalIdRule,
             'person.ihs_number' => ['nullable', 'string', 'max:255'],

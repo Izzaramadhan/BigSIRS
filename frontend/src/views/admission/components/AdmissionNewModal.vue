@@ -1,5 +1,11 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import {
+  findMatchingGuarantor,
+  isSelfPayGuarantor,
+  mergeSavedGuarantorOption,
+  useGuarantorOptions
+} from '@/composables/useGuarantorOptions';
 
 const props = defineProps({
   isOpen: {
@@ -11,6 +17,10 @@ const props = defineProps({
     default: () => []
   },
   doctors: {
+    type: Array,
+    default: () => []
+  },
+  guarantors: {
     type: Array,
     default: () => []
   },
@@ -26,6 +36,16 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'submit']);
 
+const {
+  guarantors: localGuarantors,
+  loading: guarantorsLoading,
+  error: guarantorsError,
+  isEmpty: guarantorsEmpty,
+  fetchGuarantors
+} = useGuarantorOptions();
+
+const savedGuarantorContext = ref({ id: null, name: 'UMUM' });
+
 const calcAge = (birthDate) => {
   if (!birthDate) return 35;
   const birth = new Date(birthDate);
@@ -37,12 +57,10 @@ const calcAge = (birthDate) => {
   return Math.max(0, age);
 };
 
-const mapGuarantorType = (val) => {
+const normalizeGuarantorName = (val) => {
   if (!val) return 'UMUM';
-  const lower = String(val).toLowerCase();
-  if (lower.includes('bpjs') || lower.includes('jkn')) return 'BPJS Kesehatan';
-  if (lower.includes('swasta') || lower.includes('inhealth') || lower.includes('prudential')) return 'Asuransi Swasta';
-  return 'UMUM';
+  if (isSelfPayGuarantor(val)) return 'UMUM';
+  return String(val).trim();
 };
 
 const form = ref({
@@ -57,12 +75,47 @@ const form = ref({
   address: '',
   polyclinic: 'Poli Umum',
   doctor: 'dr. Budi Santoso, Sp.PD',
+  guarantor_id: '',
   guarantor_type: 'UMUM',
   guarantor_detail: 'Mandiri / Pribadi',
   notes: ''
 });
 
+const effectiveMasterGuarantors = computed(() =>
+  props.guarantors.length > 0 ? props.guarantors : localGuarantors.value
+);
+
+const guarantorOptions = computed(() =>
+  mergeSavedGuarantorOption(effectiveMasterGuarantors.value, savedGuarantorContext.value)
+);
+
+const selectedGuarantorOption = computed(() =>
+  guarantorOptions.value.find((g) => String(g.id) === String(form.value.guarantor_id)) || null
+);
+
+const isSelfPaySelected = computed(() => {
+  if (selectedGuarantorOption.value) {
+    return selectedGuarantorOption.value.is_self_pay;
+  }
+  return isSelfPayGuarantor(form.value.guarantor_type);
+});
+
+const syncSelectedGuarantor = () => {
+  const matched = findMatchingGuarantor(guarantorOptions.value, savedGuarantorContext.value);
+  if (matched) {
+    form.value.guarantor_id = matched.id;
+    form.value.guarantor_type = matched.name;
+    if (matched.is_self_pay) {
+      form.value.guarantor_detail = 'Mandiri / Pribadi';
+    }
+  } else if (!form.value.guarantor_id && guarantorOptions.value.length > 0) {
+    form.value.guarantor_id = guarantorOptions.value[0].id;
+    form.value.guarantor_type = guarantorOptions.value[0].name;
+  }
+};
+
 const resetForm = () => {
+  savedGuarantorContext.value = { id: null, name: 'UMUM' };
   form.value = {
     patient_id: null,
     patient_name: '',
@@ -75,18 +128,28 @@ const resetForm = () => {
     address: '',
     polyclinic: 'Poli Umum',
     doctor: 'dr. Budi Santoso, Sp.PD',
+    guarantor_id: '',
     guarantor_type: 'UMUM',
     guarantor_detail: 'Mandiri / Pribadi',
     notes: ''
   };
+  syncSelectedGuarantor();
 };
 
 watch(
   () => [props.isOpen, props.patient],
-  ([open, pat]) => {
+  async ([open, pat]) => {
     if (!open) return;
     if (pat) {
-      const mappedGuarantor = mapGuarantorType(pat.guarantor);
+      const mappedName = normalizeGuarantorName(
+        typeof pat.guarantor === 'object' ? pat.guarantor?.name : pat.guarantor
+      );
+      const patientGuarantorId =
+        pat.guarantor_id ?? (typeof pat.guarantor === 'object' ? pat.guarantor?.id : null);
+      savedGuarantorContext.value = {
+        id: patientGuarantorId ?? null,
+        name: mappedName
+      };
       form.value = {
         patient_id: pat.id || pat.patient_id || null,
         patient_name: pat.name || '',
@@ -99,24 +162,49 @@ watch(
         address: pat.address || '',
         polyclinic: props.polyclinics[0] || 'Poli Umum',
         doctor: props.doctors[0] || 'dr. Budi Santoso, Sp.PD',
-        guarantor_type: mappedGuarantor,
+        guarantor_id: patientGuarantorId ? String(patientGuarantorId) : '',
+        guarantor_type: mappedName,
         guarantor_detail:
-          mappedGuarantor === 'UMUM'
+          isSelfPayGuarantor(mappedName)
             ? 'Mandiri / Pribadi'
             : (pat.insurance_number && pat.insurance_number !== '-' ? pat.insurance_number : 'JKN-Non PBI'),
         notes: ''
       };
+      syncSelectedGuarantor();
     } else {
       resetForm();
+    }
+
+    if (props.guarantors.length === 0) {
+      await fetchGuarantors(savedGuarantorContext.value.id ? { ids: savedGuarantorContext.value.id } : {});
+      syncSelectedGuarantor();
     }
   },
   { immediate: true }
 );
 
+watch(
+  () => form.value.guarantor_id,
+  () => {
+    if (selectedGuarantorOption.value) {
+      form.value.guarantor_type = selectedGuarantorOption.value.name;
+      if (selectedGuarantorOption.value.is_self_pay) {
+        form.value.guarantor_detail = 'Mandiri / Pribadi';
+      }
+    }
+  }
+);
+
 const handleSubmit = () => {
   if (!form.value.patient_name.trim()) return;
 
-  emit('submit', { ...form.value });
+  const resolvedName = selectedGuarantorOption.value?.name || form.value.guarantor_type;
+  emit('submit', {
+    ...form.value,
+    guarantor_id: selectedGuarantorOption.value?.numericId ?? (form.value.guarantor_id || null),
+    guarantor_type: resolvedName,
+    guarantor_detail: isSelfPaySelected.value ? 'Mandiri / Pribadi' : form.value.guarantor_detail
+  });
   resetForm();
 };
 </script>
@@ -242,21 +330,38 @@ const handleSubmit = () => {
           <div class="form-row-2">
             <div class="form-group">
               <label class="form-label" for="add-guarantor">Jenis Penjamin</label>
-              <select id="add-guarantor" v-model="form.guarantor_type" class="form-select">
-                <option value="UMUM">UMUM (Mandiri)</option>
-                <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-                <option value="Asuransi Swasta">Asuransi Swasta</option>
+              <select
+                id="add-guarantor"
+                v-model="form.guarantor_id"
+                class="form-select"
+                :disabled="guarantorsLoading && guarantorOptions.length === 0"
+              >
+                <option v-if="guarantorOptions.length === 0" value="">
+                  {{ guarantorsLoading ? 'Memuat daftar penjamin...' : '-- Pilih Penjamin --' }}
+                </option>
+                <option v-for="g in guarantorOptions" :key="g.id" :value="g.id">
+                  {{ g.label }}
+                </option>
               </select>
+              <small v-if="guarantorsLoading" class="guarantor-helper-muted">Memuat data penjamin...</small>
+              <small v-else-if="guarantorsError" class="guarantor-helper-error">
+                {{ guarantorsError }}
+                <button type="button" class="btn-retry-guarantor" @click="fetchGuarantors()">Coba Lagi</button>
+              </small>
+              <small v-else-if="guarantorsEmpty && guarantorOptions.length === 0" class="guarantor-helper-muted">
+                Belum ada data penjamin aktif.
+              </small>
             </div>
 
             <div class="form-group">
               <label class="form-label" for="add-guarantor-detail">Detail Penjamin</label>
-              <input autocomplete="off" 
-                id="add-guarantor-detail" 
-                v-model="form.guarantor_detail" 
-                type="text" 
-                class="form-input" 
-                placeholder="Contoh: JKN-Non PBI" 
+              <input autocomplete="off"
+                id="add-guarantor-detail"
+                v-model="form.guarantor_detail"
+                type="text"
+                class="form-input"
+                :disabled="isSelfPaySelected"
+                :placeholder="isSelfPaySelected ? 'Mandiri / Pribadi' : 'Contoh: JKN-Non PBI'"
               />
             </div>
           </div>
@@ -356,6 +461,33 @@ const handleSubmit = () => {
 
 .text-primary {
   color: var(--color-primary);
+}
+
+.guarantor-helper-muted {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.guarantor-helper-error {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-danger);
+}
+
+.btn-retry-guarantor {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.08rem 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 @media (max-width: 640px) {

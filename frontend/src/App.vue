@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import AppLayout from './layouts/AppLayout.vue'
+import ToastViewport from './components/ui/ToastViewport.vue'
 
 const authStore = useAuthStore()
 const route = useRoute()
@@ -23,6 +24,8 @@ const isAuthRoute = computed(() => {
     </AppLayout>
     <RouterView v-else />
   </template>
+
+  <ToastViewport />
 </template>
 
 <style>

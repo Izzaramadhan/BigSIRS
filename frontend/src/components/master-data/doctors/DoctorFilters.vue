@@ -1,208 +1,55 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch } from 'vue'
+import { RefreshCw } from 'lucide-vue-next'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseSearchInput from '@/components/ui/BaseSearchInput.vue'
+import { useDebouncedRef } from '@/composables/core/useDebouncedRef'
 
 const props = defineProps({
-  filters: {
-    type: Object,
-    required: true
+  search: {
+    type: String,
+    default: '',
   },
   loading: {
     type: Boolean,
-    default: false
-  }
-});
+    default: false,
+  },
+})
 
-const emit = defineEmits(['filter', 'refresh']);
+const emit = defineEmits(['update:search', 'refresh'])
 
-const localSearch = ref(props.filters.search);
+const term = ref(props.search)
+const debouncedTerm = useDebouncedRef(term, 400)
 
-const executeSearch = () => {
-  emit('filter', { key: 'search', value: localSearch.value });
-};
+watch(debouncedTerm, (value) => {
+  const normalized = value.trim()
+  if (normalized !== props.search) emit('update:search', normalized)
+})
 
-watch(() => props.filters.search, (newVal) => {
-  if (localSearch.value !== newVal) {
-    localSearch.value = newVal;
-  }
-});
+watch(
+  () => props.search,
+  (value) => {
+    if (term.value.trim() !== value) term.value = value
+  },
+)
 </script>
 
 <template>
-  <div class="filters-container">
-    <div class="search-box">
-      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
-      <input autocomplete="off" 
-        type="text" 
-        v-model="localSearch" 
-        @keyup.enter="executeSearch"
-        placeholder="Cari nama dokter atau kode..." 
-        class="search-input"
-        :disabled="loading"
-        aria-label="Cari dokter"
-      >
-      <button 
-        type="button" 
-        class="btn-search" 
-        @click="executeSearch"
-        :disabled="loading"
-      >
-        Cari
-      </button>
-    </div>
-    
-    <div class="filter-controls">
-      
-      
-      <button 
-        type="button" 
-        class="btn-icon" 
-        @click="emit('refresh')" 
-        title="Refresh Data"
-        :disabled="loading"
-        aria-label="Refresh data"
-      >
-        <svg :class="{ 'spin': loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-      </button>
-    </div>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <BaseSearchInput
+      v-model="term"
+      label="Cari nama dokter atau kode"
+      placeholder="Cari nama dokter atau kode..."
+    />
+    <BaseButton
+      variant="secondary"
+      size="icon"
+      aria-label="Muat ulang data"
+      title="Muat ulang data"
+      :disabled="loading"
+      @click="emit('refresh')"
+    >
+      <RefreshCw class="size-4" :class="{ 'animate-spin': loading }" aria-hidden="true" />
+    </BaseButton>
   </div>
 </template>
-
-<style scoped>
-.filters-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.search-box {
-  position: relative;
-  flex: 1;
-  min-width: 250px;
-  max-width: 400px;
-  display: flex;
-  gap: 0.5rem;
-}
-
-.search-icon {
-  position: absolute;
-  left: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-secondary);
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  padding: 0.5rem 1rem 0.5rem 2.5rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-  box-sizing: border-box;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.btn-search {
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  padding: 0 1rem;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-search:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.filter-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.filter-select {
-  padding: 0.5rem 2rem 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background-color: #fff;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.5rem center;
-  max-width: 200px;
-}
-
-.filter-select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover:not(:disabled) {
-  background: var(--color-page-bg);
-  color: var(--color-text-navy);
-}
-
-.btn-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-button:disabled, input:disabled, select:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@media (max-width: 768px) {
-  .search-box {
-    max-width: 100%;
-  }
-}
-</style>

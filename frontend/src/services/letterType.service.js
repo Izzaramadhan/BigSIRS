@@ -1,35 +1,39 @@
-import axios from '@/utils/axios';
+import http from '@/utils/axios'
+import { createResourceService } from '@/services/core/createResourceService'
 
-class LetterTypeService {
-  async getLetterTypes(params) {
-    const response = await axios.get('/master-data/letter-types', { params });
-    return response.data;
-  }
+const API_URL = '/master-data/letter-types'
+const resource = createResourceService(API_URL)
 
-  async getLetterType(id) {
-    const response = await axios.get(`/master-data/letter-types/${id}`);
-    return response.data;
-  }
+/**
+ * Adapter parameter list untuk backend LetterTypeService::getPaginated:
+ * - Frontend (`useCrudResource`) mengirim `sort` dan `direction`
+ * - Backend (`LetterTypeController::index`) mengharapkan `sort_by` dan `sort_dir`
+ */
+export function adaptLetterTypeListParams(params = {}) {
+  const { sort, direction, sort_by: explicitSortBy, sort_dir: explicitSortDir, ...rest } =
+    params || {}
 
-  async createLetterType(data) {
-    const response = await axios.post('/master-data/letter-types', data);
-    return response.data;
-  }
+  const resolvedSortBy = explicitSortBy || sort
+  const resolvedSortDir = explicitSortDir || direction
 
-  async updateLetterType(id, data) {
-    const response = await axios.put(`/master-data/letter-types/${id}`, data);
-    return response.data;
-  }
-
-  async deleteLetterType(id) {
-    const response = await axios.delete(`/master-data/letter-types/${id}`);
-    return response.data;
-  }
-
-  async updateStatus(id, isActive) {
-    const response = await axios.patch(`/master-data/letter-types/${id}/status`, { is_active: isActive });
-    return response.data;
+  return {
+    ...rest,
+    ...(resolvedSortBy ? { sort_by: resolvedSortBy } : {}),
+    ...(resolvedSortDir ? { sort_dir: resolvedSortDir } : {}),
   }
 }
 
-export default new LetterTypeService();
+export const letterTypeService = {
+  ...resource,
+  list: (params) => resource.list(adaptLetterTypeListParams(params)),
+  // Alias kompatibilitas untuk caller atau pengujian lama.
+  getLetterTypes: (params) => resource.list(adaptLetterTypeListParams(params)),
+  getLetterType: (id) => resource.get(id),
+  createLetterType: (data) => resource.create(data),
+  updateLetterType: (id, data) => resource.update(id, data),
+  deleteLetterType: (id) => resource.remove(id),
+  updateStatus: (id, isActive) =>
+    http.patch(`${API_URL}/${id}/status`, { is_active: isActive }).then((res) => res.data),
+}
+
+export default letterTypeService

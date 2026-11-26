@@ -1,308 +1,234 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useDoctorSchedules } from '@/composables/useDoctorSchedules';
-import DoctorScheduleTable from '@/components/master-data/doctor-schedules/DoctorScheduleTable.vue';
-import DoctorScheduleFilters from '@/components/master-data/doctor-schedules/DoctorScheduleFilters.vue';
-import DoctorScheduleFormModal from '@/components/master-data/doctor-schedules/DoctorScheduleFormModal.vue';
-import DoctorScheduleRecapTable from '@/components/master-data/doctor-schedules/DoctorScheduleRecapTable.vue';
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
-import AppToast from '@/components/common/AppToast.vue';
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import DoctorScheduleFilters from '@/components/master-data/doctor-schedules/DoctorScheduleFilters.vue'
+import DoctorScheduleFormModal from '@/components/master-data/doctor-schedules/DoctorScheduleFormModal.vue'
+import DoctorScheduleRecapTable from '@/components/master-data/doctor-schedules/DoctorScheduleRecapTable.vue'
+import DoctorScheduleTable from '@/components/master-data/doctor-schedules/DoctorScheduleTable.vue'
+import {
+  formatScheduleSummary,
+  getSafeDoctorScheduleErrorMessage,
+} from '@/components/master-data/doctor-schedules/doctor-schedule.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useDoctorSchedules } from '@/composables/useDoctorSchedules'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
-  sort,
   loading,
-  submitting,
-  error,
+  loadError,
+  saving,
   recapItems,
   recapLoading,
   recapError,
   fetchSchedules,
   fetchRecap,
-  createSchedule,
-  updateSchedule,
-  deleteSchedule
-} = useDoctorSchedules();
+  refreshAll,
+  setPage,
+  setFilters,
+  create,
+  update,
+  remove,
+} = useDoctorSchedules()
+const toast = useToast()
 
-const formModalOpen = ref(false);
-const deleteDialogOpen = ref(false);
-const selectedSchedule = ref(null);
-const formErrors = ref({});
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
-});
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingSchedule = ref(null)
+const formErrors = ref({})
+const formGeneralError = ref('')
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message };
-};
+function openForm(schedule = null) {
+  editingSchedule.value = schedule
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
 
-const closeToast = () => {
-  toast.value.show = false;
-};
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingSchedule.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
 
-const setPage = (page) => {
-  pagination.current_page = page;
-  fetchSchedules();
-};
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
 
-const setSort = ({ column, direction }) => {
-  sort.column = column;
-  sort.direction = direction;
-  fetchSchedules();
-};
+  const isEdit = Boolean(editingSchedule.value)
+  const fallback = isEdit
+    ? 'Jadwal dokter gagal diperbarui.'
+    : 'Jadwal dokter gagal ditambahkan.'
+  const result = isEdit
+    ? await update(editingSchedule.value.id, payload)
+    : await create(payload)
 
-const openAddModal = () => {
-  selectedSchedule.value = null;
-  formErrors.value = {};
-  formModalOpen.value = true;
-};
-
-const openEditModal = (item) => {
-  selectedSchedule.value = item;
-  formErrors.value = {};
-  formModalOpen.value = true;
-};
-
-const openDeleteDialog = (item) => {
-  selectedSchedule.value = item;
-  deleteDialogOpen.value = true;
-};
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value;
-  pagination.current_page = 1;
-  fetchSchedules();
-};
-
-const handleRefresh = async () => {
-  await Promise.all([
-    fetchSchedules(),
-    fetchRecap()
-  ]);
-};
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {};
-  
-  const isEditing = Boolean(selectedSchedule.value);
-  let result;
-  
-  if (isEditing) {
-    result = await updateSchedule(selectedSchedule.value.id, payload);
-  } else {
-    result = await createSchedule(payload);
+  if (!result.ok) {
+    const safeMessage = getSafeDoctorScheduleErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
   }
-  
-  if (result.success) {
-    formModalOpen.value = false;
-    
-    fetchSchedules();
-    const recapResult = await fetchRecap();
-    
-    if (recapResult && !recapResult.success) {
-      showToast({
-        type: 'warning',
-        title: 'Data Tersimpan',
-        message: isEditing 
-          ? 'Jadwal dokter berhasil diperbarui, tetapi data rekap gagal dimuat ulang. Silakan segarkan halaman.' 
-          : 'Jadwal dokter berhasil ditambahkan, tetapi data rekap gagal dimuat ulang. Silakan segarkan halaman.'
-      });
-    } else {
-      showToast({
-        type: 'success',
-        title: 'Berhasil',
-        message: isEditing 
-          ? 'Jadwal dokter berhasil diperbarui.' 
-          : 'Jadwal dokter berhasil ditambahkan.'
-      });
-    }
-  } else {
-    if (result.error?.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {};
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message: isEditing 
-          ? 'Jadwal dokter gagal diperbarui. Silakan coba lagi.' 
-          : 'Jadwal dokter gagal ditambahkan. Silakan periksa kembali data yang dimasukkan.'
-      });
-    } else {
-      formErrors.value = { general: 'Terjadi kesalahan sistem. Silakan coba lagi.' };
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message: result.error?.response?.data?.message || 'Terjadi kesalahan sistem. Silakan coba lagi.'
-      });
-    }
+
+  closeForm()
+  toast.success(
+    isEdit ? 'Jadwal dokter berhasil diperbarui.' : 'Jadwal dokter berhasil ditambahkan.',
+  )
+  if (!result.recapOk) {
+    toast.error('Data rekap jadwal gagal dimuat ulang. Silakan klik Coba Lagi pada rekap.')
   }
-};
+}
 
-const getDayName = (day) => {
-  const map = { 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu', 7: 'Minggu' };
-  return map[day] || '-';
-};
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingSchedule = ref(null)
 
-const handleDeleteConfirm = async () => {
-  const result = await deleteSchedule(selectedSchedule.value.id);
-  
-  if (result.success) {
-    deleteDialogOpen.value = false;
-    
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--;
-    }
-    
-    fetchSchedules();
-    const recapResult = await fetchRecap();
-    
-    if (recapResult && !recapResult.success) {
-      showToast({
-        type: 'warning',
-        title: 'Data Terhapus',
-        message: 'Jadwal dokter berhasil dihapus, tetapi data rekap gagal dimuat ulang. Silakan segarkan halaman.'
-      });
-    } else {
-      showToast({
-        type: 'success',
-        title: 'Berhasil',
-        message: 'Jadwal dokter berhasil dihapus.'
-      });
-    }
-  } else {
-    let errorMessage = 'Jadwal dokter gagal dihapus. Silakan coba lagi.';
-    
-    if (result.error?.response?.data?.message) {
-      errorMessage = result.error.response.data.message;
-    }
-    
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMessage
-    });
-    deleteDialogOpen.value = false;
+const deleteMessage = computed(() => {
+  if (!deletingSchedule.value) return ''
+  return `Apakah Anda yakin ingin menghapus jadwal “${formatScheduleSummary(deletingSchedule.value)}”?`
+})
+
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingSchedule.value = null
+}
+
+async function handleDelete() {
+  if (saving.value || !deletingSchedule.value) return
+  const result = await remove(deletingSchedule.value.id)
+  deletingSchedule.value = null
+
+  if (!result.ok) {
+    toast.error(getSafeDoctorScheduleErrorMessage(result.error, 'Jadwal dokter gagal dihapus.'))
+    return
   }
-};
 
-onMounted(() => {
-  fetchSchedules();
-  fetchRecap();
-});
+  toast.success('Jadwal dokter berhasil dihapus.')
+  if (!result.recapOk) {
+    toast.error('Data rekap jadwal gagal dimuat ulang. Silakan klik Coba Lagi pada rekap.')
+  }
+}
+
+onMounted(refreshAll)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast 
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader 
+  <div class="space-y-6">
+    <BasePageHeader
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Dokter', 'Jadwal Dokter']"
       title="Data Jadwal Dokter"
-      subtitle="Manajemen jadwal operasional dokter berdasarkan poliklinik."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Dokter', active: false },
-        { label: 'Jadwal Dokter', active: true }
-      ]"
+      description="Manajemen jadwal operasional dokter berdasarkan poliklinik."
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <Plus class="size-4" aria-hidden="true" />
           Tambah Jadwal Dokter
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <DoctorScheduleFilters 
-        :filters="filters"
-        :loading="loading || recapLoading"
-        @filter="handleFilter"
-        @refresh="handleRefresh"
-      />
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error" 
-        @retry="fetchSchedules" 
-      />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && items.length === 0" 
-          :is-search="!!filters.search"
-        >
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Jadwal Dokter</button>
-          </template>
-        </MasterDataEmptyState>
-        
-        <template v-else>
-          <DoctorScheduleTable 
-            :items="items"
-            :pagination="pagination"
-            :sort="sort"
-            :loading="loading"
-            @sort="setSort"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-          
-          <MasterDataPagination 
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-
-      <!-- Data Jadwal Dokter (Recap Table) -->
-      <DoctorScheduleRecapTable 
-        :schedules="recapItems"
-        :loading="recapLoading"
-        :error="recapError"
-        @retry="fetchRecap"
-      />
-    </div>
-
-    <!-- Modals -->
-    <DoctorScheduleFormModal 
-      :is-open="formModalOpen"
-      :edit-data="selectedSchedule"
-      :loading="submitting"
-      :errors="formErrors"
-      @close="formModalOpen = false"
-      @save="handleFormSubmit"
+    <DoctorScheduleFilters
+      :search="filters.search"
+      :loading="loading || recapLoading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="refreshAll"
     />
-    
-    <MasterDataDeleteDialog 
-      :is-open="deleteDialogOpen"
-      title="Hapus Jadwal Dokter?"
-      :item-name="selectedSchedule ? `${selectedSchedule.doctor?.name} di ${selectedSchedule.polyclinic?.name} (${getDayName(selectedSchedule.day_of_week)}, ${selectedSchedule.start_time}-${selectedSchedule.end_time})` : ''"
-      warning-message="Jadwal dokter ini akan dihapus secara permanen. Pastikan jadwal ini tidak sedang digunakan."
-      :is-submitting="submitting"
-      @close="deleteDialogOpen = false"
-      @confirm="handleDeleteConfirm"
+
+    <DoctorScheduleTable
+      :items="items"
+      :loading="loading"
+      :offset="(meta.page - 1) * meta.perPage"
+      @edit="openForm($event)"
+      @delete="deletingSchedule = $event"
+    >
+      <template #empty>
+        <BaseEmptyState
+          v-if="loadError"
+          :icon="CircleAlert"
+          tone="danger"
+          title="Gagal memuat jadwal dokter"
+          :description="loadError"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="fetchSchedules">Muat Ulang</BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else-if="filters.search"
+          :icon="SearchX"
+          title="Jadwal dokter tidak ditemukan"
+          :description="`Tidak ada jadwal yang cocok dengan pencarian “${filters.search}”.`"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="setFilters({ search: '' })">
+              Reset Pencarian
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else
+          :icon="Inbox"
+          title="Belum ada data jadwal dokter"
+          description="Tambahkan jadwal praktik dokter pertama untuk mulai mengatur operasional poliklinik."
+        >
+          <template #action>
+            <BaseButton @click="openForm()">
+              <Plus class="size-4" aria-hidden="true" />
+              Tambah Jadwal Dokter
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+      </template>
+    </DoctorScheduleTable>
+
+    <BasePagination
+      :page="meta.page"
+      :last-page="meta.lastPage"
+      :total="meta.total"
+      :from="meta.from"
+      :to="meta.to"
+      :disabled="loading"
+      @change="setPage"
+    />
+
+    <DoctorScheduleRecapTable
+      :schedules="recapItems"
+      :loading="recapLoading"
+      :error="recapError"
+      @retry="fetchRecap"
+    />
+
+    <DoctorScheduleFormModal
+      :open="formOpen"
+      :schedule="editingSchedule"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingSchedule)"
+      title="Hapus Jadwal Dokter"
+      :message="deleteMessage"
+      confirm-text="Ya, Hapus"
+      :loading="saving"
+      @close="closeDeleteDialog"
+      @confirm="handleDelete"
     />
   </div>
 </template>

@@ -7,11 +7,23 @@ import admissionService from '@/services/admission.service';
 import patientService from '@/services/patient.service';
 import lookupService from '@/services/lookup.service';
 import { polyclinicService } from '@/services/polyclinic';
-import { guarantorsService } from '@/services/master-data/guarantors.service';
 import { useAdmissions } from '@/composables/useAdmissions';
+import {
+  findMatchingGuarantor,
+  isSelfPayGuarantor,
+  useGuarantorOptions
+} from '@/composables/useGuarantorOptions';
 
 const route = useRoute();
 const router = useRouter();
+
+const {
+  loading: guarantorsLoading,
+  error: guarantorsError,
+  isEmpty: guarantorsEmpty,
+  fetchGuarantors,
+  ensureSavedOption
+} = useGuarantorOptions();
 
 const {
   admissionsList,
@@ -60,14 +72,12 @@ const normalizeGuarantor = (val) => {
 };
 
 // Master Data State
-const guarantorList = ref([]);
 const polyclinicList = ref([]);
 const backendDoctorList = ref([]);
 const referralSourceList = ref([]);
 
 const initialPolyclinic = ref('');
 const recordVisitId = ref(null);
-let cachedInsuranceNumber = '';
 
 const normalizeCaseType = (val) => {
   if (!val) return 'Pemeriksaan Kasus Baru';
@@ -81,12 +91,26 @@ const normalizeCaseType = (val) => {
   return 'Pemeriksaan Kasus Baru';
 };
 
-const hasPolyclinicChanged = computed(() => {
-  return Boolean(initialPolyclinic.value && form.value.polyclinic && initialPolyclinic.value !== form.value.polyclinic);
-});
 const canChangeClinic = ref(true);
 const cannotChangeReason = ref('');
 const isServiceLocked = ref(false);
+
+const savedGuarantorContext = ref({ id: null, name: '' });
+
+const guarantorOptions = computed(() =>
+  ensureSavedOption(savedGuarantorContext.value)
+);
+
+const selectedGuarantorOption = computed(() =>
+  guarantorOptions.value.find((g) => String(g.id) === String(form.value.guarantor_id)) || null
+);
+
+const isSelfPaySelected = computed(() => {
+  if (selectedGuarantorOption.value) {
+    return selectedGuarantorOption.value.is_self_pay;
+  }
+  return isSelfPayGuarantor(form.value.guarantor_type);
+});
 
 const polyclinicOptions = computed(() => {
   const base = new Set();
@@ -130,7 +154,7 @@ const patientSummary = ref({
 
 const form = ref({
   admission_datetime: '',
-  guarantor_id: 2,
+  guarantor_id: '',
   guarantor_type: 'UMUM',
   insurance_number: '',
   nik: '',
@@ -187,15 +211,12 @@ const loadDoctorsForClinic = async (polyId) => {
 // Master Data Loaders
 const loadMasterData = async () => {
   try {
-    const [guarantorRes, polyclinicRes, referralRes] = await Promise.allSettled([
-      guarantorsService.getGuarantors({ is_active: true, per_page: 100 }),
+    const [, polyclinicRes, referralRes] = await Promise.allSettled([
+      fetchGuarantors(savedGuarantorContext.value.id ? { ids: savedGuarantorContext.value.id } : {}),
       polyclinicService.getPolyclinics({ is_active: true }),
       lookupService.getReferralSources()
     ]);
 
-    if (guarantorRes.status === 'fulfilled') {
-      guarantorList.value = guarantorRes.value.data || guarantorRes.value || [];
-    }
     if (polyclinicRes.status === 'fulfilled') {
       polyclinicList.value = polyclinicRes.value.data || polyclinicRes.value || [];
     }
@@ -204,6 +225,17 @@ const loadMasterData = async () => {
     }
   } catch {
     // Fail-safe
+  }
+};
+
+const syncSelectedGuarantorFromMaster = () => {
+  const matched = findMatchingGuarantor(guarantorOptions.value, savedGuarantorContext.value);
+  if (matched) {
+    form.value.guarantor_id = matched.id;
+    form.value.guarantor_type = matched.name;
+    if (matched.is_self_pay) {
+      form.value.insurance_number = '';
+    }
   }
 };
 
@@ -226,13 +258,19 @@ const loadRecordFromLocal = () => {
 
   const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
   const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
-  const normalizedGuarantor = normalizeGuarantor(record.guarantor_type);
+  const rawGuarantorName = normalizeGuarantor(record.guarantor_type);
+  savedGuarantorContext.value = {
+    id: record.guarantor_id ?? null,
+    name: rawGuarantorName
+  };
 
   form.value = {
     admission_datetime: datePart ? `${datePart} ${timePart}` : timePart,
-    guarantor_id: record.guarantor_id || (normalizedGuarantor === 'UMUM' ? 2 : 1),
-    guarantor_type: normalizedGuarantor,
-    insurance_number: normalizedGuarantor === 'UMUM' ? '' : (record.insurance_number || record.guarantor_detail || ''),
+    guarantor_id: record.guarantor_id ? String(record.guarantor_id) : '',
+    guarantor_type: rawGuarantorName,
+    insurance_number: isSelfPayGuarantor(rawGuarantorName)
+      ? ''
+      : (record.insurance_number || record.guarantor_detail || ''),
     nik: record.nik || '',
     referral_source_id: record.referral_source_id || 3,
     referral_source: record.referral_source || 'Datang Sendiri',
@@ -242,7 +280,7 @@ const loadRecordFromLocal = () => {
     polyclinic_id: record.polyclinic_id || null,
     polyclinic: record.polyclinic || '',
     service_type: record.service_type || 'Umum',
-    case_type: record.case_type || 'Pemeriksaan Kasus Baru',
+    case_type: normalizeCaseType(record.case_type),
     doctor_id: record.doctor_id || null,
     doctor: record.doctor || '',
 
@@ -252,6 +290,8 @@ const loadRecordFromLocal = () => {
     family_address: record.family_address || record.emergency_contact?.address || '',
     notes: record.notes || ''
   };
+  initialPolyclinic.value = form.value.polyclinic;
+  syncSelectedGuarantorFromMaster();
 };
 
 const fetchBackendRecord = async () => {
@@ -288,12 +328,22 @@ const fetchBackendRecord = async () => {
 
         const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
         const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
-        const normalizedGuarantor = normalizeGuarantor(record.guarantor_type || record.guarantor);
+        const rawGuarantorName = normalizeGuarantor(record.guarantor_type || record.guarantor);
+        savedGuarantorContext.value = {
+          id: record.guarantor_id ?? null,
+          name: rawGuarantorName
+        };
 
         form.value.admission_datetime = record.admission_datetime || (datePart ? `${datePart} ${timePart}` : timePart);
-        form.value.guarantor_id = record.guarantor_id || (normalizedGuarantor === 'UMUM' ? 2 : 1);
-        form.value.guarantor_type = normalizedGuarantor;
-        form.value.insurance_number = normalizedGuarantor === 'UMUM' ? '' : (record.insurance_number || record.guarantor_detail || '');
+        form.value.guarantor_id = record.guarantor_id ? String(record.guarantor_id) : '';
+        form.value.guarantor_type = rawGuarantorName;
+        form.value.insurance_number = isSelfPayGuarantor(rawGuarantorName)
+          ? ''
+          : (record.insurance_number || record.guarantor_detail || '');
+        if (record.guarantor_id) {
+          await fetchGuarantors({ ids: record.guarantor_id });
+        }
+        syncSelectedGuarantorFromMaster();
         form.value.nik = record.nik || pat.nik || pat.no_ktp || '';
         form.value.referral_source_id = record.referral_source_id || 3;
         form.value.referral_source = record.referral_source || 'Datang Sendiri';
@@ -345,10 +395,21 @@ const fetchBackendRecord = async () => {
           if (pat.emergency_contact?.phone) form.value.family_phone = pat.emergency_contact.phone;
           if (pat.emergency_contact?.address) form.value.family_address = pat.emergency_contact.address;
           if (pat.guarantor) {
-            form.value.guarantor_id = pat.guarantor.id || form.value.guarantor_id;
-            form.value.guarantor_type = normalizeGuarantor(pat.guarantor.name);
+            const patGuarName = normalizeGuarantor(pat.guarantor.name || pat.guarantor);
+            savedGuarantorContext.value = {
+              id: pat.guarantor.id ?? null,
+              name: patGuarName
+            };
+            form.value.guarantor_id = pat.guarantor.id ? String(pat.guarantor.id) : form.value.guarantor_id;
+            form.value.guarantor_type = patGuarName;
+            if (pat.guarantor.id) {
+              await fetchGuarantors({ ids: pat.guarantor.id });
+            }
+            syncSelectedGuarantorFromMaster();
           }
-          if (pat.insurance_number) form.value.insurance_number = pat.insurance_number;
+          if (pat.insurance_number && !isSelfPaySelected.value) {
+            form.value.insurance_number = pat.insurance_number;
+          }
         }
       }
     } catch (e) {
@@ -360,14 +421,16 @@ const fetchBackendRecord = async () => {
 loadRecordFromLocal();
 
 watch(
-  () => form.value.guarantor_type,
-  (val) => {
-    if (val === 'UMUM') {
+  () => form.value.guarantor_id,
+  () => {
+    if (selectedGuarantorOption.value) {
+      form.value.guarantor_type = selectedGuarantorOption.value.name;
+    }
+    if (isSelfPaySelected.value) {
       form.value.insurance_number = '';
-      form.value.guarantor_id = 2;
-    } else {
-      const match = guarantorList.value.find((g) => (g.name || g.jenis_asuransi) === val);
-      if (match) form.value.guarantor_id = match.id;
+    }
+    if (errors.value.guarantor_type) {
+      delete errors.value.guarantor_type;
     }
   }
 );
@@ -423,7 +486,7 @@ const validateForm = () => {
   if (!form.value.admission_datetime.trim()) {
     newErrors.admission_datetime = 'Waktu Admisi wajib diisi.';
   }
-  if (!form.value.guarantor_type) {
+  if (!form.value.guarantor_id && !form.value.guarantor_type) {
     newErrors.guarantor_type = 'Jenis Asuransi wajib dipilih.';
   }
   if (!form.value.referral_source) {
@@ -488,11 +551,11 @@ const handleUpdate = async () => {
   );
 
   // Resolve guarantor_id
-  let guarantorId = form.value.guarantor_id;
+  let guarantorId = selectedGuarantorOption.value?.numericId ?? (form.value.guarantor_id ? Number(form.value.guarantor_id) : null);
   if (!guarantorId) {
-    const matchG = guarantorList.value.find((g) => (g.name || g.jenis_asuransi) === form.value.guarantor_type);
-    guarantorId = matchG ? matchG.id : (form.value.guarantor_type === 'UMUM' ? 2 : 1);
+    guarantorId = isSelfPaySelected.value ? 2 : 1;
   }
+  const resolvedGuarantorName = selectedGuarantorOption.value?.name || form.value.guarantor_type;
 
   // Resolve polyclinic_id
   let polyclinicId = form.value.polyclinic_id;
@@ -518,7 +581,11 @@ const handleUpdate = async () => {
   const payload = {
     visit_id: recordVisitId.value,
     guarantor_id: Number(guarantorId),
-    insurance_number: form.value.guarantor_type === 'UMUM' ? '' : form.value.insurance_number,
+    guarantor_type: resolvedGuarantorName,
+    guarantor_detail: isSelfPaySelected.value
+      ? 'Mandiri / Pribadi'
+      : (form.value.insurance_number || resolvedGuarantorName),
+    insurance_number: isSelfPaySelected.value ? '' : form.value.insurance_number,
     referral_source_id: Number(referralSourceId),
     referral_source: form.value.referral_source,
     referral_name: form.value.referral_source === 'Datang Sendiri' ? '' : form.value.referral_name.trim(),
@@ -559,8 +626,8 @@ const handleUpdate = async () => {
       ...payload,
       admission_date: parsedTime.admission_date,
       admission_time: parsedTime.admission_time,
-      guarantor_type: form.value.guarantor_type,
-      guarantor_detail: form.value.guarantor_type === 'UMUM' ? 'Mandiri / Pribadi' : (form.value.insurance_number || form.value.guarantor_type),
+      guarantor_type: resolvedGuarantorName,
+      guarantor_detail: isSelfPaySelected.value ? 'Mandiri / Pribadi' : (form.value.insurance_number || resolvedGuarantorName),
       polyclinic: form.value.polyclinic,
       doctor: form.value.doctor,
       emergency_contact: {
@@ -753,24 +820,35 @@ const handleCancel = () => {
                   </label>
                   <div class="h-control">
                     <div class="select-wrap">
-                      <select id="edit-guarantor" v-model="form.guarantor_type" class="form-select custom-select">
-                        <option value="UMUM">UMUM</option>
-                        <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-                        <option value="BPJS Ketenagakerjaan">BPJS Ketenagakerjaan</option>
-                        <option value="Asuransi Swasta">Asuransi Swasta</option>
-                        <template v-for="g in guarantorList" :key="g.id">
-                          <option
-                            v-if="!['UMUM', 'BPJS Kesehatan', 'BPJS Ketenagakerjaan', 'Asuransi Swasta'].includes(g.name || g.jenis_asuransi)"
-                            :value="g.name || g.jenis_asuransi"
-                          >
-                            {{ g.name || g.jenis_asuransi }}
-                          </option>
-                        </template>
+                      <select
+                        id="edit-guarantor"
+                        v-model="form.guarantor_id"
+                        class="form-select custom-select"
+                        :disabled="guarantorsLoading && guarantorOptions.length === 0"
+                      >
+                        <option v-if="guarantorOptions.length === 0" value="">
+                          {{ guarantorsLoading ? 'Memuat daftar asuransi...' : '-- Pilih Jenis Asuransi --' }}
+                        </option>
+                        <option
+                          v-for="g in guarantorOptions"
+                          :key="g.id"
+                          :value="g.id"
+                        >
+                          {{ g.label }}
+                        </option>
                       </select>
                       <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 12 15 18 9"></polyline>
                       </svg>
                     </div>
+                    <span v-if="guarantorsLoading" class="guarantor-helper-muted">Memuat data penjamin...</span>
+                    <span v-else-if="guarantorsError" class="error-message">
+                      {{ guarantorsError }}
+                      <button type="button" class="btn-retry-guarantor" @click="fetchGuarantors(savedGuarantorContext.id ? { ids: savedGuarantorContext.id } : {})">Coba Lagi</button>
+                    </span>
+                    <span v-else-if="guarantorsEmpty && guarantorOptions.length === 0" class="guarantor-helper-muted">
+                      Data penjamin Master Data kosong.
+                    </span>
                     <span v-if="errors.guarantor_type" class="error-message">{{ errors.guarantor_type }}</span>
                   </div>
                 </div>
@@ -784,8 +862,8 @@ const handleCancel = () => {
                       v-model="form.insurance_number"
                       type="text"
                       class="form-input"
-                      :disabled="form.guarantor_type === 'UMUM'"
-                      placeholder="No Asuransi"
+                      :disabled="isSelfPaySelected"
+                      :placeholder="isSelfPaySelected ? 'No Asuransi' : 'Masukkan Nomor Kartu Asuransi / BPJS'"
                       autocomplete="off"
                     />
                   </div>
@@ -1366,6 +1444,25 @@ const handleCancel = () => {
     grid-template-columns: 1fr;
     gap: 0.25rem;
   }
+}
+
+.guarantor-helper-muted {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.btn-retry-guarantor {
+  margin-left: 0.45rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .h-label {

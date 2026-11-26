@@ -1,96 +1,36 @@
-import { ref } from 'vue'
+import { reactive } from 'vue'
+import { useCrudResource } from '@/composables/core/useCrudResource'
 import { guarantorsService } from '@/services/master-data/guarantors.service'
 
+/**
+ * Composable modul Jenis Asuransi / Penjamin berbasis useCrudResource.
+ * Default sorting diselaraskan dengan GuarantorController::index (`name` ascending).
+ */
 export function useGuarantors() {
-  const guarantors = ref([])
-  const meta = ref({
-    current_page: 1,
-    last_page: 1,
-    per_page: 10,
-    total: 0
+  const sort = reactive({
+    column: 'name',
+    direction: 'asc',
   })
-  
-  const loading = ref(false)
-  const error = ref(null)
 
-  const fetchGuarantors = async (params = {}) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await guarantorsService.getGuarantors(params)
-      guarantors.value = response.data || []
-      if (response.meta) {
-        meta.value = response.meta
-      }
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memuat data jenis asuransi'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
+  const crud = useCrudResource(guarantorsService, {
+    label: 'jenis asuransi',
+    sort,
+  })
 
-  const createGuarantor = async (data) => {
-    loading.value = true
-    error.value = null
-    try {
-      return await guarantorsService.createGuarantor(data)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menyimpan data'
-      throw err
-    } finally {
-      loading.value = false
+  function setSort(column) {
+    if (sort.column === column) {
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      sort.column = column
+      sort.direction = 'asc'
     }
-  }
-
-  const updateGuarantor = async (id, data) => {
-    loading.value = true
-    error.value = null
-    try {
-      return await guarantorsService.updateGuarantor(id, data)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui data'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const deleteGuarantor = async (id) => {
-    loading.value = true
-    error.value = null
-    try {
-      await guarantorsService.deleteGuarantor(id)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menghapus data'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const updateStatus = async (id, isActive) => {
-    loading.value = true
-    error.value = null
-    try {
-      return await guarantorsService.updateStatus(id, isActive)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    crud.meta.page = 1
+    return crud.fetchItems()
   }
 
   return {
-    guarantors,
-    meta,
-    loading,
-    error,
-    fetchGuarantors,
-    createGuarantor,
-    updateGuarantor,
-    deleteGuarantor,
-    updateStatus
+    ...crud,
+    sort,
+    setSort,
   }
 }

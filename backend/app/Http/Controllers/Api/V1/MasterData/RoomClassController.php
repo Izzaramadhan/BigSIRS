@@ -9,11 +9,73 @@ use App\Http\Resources\MasterData\RoomClassResource;
 use App\Models\Legacy\LegacyRoomClass;
 use App\Models\MasterData\RoomClass;
 use App\Support\LegacyAccess;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RoomClassController extends Controller
 {
+    /**
+     * Display a filtered listing of room classes for dropdown options.
+     */
+    public function options(Request $request)
+    {
+        $search = trim((string) $request->query('search', ''));
+
+        if (LegacyAccess::isAvailable('ref_kelas')) {
+            $query = LegacyRoomClass::query()
+                ->select(['id', 'kode', 'nama', 'harga'])
+                ->orderBy('nama', 'asc');
+
+            $this->applyOptionsSearch($query, $search, 'nama', 'kode');
+
+            return response()->json([
+                'data' => $query->get()->map(fn (LegacyRoomClass $item) => $this->formatOption($item)),
+            ]);
+        }
+
+        $query = RoomClass::query()
+            ->select(['id', 'code', 'name', 'price'])
+            ->orderBy('name', 'asc');
+
+        $this->applyOptionsSearch($query, $search, 'name', 'code');
+
+        return response()->json([
+            'data' => $query->get()->map(fn (RoomClass $item) => $this->formatOption($item)),
+        ]);
+    }
+
+    private function applyOptionsSearch(Builder $query, string $search, string $nameColumn, string $codeColumn): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $escaped = strtr($search, ['!' => '!!', '%' => '!%', '_' => '!_']);
+        $pattern = "%{$escaped}%";
+
+        $query->where(function (Builder $q) use ($pattern, $nameColumn, $codeColumn) {
+            $q->whereRaw("{$nameColumn} LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("{$codeColumn} LIKE ? ESCAPE '!'", [$pattern]);
+        });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatOption(RoomClass|LegacyRoomClass $item): array
+    {
+        $price = (float) ($item->price ?? 0);
+
+        return [
+            'id' => $item->id,
+            'code' => $item->code,
+            'name' => $item->name,
+            'price' => $price,
+            'formatted_price' => 'Rp' . number_format($price, 0, ',', '.'),
+        ];
+    }
+
     /**
      * Display a listing of room classes for dropdowns.
      */

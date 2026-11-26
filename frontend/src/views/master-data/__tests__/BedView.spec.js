@@ -1,18 +1,28 @@
+import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BedView from '../bed/BedView.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import BedFormModal from '@/components/master-data/beds/BedFormModal.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import { useToast } from '@/composables/core/useToast'
 import { bedsService } from '@/services/master-data/beds.service'
 import { roomsService } from '@/services/master-data/rooms.service'
 
-vi.mock('@/services/master-data/beds.service', () => ({
-  bedsService: {
-    getBeds: vi.fn(),
-    getBed: vi.fn(),
-    createBed: vi.fn(),
-    updateBed: vi.fn(),
-    deleteBed: vi.fn(),
-  },
-}))
+vi.mock('@/services/master-data/beds.service', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    bedsService: {
+      ...actual.bedsService,
+      list: vi.fn(),
+      get: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      remove: vi.fn(),
+      getBeds: vi.fn(),
+    },
+  }
+})
 
 vi.mock('@/services/master-data/rooms.service', () => ({
   roomsService: {
@@ -21,245 +31,454 @@ vi.mock('@/services/master-data/rooms.service', () => ({
   },
 }))
 
-const mockRooms = [
+const rooms = [
   {
     id: 1,
     name: 'Kamar 1',
-    code: 'KMR-001',
-    ward_id: 3,
-    ward: {
-      id: 3,
-      name: 'Bangsal Maternal Perinatal',
-      floor: {
-        id: 2,
-        name: 'Lantai 2',
-        building: { id: 1, name: 'RUANG BUGENVILLE' },
-      },
-    },
-    room_class_id: 3,
-    room_class: { id: 3, code: 'KLS-3', name: 'Kelas 3' },
-    class: { id: 3, code: 'KLS-3', name: 'Kelas 3' },
+    ward: { id: 3, name: 'Bangsal Maternal Perinatal' },
+    room_class: { id: 3, name: 'Kelas 3' },
     display_name: 'Kamar 1 - Bangsal Maternal Perinatal - Kelas 3',
   },
   {
     id: 2,
     name: 'Kamar 2',
-    code: 'KMR-002',
-    ward_id: 1,
-    ward: {
-      id: 1,
-      name: 'Bangsal Melati',
-      floor: { id: 1, name: 'Lantai 1' },
-    },
-    room_class_id: 1,
-    room_class: { id: 1, code: 'VIP', name: 'VIP' },
-    class: { id: 1, code: 'VIP', name: 'VIP' },
-    display_name: 'Kamar 2 - Bangsal Melati - VIP',
+    ward: { id: 1, name: 'Bangsal Melati' },
+    room_class: null,
   },
 ]
 
-const mockPaginatedBedsResponse = {
-  data: [
-    {
-      id: 1,
-      room_id: 1,
-      name: 'Bed 1',
-      description: 'Bed dekat jendela',
-      room: {
-        id: 1,
-        code: 'KMR-001',
-        name: 'Kamar 1',
-        ward: {
-          id: 3,
-          name: 'Bangsal Maternal Perinatal',
-          floor: {
-            id: 2,
-            name: 'Lantai 2',
-            building: { id: 1, name: 'RUANG BUGENVILLE' },
-          },
-        },
-        room_class: { id: 3, code: 'KLS-3', name: 'Kelas 3' },
-        class: { id: 3, code: 'KLS-3', name: 'Kelas 3' },
-      },
-      room_table_display_name: 'Kamar 1 - Bangsal Maternal Perinatal',
-      room_form_display_name: 'Kamar 1 - Bangsal Maternal Perinatal - Kelas 3',
-      created_at: '2026-10-22T08:00:00Z',
-      updated_at: '2026-10-22T08:00:00Z',
-    },
-    {
-      id: 2,
-      room_id: 2,
-      name: 'Bed 2',
-      description: null,
-      room: {
-        id: 2,
-        code: 'KMR-002',
-        name: 'Kamar 2',
-        ward: {
-          id: 1,
-          name: 'Bangsal Melati',
-        },
-        room_class: null,
-        class: null,
-      },
-      room_table_display_name: 'Kamar 2 - Bangsal Melati',
-      room_form_display_name: 'Kamar 2 - Bangsal Melati - (Kelas Belum Ditentukan)',
-      created_at: '2026-10-22T08:00:00Z',
-      updated_at: '2026-10-22T08:00:00Z',
-    },
-  ],
+const beds = [
+  {
+    id: 1,
+    room_id: 1,
+    name: 'Bed 1',
+    description: 'Bed dekat jendela',
+    room: { id: 1, name: 'Kamar 1', room_class: { id: 3, name: 'Kelas 3' } },
+    room_table_display_name: 'Kamar 1 - Bangsal Maternal Perinatal',
+  },
+  {
+    id: 2,
+    room_id: 2,
+    name: 'Bed 2',
+    description: null,
+    room: { id: 2, name: 'Kamar 2', ward: { id: 1, name: 'Bangsal Melati' }, room_class: null },
+  },
+]
+
+const listResponse = (data = beds, metaOverrides = {}) => ({
+  data,
   meta: {
     current_page: 1,
     last_page: 1,
     per_page: 10,
-    total: 2,
-    from: 1,
-    to: 2,
+    total: data.length,
+    from: data.length > 0 ? 1 : 0,
+    to: data.length,
+    ...metaOverrides,
   },
-  links: {},
+})
+
+const toast = useToast()
+const toastMessages = () => toast.toasts.value.map((item) => item.message)
+
+async function mountView() {
+  const wrapper = mount(BedView, {
+    global: {
+      stubs: {
+        Teleport: true,
+      },
+    },
+  })
+  await flushPromises()
+  return wrapper
 }
 
-describe('BedView.vue and Bed Management', () => {
+const findButtonByText = (wrapper, label) =>
+  wrapper.findAll('button').find((button) => button.text().trim() === label)
+
+const findControlByLabel = (wrapper, labelText) => {
+  const label = wrapper
+    .findAll('label')
+    .find((node) => node.text().replace('*', '').trim() === labelText)
+  const forId = label.attributes('for')
+  return wrapper.get(`[id="${forId}"]`)
+}
+
+const tableCells = (wrapper) =>
+  wrapper.findAll('tbody tr').map((row) => row.findAll('td').map((cell) => cell.text()))
+
+describe('BedView', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    bedsService.getBeds.mockResolvedValue(mockPaginatedBedsResponse)
-    roomsService.getRooms.mockResolvedValue({ data: mockRooms })
+    vi.resetAllMocks()
+    vi.useRealTimers()
+    toast.clear()
+    bedsService.list.mockResolvedValue(listResponse())
+    bedsService.getBeds.mockImplementation((params) => bedsService.list(params))
+    roomsService.getRooms.mockResolvedValue({ data: rooms })
   })
 
-  const mountView = async () => {
-    const wrapper = mount(BedView, {
-      global: {
-        stubs: {
-          teleport: true,
+  afterEach(() => {
+    vi.useRealTimers()
+    document.body.innerHTML = ''
+  })
+
+  it('menampilkan judul, deskripsi halaman, breadcrumbs, dan 6 kolom tabel sesuai urutan', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.get('h1').text()).toBe('Data Bed')
+    expect(wrapper.text()).toContain(
+      'Kelola data tempat tidur berdasarkan kamar, bangsal, dan kelas perawatan rumah sakit.',
+    )
+
+    const breadcrumbItems = wrapper.get('nav[aria-label="Breadcrumb"]').findAll('li')
+    expect(breadcrumbItems.map((li) => li.text().replace('/', '').trim())).toEqual([
+      'Dashboard',
+      'Master Data',
+      'Data Bed',
+    ])
+
+    expect(wrapper.findAll('thead th').map((th) => th.text())).toEqual([
+      'No',
+      'Nama Kamar',
+      'Nama Kelas',
+      'Nama Bed',
+      'Deskripsi',
+      'Aksi',
+    ])
+
+    const [first, second] = tableCells(wrapper)
+    expect(first.slice(0, 5)).toEqual([
+      '1',
+      'Kamar 1 - Bangsal Maternal Perinatal',
+      'Kelas 3',
+      'Bed 1',
+      'Bed dekat jendela',
+    ])
+    expect(second.slice(0, 5)).toEqual(['2', 'Kamar 2 - Bangsal Melati', '—', 'Bed 2', '—'])
+  })
+
+  it('menampilkan loading state dan empty state (data kosong maupun hasil pencarian kosong)', async () => {
+    let resolveList
+    bedsService.list.mockReturnValueOnce(new Promise((resolve) => (resolveList = resolve)))
+
+    const pendingWrapper = mount(BedView, { global: { stubs: { Teleport: true } } })
+    await flushPromises()
+    expect(pendingWrapper.get('tbody').attributes('aria-busy')).toBe('true')
+
+    resolveList(listResponse([]))
+    await flushPromises()
+    expect(pendingWrapper.get('tbody').attributes('aria-busy')).toBeUndefined()
+    expect(pendingWrapper.text()).toContain('Belum ada data bed')
+
+    vi.useFakeTimers()
+    bedsService.list.mockResolvedValue(listResponse([]))
+    const searchInput = pendingWrapper.get('input[aria-label="Cari bed"]')
+    await searchInput.setValue('VIP Khusus')
+    await nextTick()
+    vi.advanceTimersByTime(400)
+    await flushPromises()
+
+    expect(pendingWrapper.text()).toContain('Bed tidak ditemukan')
+    expect(pendingWrapper.text()).toContain('Tidak ada bed yang cocok dengan “VIP Khusus”.')
+  })
+
+  it('mengirim pencarian ke API dan mendukung tombol muat ulang', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+
+    const searchInput = wrapper.get('input[aria-label="Cari bed"]')
+    await searchInput.setValue('Melati')
+    await nextTick()
+    vi.advanceTimersByTime(400)
+    await flushPromises()
+
+    expect(bedsService.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        page: 1,
+        search: 'Melati',
+      }),
+    )
+
+    await wrapper.get('button[aria-label="Muat ulang data"]').trigger('click')
+    await flushPromises()
+    expect(bedsService.list).toHaveBeenCalledTimes(3)
+  })
+
+  // Regresi Bug P0 #4: Race condition pencarian
+  it('mengabaikan respons pencarian lama (race condition)', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+
+    let resolveSlow
+    let resolveFast
+    bedsService.list
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveSlow = resolve)))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFast = resolve)))
+
+    const searchInput = wrapper.get('input[aria-label="Cari bed"]')
+    await searchInput.setValue('Lama')
+    await nextTick()
+    vi.advanceTimersByTime(400)
+    await nextTick()
+
+    await searchInput.setValue('Baru')
+    await nextTick()
+    vi.advanceTimersByTime(400)
+    await nextTick()
+
+    resolveFast(
+      listResponse([
+        {
+          id: 9,
+          room_id: 1,
+          name: 'Bed Terbaru',
+          description: null,
+          room_table_display_name: 'Kamar 1 - Bangsal Maternal Perinatal',
+        },
+      ]),
+    )
+    await flushPromises()
+
+    resolveSlow(
+      listResponse([
+        {
+          id: 8,
+          room_id: 1,
+          name: 'Bed Usang',
+          description: null,
+          room_table_display_name: 'Kamar 1 - Bangsal Maternal Perinatal',
+        },
+      ]),
+    )
+    await flushPromises()
+
+    const rows = tableCells(wrapper)
+    expect(rows).toHaveLength(1)
+    expect(rows[0][3]).toBe('Bed Terbaru')
+  })
+
+  it('mendukung pagination lintas halaman sesuai data API', async () => {
+    bedsService.list
+      .mockResolvedValueOnce(
+        listResponse(
+          [beds[0]],
+          { current_page: 1, last_page: 2, per_page: 10, total: 12, from: 1, to: 10 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        listResponse(
+          [{ ...beds[1], id: 11, name: 'Bed 11' }],
+          { current_page: 2, last_page: 2, per_page: 10, total: 12, from: 11, to: 12 },
+        ),
+      )
+
+    const wrapper = await mountView()
+    await wrapper.get('button[aria-label="Halaman berikutnya"]').trigger('click')
+    await flushPromises()
+
+    expect(bedsService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    const rows = tableCells(wrapper)
+    expect(rows[0][0]).toBe('11')
+    expect(rows[0][3]).toBe('Bed 11')
+  })
+
+  it('menampilkan error state aman bila daftar gagal dimuat dan dapat mencoba lagi', async () => {
+    bedsService.list.mockRejectedValueOnce({
+      response: { status: 500, data: { message: 'SQLSTATE[HY000]: Connection refused' } },
+    })
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('Data bed gagal dimuat')
+    expect(wrapper.text()).not.toContain('SQLSTATE')
+
+    await findButtonByText(wrapper, 'Coba lagi').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+  })
+
+  it('memuat lookup kamar non-paginated dengan format Kamar - Bangsal - Kelas dan menangani error muat kamar', async () => {
+    roomsService.getRooms.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    const wrapper = await mountView()
+
+    await findButtonByText(wrapper, 'Tambah Bed').trigger('click')
+    await flushPromises()
+
+    expect(roomsService.getRooms).toHaveBeenCalledWith({
+      per_page: -1,
+      sort: 'name',
+      direction: 'asc',
+    })
+    expect(wrapper.get('[role="dialog"]').text()).toContain('Gagal memuat data kamar.')
+
+    roomsService.getRooms.mockResolvedValueOnce({ data: rooms })
+    await findButtonByText(wrapper.get('[role="dialog"]'), 'Coba lagi').trigger('click')
+    await flushPromises()
+
+    const roomSelect = findControlByLabel(wrapper.get('[role="dialog"]'), 'Nama Kamar')
+    const optionTexts = roomSelect.findAll('option').map((o) => o.text())
+    expect(optionTexts).toContain('Kamar 1 - Bangsal Maternal Perinatal - Kelas 3')
+    expect(optionTexts).toContain('Kamar 2 - Bangsal Melati - (Kelas Belum Ditentukan)')
+  })
+
+  it('membuat bed baru lalu me-refresh daftar dan menampilkan toast sukses', async () => {
+    bedsService.create.mockResolvedValue({ data: { id: 3 } })
+    const wrapper = await mountView()
+
+    await findButtonByText(wrapper, 'Tambah Bed').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[role="dialog"]')
+    await findControlByLabel(dialog, 'Nama Kamar').setValue('1')
+    await findControlByLabel(dialog, 'Nama Bed').setValue('Bed 3')
+    await findControlByLabel(dialog, 'Deskripsi').setValue('Dekat pintu')
+    await dialog.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(bedsService.create).toHaveBeenCalledWith({
+      room_id: 1,
+      name: 'Bed 3',
+      description: 'Dekat pintu',
+    })
+    expect(bedsService.list).toHaveBeenCalledTimes(2)
+    expect(toastMessages()).toContain('Data bed berhasil ditambahkan.')
+    expect(wrapper.findComponent(BedFormModal).props('open')).toBe(false)
+  })
+
+  it('membuka form edit berisi data bed yang dipilih dan menyimpan perubahan', async () => {
+    bedsService.update.mockResolvedValue({ data: { id: 1 } })
+    const wrapper = await mountView()
+
+    await wrapper.get('button[aria-label="Edit Bed 1"]').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Edit Bed')
+    expect(findControlByLabel(dialog, 'Nama Kamar').element.value).toBe('1')
+    expect(findControlByLabel(dialog, 'Nama Bed').element.value).toBe('Bed 1')
+
+    await findControlByLabel(dialog, 'Nama Bed').setValue('Bed 1 Revisi')
+    await dialog.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(bedsService.update).toHaveBeenCalledWith(1, {
+      room_id: 1,
+      name: 'Bed 1 Revisi',
+      description: 'Bed dekat jendela',
+    })
+    expect(toastMessages()).toContain('Data bed berhasil diperbarui.')
+  })
+
+  // Regresi Bug P0 #1: Validasi 422 tidak boleh membuat tabel menghilang
+  it('validasi server 422: tabel tetap tampil, error diteruskan ke field form, dan toast error muncul', async () => {
+    bedsService.create.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'Data tidak valid.',
+          errors: {
+            room_id: ['Kamar yang dipilih harus memiliki relasi Kelas yang valid.'],
+            name: ['Nama bed sudah digunakan pada kamar yang dipilih.'],
+          },
         },
       },
     })
-    await flushPromises()
-    return wrapper
-  }
-
-  it('renders page header with correct title and description', async () => {
     const wrapper = await mountView()
-    expect(wrapper.text()).toContain('Data Bed')
-    expect(wrapper.text()).toContain('Kelola data tempat tidur berdasarkan kamar, bangsal, dan kelas perawatan rumah sakit.')
-  })
 
-  it('renders table headers with required 6 columns in exact order', async () => {
-    const wrapper = await mountView()
-    const ths = wrapper.findAll('thead th')
-    expect(ths).toHaveLength(6)
-    expect(ths[0].text()).toBe('No')
-    expect(ths[1].text()).toBe('Nama Kamar')
-    expect(ths[2].text()).toBe('Nama Kelas')
-    expect(ths[3].text()).toBe('Nama Bed')
-    expect(ths[4].text()).toBe('Deskripsi')
-    expect(ths[5].text()).toBe('Aksi')
-  })
-
-  it('renders Nama Kamar formatted as [Nama Kamar] - [Nama Bangsal]', async () => {
-    const wrapper = await mountView()
-    const rows = wrapper.findAll('tbody tr')
-    expect(rows).toHaveLength(2)
-
-    // First row: Kamar 1 - Bangsal Maternal Perinatal
-    expect(rows[0].find('.col-room').text()).toBe('Kamar 1 - Bangsal Maternal Perinatal')
-    // Second row: Kamar 2 - Bangsal Melati
-    expect(rows[1].find('.col-room').text()).toBe('Kamar 2 - Bangsal Melati')
-  })
-
-  it('renders Nama Kelas in its own column and handles missing class with fallback', async () => {
-    const wrapper = await mountView()
-    const rows = wrapper.findAll('tbody tr')
-
-    // First row: Kelas 3
-    expect(rows[0].find('.col-class').text()).toBe('Kelas 3')
-    // Second row: missing class renders —
-    expect(rows[1].find('.col-class').text()).toBe('—')
-  })
-
-  it('renders Nama Bed and handles empty description with —', async () => {
-    const wrapper = await mountView()
-    const rows = wrapper.findAll('tbody tr')
-
-    expect(rows[0].find('.col-name').text()).toBe('Bed 1')
-    expect(rows[0].find('.col-description').text()).toBe('Bed dekat jendela')
-
-    expect(rows[1].find('.col-name').text()).toBe('Bed 2')
-    expect(rows[1].find('.col-description').text()).toBe('—')
-  })
-
-  it('opens add modal with room options formatted as Kamar - Bangsal - Kelas', async () => {
-    const wrapper = await mountView()
-    const addButton = wrapper.find('button.btn-primary')
-    await addButton.trigger('click')
+    await findButtonByText(wrapper, 'Tambah Bed').trigger('click')
     await flushPromises()
 
-    const modal = wrapper.findComponent({ name: 'BedFormModal' })
-    expect(modal.exists()).toBe(true)
-    expect(modal.props('isOpen')).toBe(true)
-    expect(roomsService.getRooms).toHaveBeenCalled()
-  })
+    const dialog = wrapper.get('[role="dialog"]')
+    await findControlByLabel(dialog, 'Nama Kamar').setValue('1')
+    await findControlByLabel(dialog, 'Nama Bed').setValue('Bed 1')
+    await dialog.get('form').trigger('submit')
+    await flushPromises()
 
-  it('successfully creates bed and calls createBed with room_id and name', async () => {
-    bedsService.createBed.mockResolvedValue({
-      data: {
-        id: 3,
-        room_id: 1,
-        name: 'Bed 3',
-        description: null,
-      },
+    const modal = wrapper.findComponent(BedFormModal)
+    expect(modal.props('open')).toBe(true)
+    expect(modal.props('serverErrors')).toEqual({
+      room_id: 'Kamar yang dipilih harus memiliki relasi Kelas yang valid.',
+      name: 'Nama bed sudah digunakan pada kamar yang dipilih.',
     })
-
-    const wrapper = await mountView()
-    const addButton = wrapper.find('button.btn-primary')
-    await addButton.trigger('click')
-    await flushPromises()
-
-    const modal = wrapper.findComponent({ name: 'BedFormModal' })
-    modal.vm.$emit('submit', {
-      room_id: 1,
-      name: 'Bed 3',
-      description: null,
-    })
-    await flushPromises()
-
-    expect(bedsService.createBed).toHaveBeenCalledWith({
-      room_id: 1,
-      name: 'Bed 3',
-      description: null,
-    })
-    expect(wrapper.text()).toContain('Data bed berhasil ditambahkan.')
+    const updatedDialog = wrapper.get('[role="dialog"]')
+    expect(updatedDialog.text()).toContain('Kamar yang dipilih harus memiliki relasi Kelas yang valid.')
+    expect(updatedDialog.text()).toContain('Nama bed sudah digunakan pada kamar yang dipilih.')
+    expect(updatedDialog.findComponent(SearchableSelect).props('isInvalid')).toBe(true)
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+    expect(toastMessages()).toContain('Data tidak valid.')
+    expect(toastMessages()).not.toContain('Data bed berhasil ditambahkan.')
   })
 
-  it('opens edit modal with existing bed data', async () => {
+  // Regresi Bug P0 #3: Validasi dropdown SearchableSelect wajib memakai prop isInvalid
+  it('validasi sisi klien mengirim isInvalid ke SearchableSelect dan mencegah submit kosong', async () => {
     const wrapper = await mountView()
-    const editBtn = wrapper.find('.actions-cell button[title="Edit"]')
-    await editBtn.trigger('click')
+
+    await findButtonByText(wrapper, 'Tambah Bed').trigger('click')
     await flushPromises()
 
-    const modal = wrapper.findComponent({ name: 'BedFormModal' })
-    expect(modal.props('isOpen')).toBe(true)
-    expect(modal.props('bed')).toBeTruthy()
-    expect(modal.props('bed').name).toBe('Bed 1')
+    await wrapper.get('[role="dialog"] form').trigger('submit')
+    await flushPromises()
+
+    const updatedDialog = wrapper.get('[role="dialog"]')
+    expect(updatedDialog.text()).toContain('Nama kamar wajib dipilih.')
+    expect(updatedDialog.text()).toContain('Nama bed wajib diisi.')
+    expect(updatedDialog.findComponent(SearchableSelect).props('isInvalid')).toBe(true)
+    expect(bedsService.create).not.toHaveBeenCalled()
   })
 
-  it('opens delete confirmation dialog with formatted message and deletes bed', async () => {
-    bedsService.deleteBed.mockResolvedValue({ success: true })
+  it('mencegah double submit pada form selama request create/update berjalan', async () => {
+    let finishCreate
+    bedsService.create.mockReturnValue(new Promise((resolve) => (finishCreate = resolve)))
 
     const wrapper = await mountView()
-    const deleteBtn = wrapper.find('.actions-cell button[title="Hapus"]')
-    await deleteBtn.trigger('click')
+    await findButtonByText(wrapper, 'Tambah Bed').trigger('click')
     await flushPromises()
 
-    const dialog = wrapper.findComponent({ name: 'MasterDataDeleteDialog' })
-    expect(dialog.props('isOpen')).toBe(true)
-    expect(dialog.props('title')).toBe('Hapus Bed')
-    expect(dialog.props('confirmMessage')).toContain('Apakah Anda yakin ingin menghapus “Bed 1” dari “Kamar 1 - Bangsal Maternal Perinatal”?')
-
-    dialog.vm.$emit('confirm')
+    const dialog = wrapper.get('[role="dialog"]')
+    await findControlByLabel(dialog, 'Nama Kamar').setValue('1')
+    await findControlByLabel(dialog, 'Nama Bed').setValue('Bed Baru')
+    await dialog.get('form').trigger('submit')
+    await dialog.get('form').trigger('submit')
     await flushPromises()
 
-    expect(bedsService.deleteBed).toHaveBeenCalledWith(1)
-    expect(wrapper.text()).toContain('Data bed berhasil dihapus.')
+    expect(bedsService.create).toHaveBeenCalledTimes(1)
+    expect(findButtonByText(wrapper.get('[role="dialog"]'), 'Simpan').attributes('disabled')).toBeDefined()
+
+    finishCreate({ data: { id: 5 } })
+    await flushPromises()
+    expect(toastMessages()).toContain('Data bed berhasil ditambahkan.')
+  })
+
+  // Regresi Bug P0 #2: BaseConfirmDialog mengunci tombol hapus selama request berjalan
+  it('menghapus bed setelah konfirmasi dan mengunci tombol hapus untuk mencegah double delete', async () => {
+    let finishDelete
+    bedsService.remove.mockReturnValue(new Promise((resolve) => (finishDelete = resolve)))
+    const wrapper = await mountView()
+
+    await wrapper.get('button[aria-label="Hapus Bed 1"]').trigger('click')
+    await flushPromises()
+
+    const confirmDialog = wrapper.findComponent(BaseConfirmDialog)
+    expect(confirmDialog.props('open')).toBe(true)
+    expect(confirmDialog.props('message')).toBe(
+      'Apakah Anda yakin ingin menghapus “Bed 1” dari “Kamar 1 - Bangsal Maternal Perinatal”?',
+    )
+
+    await findButtonByText(wrapper.get('[role="dialog"]'), 'Hapus').trigger('click')
+    await flushPromises()
+
+    expect(confirmDialog.props('loading')).toBe(true)
+    expect(findButtonByText(wrapper.get('[role="dialog"]'), 'Hapus').attributes('disabled')).toBeDefined()
+    expect(bedsService.remove).toHaveBeenCalledTimes(1)
+    expect(bedsService.remove).toHaveBeenCalledWith(1)
+
+    finishDelete({})
+    await flushPromises()
+    expect(toastMessages()).toContain('Data bed berhasil dihapus.')
+  })
+
+  it('mempertahankan alias kompatibilitas bedsService.getBeds', async () => {
+    await bedsService.getBeds({ page: 1 })
+    expect(bedsService.list).toHaveBeenCalledWith({ page: 1 })
   })
 })

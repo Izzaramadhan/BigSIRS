@@ -12,12 +12,29 @@ class UpdateLetterTypeRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $letterType = $this->route('letter_type');
-        if (LegacyAccess::isAvailable('ref_jenis_surat')) {
-            $id = $letterType instanceof LegacyLetterType || $letterType instanceof LetterType ? $letterType->id : $letterType;
-            $letterType = LegacyLetterType::findOrFail($id);
+        $user = $this->user();
+        if (! $user) {
+            return false;
         }
-        return $this->user()->can('update', $letterType);
+
+        $letterType = $this->route('letter_type');
+        $id = $letterType instanceof LegacyLetterType || $letterType instanceof LetterType
+            ? $letterType->id
+            : $letterType;
+
+        if (LegacyAccess::isAvailable('ref_jenis_surat')) {
+            if (! ($letterType instanceof LegacyLetterType)) {
+                $letterType = LegacyLetterType::findOrFail($id);
+            }
+
+            return $user->can('update', $letterType);
+        }
+
+        if (! ($letterType instanceof LetterType)) {
+            $letterType = LetterType::findOrFail($id);
+        }
+
+        return $user->can('update', $letterType);
     }
 
     public function rules(): array

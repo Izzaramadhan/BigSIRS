@@ -1,140 +1,158 @@
-<template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="letterTypeData ? 'Edit Surat' : 'Tambah Surat'"
-    :is-submitting="loading"
-    size="md"
-    @close="$emit('close')"
-    @submit="submitForm"
-  >
-    <div class="modal-form">
-      <div v-if="errors.general" class="alert-error">
-        {{ errors.general }}
-      </div>
-
-      <div class="form-group">
-        <label for="name" class="form-label required">Nama Surat</label>
-        <input autocomplete="off" 
-          type="text" 
-          id="name" 
-          v-model="form.name" 
-          class="form-control" 
-          :class="{ 'is-invalid': fieldError('name') }"
-          placeholder="Masukkan nama surat"
-          required
-        />
-        <div v-if="fieldError('name')" class="invalid-feedback">{{ fieldError('name') }}</div>
-      </div>
-
-      <div class="form-group">
-        <label for="description" class="form-label">Deskripsi</label>
-        <textarea 
-          id="description" 
-          v-model="form.description" 
-          class="form-control form-textarea" 
-          :class="{ 'is-invalid': fieldError('description') }"
-          placeholder="Masukkan deskripsi (opsional)"
-          rows="3"
-        ></textarea>
-        <div v-if="fieldError('description')" class="invalid-feedback">{{ fieldError('description') }}</div>
-      </div>
-      
-      <div class="form-group">
-        <label for="legacy_resource" class="form-label">Resource</label>
-        <input autocomplete="off" 
-          type="text" 
-          id="legacy_resource" 
-          v-model="form.legacy_resource" 
-          class="form-control" 
-          :class="{ 'is-invalid': fieldError('legacy_resource') }"
-          placeholder="Masukkan resource"
-        />
-        <div v-if="fieldError('legacy_resource')" class="invalid-feedback">{{ fieldError('legacy_resource') }}</div>
-      </div>
-    </div>
-  </MasterDataFormModal>
-</template>
-
 <script setup>
-import { ref, watch } from 'vue';
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import { computed, reactive, ref, useId, watch } from 'vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import {
+  createLetterTypeForm,
+  LETTER_TYPE_DESCRIPTION_MAX_LENGTH,
+  LETTER_TYPE_NAME_MAX_LENGTH,
+  LETTER_TYPE_RESOURCE_MAX_LENGTH,
+  toLetterTypePayload,
+  validateLetterTypeForm,
+} from './letter-types/letter-type.helpers'
 
 const props = defineProps({
-  isOpen: {
+  open: {
     type: Boolean,
-    default: false
+    required: true,
   },
-  letterTypeData: {
+  /** null = mode tambah, object = mode edit. */
+  letterType: {
     type: Object,
-    default: null
+    default: null,
   },
-  loading: {
+  saving: {
     type: Boolean,
-    default: false
+    default: false,
   },
-  errors: {
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
     type: Object,
-    default: () => ({})
-  }
-});
+    default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal (mis. 403/404/5xx). */
+  generalError: {
+    type: String,
+    default: '',
+  },
+})
 
-const emit = defineEmits(['close', 'submit']);
+const emit = defineEmits(['close', 'submit'])
 
-const form = ref({
-  name: '',
-  description: '',
-  legacy_resource: null
-});
+const formId = useId()
+const form = reactive(createLetterTypeForm())
+const clientErrors = ref({})
 
-const isEdit = ref(false);
+const isEdit = computed(() => Boolean(props.letterType?.id))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
 
-watch(() => props.isOpen, (newVal) => {
-  if (newVal) {
-    if (props.letterTypeData) {
-      isEdit.value = true;
-      form.value = {
-        name: props.letterTypeData.name,
-        description: props.letterTypeData.description || '',
-        legacy_resource: props.letterTypeData.legacy_resource || null
-      };
-    } else {
-      isEdit.value = false;
-      form.value = {
-        name: '',
-        description: '',
-        legacy_resource: null
-      };
-    }
-  }
-});
+watch(
+  [() => props.open, () => props.letterType],
+  ([isOpen]) => {
+    if (!isOpen) return
+    Object.assign(form, createLetterTypeForm(props.letterType))
+    clientErrors.value = {}
+  },
+  { immediate: true },
+)
 
-const closeModal = () => {
-  emit('close');
-};
+for (const field of ['name', 'description', 'legacy_resource']) {
+  watch(
+    () => form[field],
+    () => {
+      if (clientErrors.value[field]) {
+        const next = { ...clientErrors.value }
+        delete next[field]
+        clientErrors.value = next
+      }
+    },
+  )
+}
 
-const submitForm = () => {
-  emit('submit', form.value);
-};
+function handleSubmit() {
+  if (props.saving) return
+  clientErrors.value = validateLetterTypeForm(form)
+  if (Object.keys(clientErrors.value).length > 0) return
+  emit('submit', toLetterTypePayload(form))
+}
 
-const fieldError = (field) => props.errors?.[field]?.[0] || null;
+function requestClose() {
+  if (!props.saving) emit('close')
+}
 </script>
 
-<style scoped>
-.alert-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-}
+<template>
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Surat' : 'Tambah Surat'"
+    size="md"
+    :persistent="saving"
+    @close="requestClose"
+  >
+    <form :id="formId" class="flex flex-col gap-5" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
 
-.bg-gray-100 {
-  background-color: #f3f4f6;
-}
+      <BaseField
+        v-slot="field"
+        id="name"
+        label="Nama Surat"
+        required
+        :error="errors.name"
+        :hint="`Maksimal ${LETTER_TYPE_NAME_MAX_LENGTH} karakter.`"
+      >
+        <BaseInput
+          v-bind="field"
+          v-model="form.name"
+          autocomplete="off"
+          placeholder="Masukkan nama surat"
+          :maxlength="LETTER_TYPE_NAME_MAX_LENGTH"
+        />
+      </BaseField>
 
-.text-gray-500 {
-  color: #6b7280;
-}
-</style>
+      <BaseField
+        v-slot="field"
+        id="description"
+        label="Deskripsi"
+        :error="errors.description"
+        :hint="`Opsional, maksimal ${LETTER_TYPE_DESCRIPTION_MAX_LENGTH} karakter.`"
+      >
+        <BaseTextarea
+          v-bind="field"
+          v-model="form.description"
+          :rows="3"
+          placeholder="Masukkan deskripsi (opsional)"
+          :maxlength="LETTER_TYPE_DESCRIPTION_MAX_LENGTH"
+        />
+      </BaseField>
+
+      <BaseField
+        v-slot="field"
+        id="legacy_resource"
+        label="Resource"
+        :error="errors.legacy_resource"
+        :hint="`Opsional, path atau URL format lama (maksimal ${LETTER_TYPE_RESOURCE_MAX_LENGTH} karakter).`"
+      >
+        <BaseInput
+          v-bind="field"
+          v-model="form.legacy_resource"
+          autocomplete="off"
+          placeholder="Masukkan resource (opsional)"
+          :maxlength="LETTER_TYPE_RESOURCE_MAX_LENGTH"
+        />
+      </BaseField>
+    </form>
+
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="requestClose">Batal</BaseButton>
+      <BaseButton type="submit" :form="formId" :loading="saving">
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
+</template>

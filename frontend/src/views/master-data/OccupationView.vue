@@ -1,269 +1,207 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useOccupations } from '@/composables/useOccupations'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import OccupationFilters from '@/components/master-data/occupations/OccupationFilters.vue'
 import OccupationFormModal from '@/components/master-data/occupations/OccupationFormModal.vue'
-import AppToast from '@/components/common/AppToast.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import MasterDataSearchInput from '@/components/master-data/shared/MasterDataSearchInput.vue'
-import MasterDataActionButtons from '@/components/master-data/shared/MasterDataActionButtons.vue'
+import OccupationTable from '@/components/master-data/occupations/OccupationTable.vue'
+import { getSafeOccupationErrorMessage } from '@/components/master-data/occupations/occupation.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useOccupations } from '@/composables/useOccupations'
 
 const {
-  occupations,
+  items,
   meta,
+  filters,
   loading,
-  error,
-  fetchOccupations,
-  deleteOccupation
+  loadError,
+  saving,
+  fetchItems,
+  setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useOccupations()
+const toast = useToast()
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingOccupation = ref(null)
+const formErrors = ref({})
+const formGeneralError = ref('')
+
+function openForm(occupation = null) {
+  editingOccupation.value = occupation
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
+
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingOccupation.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
+
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
+
+  const isEdit = Boolean(editingOccupation.value)
+  const fallback = isEdit ? 'Data pekerjaan gagal diperbarui.' : 'Data pekerjaan gagal ditambahkan.'
+  const result = isEdit
+    ? await update(editingOccupation.value.id, payload)
+    : await create(payload)
+
+  if (!result.ok) {
+    const safeMessage = getSafeOccupationErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
+  }
+
+  closeForm()
+  toast.success(
+    isEdit ? 'Data pekerjaan berhasil diperbarui.' : 'Data pekerjaan berhasil ditambahkan.',
+  )
+}
+
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingOccupation = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingOccupation.value) return ''
+  return `Apakah Anda yakin ingin menghapus pekerjaan “${deletingOccupation.value.name}”?`
 })
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingOccupation.value = null
 }
 
-const closeToast = () => {
-  toast.value.show = false
-}
+async function handleDelete() {
+  if (saving.value || !deletingOccupation.value) return
+  const result = await remove(deletingOccupation.value.id)
+  deletingOccupation.value = null
 
-const searchQuery = ref('')
-const currentPage = ref(1)
-const perPage = ref(10) // Internal state, we can keep it without UI or set it as needed
-
-const isFormModalOpen = ref(false)
-const selectedOccupation = ref(null)
-
-const isDeleteModalOpen = ref(false)
-const occupationToDelete = ref(null)
-const deleteError = ref(null)
-
-const handleSearch = () => {
-  currentPage.value = 1
-  loadData()
-}
-
-const handleRefresh = () => {
-  loadData()
-}
-
-const handlePageChange = (page) => {
-  if (page < 1 || page > meta.value.last_page) return
-  currentPage.value = page
-  loadData()
-}
-
-const loadData = async () => {
-  try {
-    await fetchOccupations({
-      page: currentPage.value,
-      per_page: perPage.value,
-      search: searchQuery.value
-    })
-  } catch (err) {
-    console.error('Failed to load Occupations:', err)
+  if (result.ok) {
+    toast.success('Data pekerjaan berhasil dihapus.')
+  } else {
+    toast.error(getSafeOccupationErrorMessage(result.error, 'Data pekerjaan gagal dihapus.'))
   }
 }
 
-const openAddModal = () => {
-  selectedOccupation.value = null
-  isFormModalOpen.value = true
-}
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeOccupationErrorMessage({ message: loadError.value }, 'Data pekerjaan gagal dimuat.')
+    : '',
+)
 
-const openEditModal = (occupation) => {
-  selectedOccupation.value = { ...occupation }
-  isFormModalOpen.value = true
-}
-
-const onFormSuccess = () => {
-  const isEditing = Boolean(selectedOccupation.value)
-  isFormModalOpen.value = false
-  loadData()
-  showToast({
-    type: 'success',
-    title: 'Berhasil',
-    message: isEditing ? 'Data Pekerjaan berhasil diperbarui.' : 'Data Pekerjaan berhasil ditambahkan.'
-  })
-}
-
-const confirmDelete = (occupation) => {
-  occupationToDelete.value = occupation
-  deleteError.value = null
-  isDeleteModalOpen.value = true
-}
-
-const handleDelete = async () => {
-  if (!occupationToDelete.value) return
-  
-  try {
-    await deleteOccupation(occupationToDelete.value.id)
-    isDeleteModalOpen.value = false
-    loadData()
-    showToast({ type: 'success', title: 'Berhasil', message: 'Data Pekerjaan berhasil dihapus.' })
-  } catch (err) {
-    showToast({ 
-      type: 'error', 
-      title: 'Gagal Menghapus', 
-      message: err.response?.data?.message || 'Data Pekerjaan gagal dihapus.' 
-    })
-    isDeleteModalOpen.value = false
-  }
-}
-
-let searchTimeout
-watch(searchQuery, () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    handleSearch()
-  }, 300)
-})
-
-onMounted(() => {
-  loadData()
-})
-
-const getRowNumber = (index) => {
-  return (currentPage.value - 1) * perPage.value + index + 1;
-};
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast 
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <MasterDataPageHeader 
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Pekerjaan"
-      subtitle="Kelola data dasar tingkat Pekerjaan."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Data Dasar', active: false },
-        { label: 'Pekerjaan', active: true }
-      ]"
+      description="Kelola data dasar pekerjaan."
+      :breadcrumbs="['Dashboard', 'Data Dasar', 'Pekerjaan']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Pekerjaan
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <div class="page-content">
-      <div class="filters-container">
-        <MasterDataSearchInput 
-          v-model="searchQuery" 
-          placeholder="Cari tingkat Pekerjaan..." 
-        />
-
-        <div class="filter-selects">
-          <div class="filters-actions">
-            <button type="button" class="btn-icon" @click="handleRefresh" title="Refresh Data" :disabled="loading">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ 'spin': loading }">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error" 
-        @retry="loadData" 
-      />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && occupations.length === 0" 
-          :is-search="!!searchQuery"
-        >
-          <template #action v-if="!searchQuery">
-            <button class="btn-primary" @click="openAddModal">Tambah Pekerjaan</button>
-          </template>
-        </MasterDataEmptyState>
-        
-        <template v-else>
-          <div class="table-wrapper">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th class="col-no">No</th>
-                    <th class="col-name">Pekerjaan</th>
-                    <th class="col-actions text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template v-if="loading">
-                    <tr v-for="i in 5" :key="`skeleton-${i}`" class="skeleton-row">
-                      <td><div class="skeleton-box skeleton-small"></div></td>
-                      <td><div class="skeleton-box skeleton-medium"></div></td>
-                      <td><div class="skeleton-box skeleton-circle"></div></td>
-                    </tr>
-                  </template>
-
-                  <template v-else>
-                    <tr v-for="(item, index) in occupations" :key="item.id">
-                      <td class="col-no text-muted">{{ getRowNumber(index) }}</td>
-                      <td class="col-name font-medium text-navy">{{ item.name }}</td>
-                      <td class="actions-cell">
-                        <MasterDataActionButtons 
-                          :show-toggle="false"
-                          @edit="openEditModal(item)"
-                          @delete="confirmDelete(item)"
-                        />
-                      </td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <MasterDataPagination 
-            v-if="meta"
-            :pagination="{ current_page: currentPage, last_page: meta.last_page || 1, per_page: perPage, total: meta.total || 0, from: meta.from, to: meta.to }"
-            :loading="loading"
-            :item-count="occupations.length"
-            @page-change="handlePageChange"
-          />
-        </template>
-      </template>
-    </div>
-    
-    <OccupationFormModal 
-      :is-open="isFormModalOpen"
-      :occupation="selectedOccupation"
-      @close="isFormModalOpen = false"
-      @success="onFormSuccess"
+    <OccupationFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog 
-      :is-open="isDeleteModalOpen"
-      title="Hapus Pekerjaan?"
-      :item-name="occupationToDelete?.name || ''"
-      warning-message="Tindakan ini tidak dapat dibatalkan."
-      :is-submitting="loading"
-      @close="isDeleteModalOpen = false"
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data pekerjaan gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
+        </template>
+      </BaseEmptyState>
+    </div>
+
+    <template v-else>
+      <OccupationTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingOccupation = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Pekerjaan tidak ditemukan"
+            :description="`Tidak ada pekerjaan yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data pekerjaan"
+            description="Tambahkan pekerjaan pertama untuk mulai mengelola data."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Pekerjaan</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </OccupationTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <OccupationFormModal
+      :open="formOpen"
+      :occupation="editingOccupation"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingOccupation)"
+      title="Hapus Pekerjaan"
+      :message="deleteMessage"
+      confirm-text="Hapus"
+      :loading="saving"
+      @close="closeDeleteDialog"
       @confirm="handleDelete"
     />
   </div>

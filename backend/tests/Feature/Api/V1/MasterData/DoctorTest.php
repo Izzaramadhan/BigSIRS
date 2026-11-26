@@ -255,6 +255,60 @@ class DoctorTest extends TestCase
         $response->assertOk(); // No validation error
     }
 
+    public function test_cannot_update_doctor_to_employee_owned_by_another_doctor()
+    {
+        $doctor1 = Doctor::factory()->create();
+        $doctor2 = Doctor::factory()->create();
+        $spec = Specialization::factory()->create();
+
+        $response = $this->actingAs($this->user)
+            ->putJson('/api/v1/master-data/doctors/'.$doctor1->id, [
+                'employee_id' => $doctor2->employee_id,
+                'person' => [
+                    'name' => 'Dokter Satu',
+                    'gender' => 'L',
+                ],
+                'professional' => [
+                    'specialization_id' => $spec->id,
+                ],
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['employee_id']);
+    }
+
+    public function test_can_explicitly_clear_allergies_on_update()
+    {
+        $employee = Employee::factory()->create([
+            'name' => 'dr. Alergi',
+            'gender' => 'L',
+            'allergies' => 'Penisilin',
+        ]);
+        $doctor = Doctor::factory()->create(['employee_id' => $employee->id]);
+        $spec = Specialization::factory()->create();
+
+        $response = $this->actingAs($this->user)
+            ->post('/api/v1/master-data/doctors/'.$doctor->id, [
+                '_method' => 'PUT',
+                'person' => [
+                    'name' => 'dr. Alergi',
+                    'gender' => 'L',
+                    'allergies' => '',
+                ],
+                'professional' => [
+                    'specialization_id' => $spec->id,
+                ],
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.employee.allergies', null);
+
+        $this->assertDatabaseHas('employees', [
+            'id' => $employee->id,
+            'allergies' => null,
+        ]);
+    }
+
     public function test_create_validates_gender_is_required()
     {
         $employee = Employee::factory()->create();

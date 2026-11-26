@@ -5,6 +5,7 @@ namespace Tests\Feature\MasterData;
 use App\Models\LetterType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
 
 class LetterTypeTest extends TestCase
@@ -144,6 +145,77 @@ class LetterTypeTest extends TestCase
 
         $this->assertSoftDeleted('letter_types', [
             'id' => $letterType->id,
+        ]);
+    }
+
+    public function test_update_returns_404_when_letter_type_not_found()
+    {
+        $response = $this->actingAs($this->user)
+            ->putJson('/api/v1/master-data/letter-types/999999', [
+                'name' => 'Surat Baru',
+            ]);
+
+        $response->assertStatus(404);
+    }
+
+    public function test_unauthenticated_user_cannot_update_letter_type()
+    {
+        $letterType = LetterType::factory()->create([
+            'name' => 'Surat Awal',
+        ]);
+
+        $response = $this->putJson("/api/v1/master-data/letter-types/{$letterType->id}", [
+            'name' => 'Surat Baru',
+        ]);
+
+        $response->assertStatus(401);
+        $this->assertDatabaseHas('letter_types', [
+            'id' => $letterType->id,
+            'name' => 'Surat Awal',
+        ]);
+    }
+
+    public function test_update_validates_payload_422_and_duplicate_name()
+    {
+        LetterType::factory()->create(['name' => 'Surat Sudah Ada']);
+        $letterType = LetterType::factory()->create(['name' => 'Surat Awal']);
+
+        $response = $this->actingAs($this->user)
+            ->putJson("/api/v1/master-data/letter-types/{$letterType->id}", [
+                'name' => 'Surat Sudah Ada',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['name']);
+    }
+
+    public function test_update_authorizes_resolved_letter_type_model_and_enforces_403_when_denied()
+    {
+        $letterType = LetterType::factory()->create([
+            'name' => 'Surat Awal',
+        ]);
+
+        $capturedTarget = null;
+        Gate::before(function ($user, string $ability, array $arguments) use (&$capturedTarget) {
+            if ($ability === 'update') {
+                $capturedTarget = $arguments[0] ?? null;
+                return false;
+            }
+
+            return null;
+        });
+
+        $response = $this->actingAs($this->user)
+            ->putJson("/api/v1/master-data/letter-types/{$letterType->id}", [
+                'name' => 'Surat Baru',
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertInstanceOf(LetterType::class, $capturedTarget);
+        $this->assertSame($letterType->id, $capturedTarget->id);
+        $this->assertDatabaseHas('letter_types', [
+            'id' => $letterType->id,
+            'name' => 'Surat Awal',
         ]);
     }
 }

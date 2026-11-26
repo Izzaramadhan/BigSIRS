@@ -115,6 +115,56 @@ class LegacyEmployee extends LegacyModel
         return isset($this->person?->id_pekerjaan) ? (int) $this->person->id_pekerjaan : null;
     }
 
+    public function getIhsNumberAttribute(): ?string
+    {
+        return $this->person?->ihs_number;
+    }
+
+    public function getNationalityAttribute(): ?string
+    {
+        return $this->person?->nationality;
+    }
+
+    public function getBloodTypeAttribute(): ?string
+    {
+        return $this->person?->blood_type;
+    }
+
+    public function getAllergiesAttribute(): ?string
+    {
+        return $this->person?->allergies;
+    }
+
+    public function getMaritalStatusAttribute(): ?string
+    {
+        return $this->person?->marital_status;
+    }
+
+    public function getPostalCodeAttribute(): ?string
+    {
+        return $this->person?->postal_code;
+    }
+
+    public function getProvinceIdAttribute(): ?string
+    {
+        return $this->person?->province_id;
+    }
+
+    public function getRegencyIdAttribute(): ?string
+    {
+        return $this->person?->regency_id;
+    }
+
+    public function getDistrictIdAttribute(): ?string
+    {
+        return $this->person?->district_id;
+    }
+
+    public function getVillageIdAttribute(): ?string
+    {
+        return $this->person?->village_id;
+    }
+
     public function getIsActiveAttribute(): bool
     {
         return ((string) ($this->attributes['status'] ?? '1')) === '1';

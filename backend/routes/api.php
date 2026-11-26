@@ -94,6 +94,18 @@ Route::prefix('v1')->group(function () {
         Route::prefix('examinations')->group(function () {
             Route::get('/', [ExaminationController::class, 'index']);
             Route::get('{id}', [ExaminationController::class, 'show'])->whereNumber('id');
+            Route::put('{id}/status', [ExaminationController::class, 'updateStatus'])->whereNumber('id');
+            Route::match(['post', 'put'], '{id}/vitals', [ExaminationController::class, 'saveVitals'])->whereNumber('id');
+            Route::match(['post', 'put'], '{id}/clinical', [ExaminationController::class, 'saveClinical'])->whereNumber('id');
+            Route::get('{id}/allergies', [ExaminationController::class, 'getAllergies'])->whereNumber('id');
+            Route::match(['post', 'put'], '{id}/allergies', [ExaminationController::class, 'saveAllergies'])->whereNumber('id');
+            Route::post('{id}/diagnoses', [ExaminationController::class, 'addDiagnosis'])->whereNumber('id');
+            Route::delete('{id}/diagnoses/{diagnosisId}', [ExaminationController::class, 'deleteDiagnosis'])->whereNumber('id')->whereNumber('diagnosisId');
+            Route::post('{id}/procedures', [ExaminationController::class, 'addProcedure'])->whereNumber('id');
+            Route::delete('{id}/procedures/{procedureId}', [ExaminationController::class, 'deleteProcedure'])->whereNumber('id')->whereNumber('procedureId');
+            Route::post('{id}/prescriptions', [ExaminationController::class, 'storePrescription'])->whereNumber('id');
+            Route::post('{id}/labs', [ExaminationController::class, 'storeLabOrder'])->whereNumber('id');
+            Route::post('{id}/radiologies', [ExaminationController::class, 'storeRadiologyOrder'])->whereNumber('id');
         });
 
         Route::prefix('master-data')->group(function () {
@@ -221,6 +233,7 @@ Route::prefix('v1')->group(function () {
             Route::get('educations', [LookupController::class, 'educations']);
             Route::get('occupations', [LookupController::class, 'occupations']);
             Route::get('positions', [LookupController::class, 'positions']);
+            Route::get('guarantors', [LookupController::class, 'guarantors']);
             Route::get('referral-sources', [LookupController::class, 'referralSources']);
             Route::get('laboratory-categories', [LookupController::class, 'laboratoryCategories']);
             Route::get('radiology-categories', [LookupController::class, 'radiologyCategories']);

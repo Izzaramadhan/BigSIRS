@@ -1,27 +1,29 @@
-import axios from '@/utils/axios'
+import { createResourceService } from '@/services/core/createResourceService'
 
-export const occupationsService = {
-  getOccupations(params = {}) {
-    return axios.get('/master-data/occupations', { params }).then(res => res.data)
-  },
+const resource = createResourceService('/master-data/occupations')
 
-  getOccupation(id) {
-    return axios.get(`/master-data/occupations/${id}`).then(res => res.data)
-  },
-
-  createOccupation(data) {
-    return axios.post('/master-data/occupations', data).then(res => res.data)
-  },
-
-  updateOccupation(id, data) {
-    return axios.put(`/master-data/occupations/${id}`, data).then(res => res.data)
-  },
-
-  deleteOccupation(id) {
-    return axios.delete(`/master-data/occupations/${id}`).then(res => res.data)
-  },
-
-  updateStatus(id, is_active) {
-    return axios.patch(`/master-data/occupations/${id}/status`, { is_active }).then(res => res.data)
+function mapListParams(params = {}) {
+  if (!params || (!('sort' in params) && !('direction' in params))) {
+    return params
+  }
+  const { sort, direction, ...rest } = params
+  return {
+    ...rest,
+    ...(sort ? { sort_by: sort } : {}),
+    ...(direction ? { sort_desc: direction === 'desc' } : {}),
   }
 }
+
+export const occupationsService = {
+  ...resource,
+  // Backend OccupationController::index membaca sort_by & sort_desc.
+  list: (params) => resource.list(mapListParams(params)),
+  // Alias kompatibilitas untuk caller atau pengujian lama.
+  getOccupations: (params) => resource.list(mapListParams(params)),
+  getOccupation: (id) => resource.get(id),
+  createOccupation: (data) => resource.create(data),
+  updateOccupation: (id, data) => resource.update(id, data),
+  deleteOccupation: (id) => resource.remove(id),
+}
+
+export default occupationsService

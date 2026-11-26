@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import PosSaleView from '../PosSaleView.vue';
 import PosSaleTable from '../components/PosSaleTable.vue';
 import PosSaleFormModal from '../components/PosSaleFormModal.vue';
-import PosSaleDeleteDialog from '../components/PosSaleDeleteDialog.vue';
 import PosSaleSummaryCards from '../components/PosSaleSummaryCards.vue';
 import PosSaleStatusBadge from '../components/PosSaleStatusBadge.vue';
 import PosSaleFilters from '../components/PosSaleFilters.vue';
@@ -36,6 +35,10 @@ describe('Penjualan Bebas (OTC) Module Tests', () => {
 
     beforeEach(() => {
       composable = usePosSales();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
     it('initializes with default mock sales and summary metrics', () => {
@@ -85,6 +88,23 @@ describe('Penjualan Bebas (OTC) Module Tests', () => {
 
     it('creates, voids, and deletes sales correctly', async () => {
       const initialCount = composable.sales.value.length;
+
+      vi.spyOn(posSalesService, 'getSummary').mockResolvedValue({ data: composable.summary.value });
+      vi.spyOn(posSalesService, 'createPosSale').mockResolvedValueOnce({
+        data: {
+          id: 9999,
+          status: 'Lunas',
+          customerName: 'Test Pembeli Baru',
+          customerType: 'Umum',
+          location: 'Farmasi Pusat (Kasir 1)',
+          paymentMethod: 'Tunai',
+          items: [
+            { name: 'Paracetamol 500 mg Tablet', price: 15000, qty: 2, subtotal: 30000 }
+          ]
+        }
+      });
+      vi.spyOn(posSalesService, 'cancelPosSale').mockResolvedValueOnce({ success: true });
+      vi.spyOn(posSalesService, 'deletePosSale').mockResolvedValueOnce({ success: true });
 
       const resCreate = await composable.createSale({
         customerName: 'Test Pembeli Baru',

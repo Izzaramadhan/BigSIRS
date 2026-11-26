@@ -37,4 +37,9 @@ class LegacyAdmission extends LegacyModel
     {
         return $this->hasOne(LegacyVisit::class, 'id_admisi', 'id')->latestOfMany('id');
     }
+
+    public function queue(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(LegacyQueue::class, 'id_admisi', 'id');
+    }
 }

@@ -15,7 +15,9 @@ use App\Models\MasterData\Doctor;
 use App\Support\LegacyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class DoctorController extends Controller
 {
@@ -120,39 +122,28 @@ class DoctorController extends Controller
                 if ($employeeId) {
                     $employee = LegacyEmployee::with('person')->findOrFail($employeeId);
                     $mpiId = $employee->id_mpi;
-                    if ($employee->person) {
-                        $employee->person->update([
-                            'no_ktp' => $personData['national_id'] ?? $employee->person->no_ktp,
-                            'nama' => $personData['name'] ?? $employee->person->nama,
-                            'gender' => $personData['gender'] ?? $employee->person->gender,
-                            'tgl_lahir' => $personData['birth_date'] ?? $employee->person->tgl_lahir,
-                            'tempat_lahir' => $personData['birth_place'] ?? $employee->person->tempat_lahir,
-                            'alamat' => $personData['address'] ?? $employee->person->alamat,
-                            'no_hp' => $personData['phone'] ?? $employee->person->no_hp,
-                            'agama' => $personData['religion'] ?? $employee->person->agama,
-                            'id_pendidikan' => $personData['education_id'] ?? $employee->person->id_pendidikan,
-                            'id_pekerjaan' => $personData['occupation_id'] ?? $employee->person->id_pekerjaan,
-                            'updated_at' => now(),
+                    if ($mpiId && LegacyDoctor::where('id_mpi', $mpiId)->lockForUpdate()->exists()) {
+                        throw ValidationException::withMessages([
+                            'employee_id' => ['Pegawai ini sudah terdaftar sebagai dokter.'],
                         ]);
                     }
+                    if ($employee->person) {
+                        $employee->person->update(array_merge(
+                            $this->buildLegacyPersonAttributes($personData, $employee->person),
+                            ['updated_at' => now()]
+                        ));
+                    }
                 } else {
-                    $person = LegacyPerson::create([
-                        'no_ktp' => $personData['national_id'] ?? null,
-                        'nama' => $personData['name'],
-                        'gender' => $personData['gender'] ?? 'L',
-                        'tgl_lahir' => $personData['birth_date'] ?? null,
-                        'tempat_lahir' => $personData['birth_place'] ?? null,
-                        'alamat' => $personData['address'] ?? null,
-                        'no_hp' => $personData['phone'] ?? null,
-                        'agama' => $personData['religion'] ?? null,
-                        'id_pendidikan' => $personData['education_id'] ?? null,
-                        'id_pekerjaan' => $personData['occupation_id'] ?? null,
-                        'jenis_person' => 'dokter',
-                        'status' => 1,
-                        'id_user' => $legacyUserId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+                    $person = LegacyPerson::create(array_merge(
+                        $this->buildLegacyPersonAttributes($personData),
+                        [
+                            'jenis_person' => 'dokter',
+                            'status' => 1,
+                            'id_user' => $legacyUserId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]
+                    ));
                     $mpiId = $person->id;
 
                     $employee = LegacyEmployee::create([
@@ -170,7 +161,7 @@ class DoctorController extends Controller
                     $signaturePath = $request->file('signature')->store('signatures', 'public');
                 }
 
-                $doctor = LegacyDoctor::create([
+                $doctorAttributes = [
                     'id_mpi' => $mpiId,
                     'id_spesialisasi' => $professionalData['specialization_id'],
                     'no_str' => $professionalData['str_number'] ?? null,
@@ -182,7 +173,14 @@ class DoctorController extends Controller
                     'id_user' => $legacyUserId,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ];
+
+                if (array_key_exists('ihs_number', $personData) && Schema::connection('legacy')->hasColumn('ref_dokter', 'ihs_id')) {
+                    $ihs = trim((string) ($personData['ihs_number'] ?? ''));
+                    $doctorAttributes['ihs_id'] = $ihs !== '' ? $ihs : null;
+                }
+
+                $doctor = LegacyDoctor::create($doctorAttributes);
 
                 return (new DoctorResource($doctor->load(['employee.person', 'person', 'specialization'])))
                     ->response()
@@ -198,6 +196,11 @@ class DoctorController extends Controller
             $employeeId = $request->input('employee_id');
 
             if ($employeeId) {
+                if (Doctor::where('employee_id', $employeeId)->lockForUpdate()->exists()) {
+                    throw ValidationException::withMessages([
+                        'employee_id' => ['Pegawai ini sudah terdaftar sebagai dokter.'],
+                    ]);
+                }
                 $employee = Employee::findOrFail($employeeId);
                 $employee->update($personData);
             } else {
@@ -251,19 +254,10 @@ class DoctorController extends Controller
                 // Update person
                 $person = $legacyDoctor->person ?? $legacyDoctor->employee?->person;
                 if ($person) {
-                    $person->update([
-                        'no_ktp' => $personData['national_id'] ?? $person->no_ktp,
-                        'nama' => $personData['name'] ?? $person->nama,
-                        'gender' => $personData['gender'] ?? $person->gender,
-                        'tgl_lahir' => $personData['birth_date'] ?? $person->tgl_lahir,
-                        'tempat_lahir' => $personData['birth_place'] ?? $person->tempat_lahir,
-                        'alamat' => $personData['address'] ?? $person->alamat,
-                        'no_hp' => $personData['phone'] ?? $person->no_hp,
-                        'agama' => $personData['religion'] ?? $person->agama,
-                        'id_pendidikan' => $personData['education_id'] ?? $person->id_pendidikan,
-                        'id_pekerjaan' => $personData['occupation_id'] ?? $person->id_pekerjaan,
-                        'updated_at' => now(),
-                    ]);
+                    $person->update(array_merge(
+                        $this->buildLegacyPersonAttributes($personData, $person),
+                        ['updated_at' => now()]
+                    ));
                 }
 
                 $signaturePath = $legacyDoctor->ttd;
@@ -279,17 +273,24 @@ class DoctorController extends Controller
                     $signaturePath = null;
                 }
 
-                $legacyDoctor->update([
+                $doctorAttributes = [
                     'id_spesialisasi' => $professionalData['specialization_id'] ?? $legacyDoctor->id_spesialisasi,
-                    'no_str' => $professionalData['str_number'] ?? $legacyDoctor->no_str,
-                    'sip' => $professionalData['sip_number'] ?? $legacyDoctor->sip,
-                    'masa_berlaku' => $professionalData['sip_valid_until'] ?? $legacyDoctor->masa_berlaku,
-                    'kode_dpjp' => $professionalData['bpjs_dpjp_code'] ?? $legacyDoctor->kode_dpjp,
+                    'no_str' => array_key_exists('str_number', $professionalData) ? $professionalData['str_number'] : $legacyDoctor->no_str,
+                    'sip' => array_key_exists('sip_number', $professionalData) ? $professionalData['sip_number'] : $legacyDoctor->sip,
+                    'masa_berlaku' => array_key_exists('sip_valid_until', $professionalData) ? $professionalData['sip_valid_until'] : $legacyDoctor->masa_berlaku,
+                    'kode_dpjp' => array_key_exists('bpjs_dpjp_code', $professionalData) ? $professionalData['bpjs_dpjp_code'] : $legacyDoctor->kode_dpjp,
                     'status' => isset($professionalData['is_active']) ? ($professionalData['is_active'] ? 1 : 0) : $legacyDoctor->status,
                     'ttd' => $signaturePath,
                     'id_user' => $legacyUserId,
                     'updated_at' => now(),
-                ]);
+                ];
+
+                if (array_key_exists('ihs_number', $personData) && Schema::connection('legacy')->hasColumn('ref_dokter', 'ihs_id')) {
+                    $ihs = trim((string) ($personData['ihs_number'] ?? ''));
+                    $doctorAttributes['ihs_id'] = $ihs !== '' ? $ihs : null;
+                }
+
+                $legacyDoctor->update($doctorAttributes);
 
                 return new DoctorResource($legacyDoctor->load(['employee.person', 'person', 'specialization']));
             });
@@ -571,5 +572,104 @@ class DoctorController extends Controller
         }
 
         return $resourceCollection;
+    }
+
+    /**
+     * Petakan payload `person` API ke kolom `master_person_index` yang tersedia di schema legacy.
+     * Field yang tidak dikirim pada payload edit tidak dimasukkan agar nilai tersimpan tetap aman.
+     */
+    private function buildLegacyPersonAttributes(array $personData, ?LegacyPerson $existing = null): array
+    {
+        $columnSet = array_flip(Schema::connection('legacy')->getColumnListing('master_person_index'));
+        $attributes = [];
+
+        if ($existing === null) {
+            $attributes['nama'] = trim((string) ($personData['name'] ?? ''));
+            $attributes['gender'] = $personData['gender'] ?? 'L';
+            if (isset($columnSet['no_hp'])) {
+                $attributes['no_hp'] = trim((string) ($personData['phone'] ?? ''));
+            }
+        }
+
+        $nullableTrimMap = [
+            'national_id' => 'no_ktp',
+            'name' => 'nama',
+            'birth_place' => 'tempat_lahir',
+            'address' => 'alamat',
+            'postal_code' => 'kode_pos',
+            'province_id' => 'id_provinsi',
+            'regency_id' => 'id_kabupaten',
+            'district_id' => 'id_kecamatan',
+            'village_id' => 'id_kelurahan',
+            'allergies' => 'alergi_lainnya',
+            'ihs_number' => 'ihs_id',
+        ];
+
+        foreach ($nullableTrimMap as $inputKey => $column) {
+            if (! isset($columnSet[$column]) || ! array_key_exists($inputKey, $personData)) {
+                continue;
+            }
+            $value = trim((string) ($personData[$inputKey] ?? ''));
+            $attributes[$column] = $value !== '' ? $value : null;
+        }
+
+        $directMap = [
+            'gender' => 'gender',
+            'birth_date' => 'tgl_lahir',
+            'marital_status' => 'status_perkawinan',
+            'nationality' => 'kebangsaan',
+            'education_id' => 'id_pendidikan',
+            'occupation_id' => 'id_pekerjaan',
+        ];
+
+        foreach ($directMap as $inputKey => $column) {
+            if (! isset($columnSet[$column]) || ! array_key_exists($inputKey, $personData)) {
+                continue;
+            }
+            $attributes[$column] = $personData[$inputKey] !== '' ? $personData[$inputKey] : null;
+        }
+
+        if (isset($columnSet['no_hp']) && array_key_exists('phone', $personData)) {
+            $attributes['no_hp'] = trim((string) ($personData['phone'] ?? ''));
+        }
+
+        if (isset($columnSet['agama']) && array_key_exists('religion', $personData)) {
+            $attributes['agama'] = $this->normalizeLegacyReligion($personData['religion']);
+        }
+
+        if (isset($columnSet['gol_darah']) && array_key_exists('blood_type', $personData)) {
+            $attributes['gol_darah'] = $this->normalizeLegacyBloodType($personData['blood_type']);
+        }
+
+        return $attributes;
+    }
+
+    private function normalizeLegacyBloodType(?string $bloodType): ?string
+    {
+        if ($bloodType === null || trim($bloodType) === '') {
+            return null;
+        }
+
+        $upper = strtoupper(trim($bloodType));
+        if ($upper === 'UNKNOWN' || $upper === '-') {
+            return '-';
+        }
+
+        return in_array($upper, ['A', 'B', 'AB', 'O'], true) ? $upper : '-';
+    }
+
+    private function normalizeLegacyReligion(?string $religion): ?string
+    {
+        if ($religion === null || trim($religion) === '') {
+            return null;
+        }
+
+        $trimmed = trim($religion);
+
+        return match (strtolower($trimmed)) {
+            'buddha', 'budha' => 'Budha',
+            'khonghucu', 'khong hucu' => 'Khong Hucu',
+            default => $trimmed,
+        };
     }
 }

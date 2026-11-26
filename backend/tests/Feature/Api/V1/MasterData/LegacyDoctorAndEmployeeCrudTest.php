@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
+use Tests\Support\EloquentGuardableColumnsReset;
 use Tests\TestCase;
 
 class LegacyDoctorAndEmployeeCrudTest extends TestCase
@@ -26,7 +27,9 @@ class LegacyDoctorAndEmployeeCrudTest extends TestCase
             'prefix' => '',
         ]);
 
+        DB::purge('legacy');
         LegacyAccess::clearCache();
+        EloquentGuardableColumnsReset::reset();
 
         DB::connection('legacy')->statement('
             CREATE TABLE master_person_index (
@@ -137,7 +140,9 @@ class LegacyDoctorAndEmployeeCrudTest extends TestCase
 
     protected function tearDown(): void
     {
+        DB::purge('legacy');
         LegacyAccess::clearCache();
+        EloquentGuardableColumnsReset::reset();
         parent::tearDown();
     }
 

@@ -1,109 +1,85 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ServiceTypeFormModal from '../ServiceTypeFormModal.vue'
-import { useServiceTypes } from '@/composables/useServiceTypes'
-
-vi.mock('@/composables/useServiceTypes', () => ({
-  useServiceTypes: vi.fn()
-}))
+import { SERVICE_TYPE_NAME_MAX_LENGTH } from '../service-type.helpers'
 
 describe('ServiceTypeFormModal', () => {
-  const mockCreate = vi.fn()
-  const mockUpdate = vi.fn()
-  const mockLoading = { value: false }
+  const mountModal = (propsData = {}) =>
+    mount(ServiceTypeFormModal, {
+      props: {
+        open: true,
+        serviceType: null,
+        ...propsData,
+      },
+      global: {
+        stubs: {
+          Teleport: true,
+        },
+      },
+    })
 
   beforeEach(() => {
     vi.clearAllMocks()
-    useServiceTypes.mockReturnValue({
-      createServiceType: mockCreate,
-      updateServiceType: mockUpdate,
-      loading: mockLoading
-    })
   })
 
-  it('renders correctly for add new', async () => {
-    const wrapper = mount(ServiceTypeFormModal, {
-      props: {
-        isOpen: true,
-        serviceType: null
-      },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
-    })
+  it('renders Tambah title and maxlength hint when creating', () => {
+    const wrapper = mountModal()
 
-    expect(wrapper.find('.modal-title').text()).toBe('Tambah Jenis Layanan')
+    expect(wrapper.find('h2').text()).toBe('Tambah Jenis Layanan')
+    expect(wrapper.get('input#name').attributes('maxlength')).toBe(
+      String(SERVICE_TYPE_NAME_MAX_LENGTH),
+    )
+    expect(wrapper.text()).toContain(`Maksimal ${SERVICE_TYPE_NAME_MAX_LENGTH} karakter.`)
   })
 
-  it('renders correctly for edit', async () => {
-    const wrapper = mount(ServiceTypeFormModal, {
-      props: {
-        isOpen: false,
-        serviceType: {
-          id: 1,
-          name: 'Penyakit Dalam'
-        }
-      },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
+  it('hydrates existing serviceType value when opening in Edit mode', async () => {
+    const wrapper = mountModal({
+      open: false,
+      serviceType: { id: 1, name: 'Penyakit Dalam' },
     })
 
-    await wrapper.setProps({ isOpen: true })
+    await wrapper.setProps({ open: true })
 
-    expect(wrapper.find('.modal-title').text()).toBe('Edit Jenis Layanan')
-    expect(wrapper.find('input#name').element.value).toBe('Penyakit Dalam')
+    expect(wrapper.find('h2').text()).toBe('Edit Jenis Layanan')
+    expect(wrapper.get('input#name').element.value).toBe('Penyakit Dalam')
   })
 
-  it('validates empty name', async () => {
-    const wrapper = mount(ServiceTypeFormModal, {
-      props: {
-        isOpen: true,
-        serviceType: null
-      },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
-    })
+  it('blocks submit with client validation message when name is empty or > 45 chars', async () => {
+    const wrapper = mountModal()
 
-    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.get('form').trigger('submit.prevent')
+    expect(wrapper.text()).toContain('Nama jenis layanan wajib diisi.')
+    expect(wrapper.emitted('submit')).toBeFalsy()
 
-    expect(wrapper.text()).toContain('Nama jenis layanan wajib diisi')
-    expect(mockCreate).not.toHaveBeenCalled()
+    await wrapper.get('input#name').setValue('X'.repeat(SERVICE_TYPE_NAME_MAX_LENGTH + 1))
+    await wrapper.get('form').trigger('submit.prevent')
+    expect(wrapper.text()).toContain(`Nama jenis layanan maksimal ${SERVICE_TYPE_NAME_MAX_LENGTH} karakter.`)
+    expect(wrapper.emitted('submit')).toBeFalsy()
   })
 
-  it('submits form successfully', async () => {
-    mockCreate.mockResolvedValueOnce({ data: { id: 1 } })
-
-    const wrapper = mount(ServiceTypeFormModal, {
-      props: {
-        isOpen: true,
-        serviceType: null
-      },
-      global: {
-        stubs: {
-          Teleport: true
-        }
-      }
+  it('emits normalized payload on valid submit and supports server errors', async () => {
+    const wrapper = mountModal({
+      serverErrors: { name: 'Nama jenis layanan sudah digunakan.' },
+      generalError: 'Terjadi bentrok data.',
     })
 
-    await wrapper.find('input#name').setValue('Kesehatan Anak')
-    await wrapper.find('form').trigger('submit.prevent')
+    expect(wrapper.text()).toContain('Nama jenis layanan sudah digunakan.')
+    expect(wrapper.text()).toContain('Terjadi bentrok data.')
 
-    expect(mockCreate).toHaveBeenCalledWith({
-      name: 'Kesehatan Anak',
-      is_active: true
-    })
+    await wrapper.get('input#name').setValue('  Kesehatan   Anak  ')
+    await wrapper.get('form').trigger('submit.prevent')
 
-    // wait for promises
-    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(wrapper.emitted('submit')).toEqual([[{ name: 'Kesehatan Anak' }]])
+  })
 
-    expect(wrapper.emitted('success')).toBeTruthy()
+  it('blocks submit and close while saving is true', async () => {
+    const wrapper = mountModal({ saving: true })
+
+    await wrapper.get('input#name').setValue('Rawat Jalan')
+    await wrapper.get('form').trigger('submit.prevent')
+    await wrapper.get('button[aria-label="Tutup"]').trigger('click')
+
+    expect(wrapper.emitted('submit')).toBeFalsy()
+    expect(wrapper.emitted('close')).toBeFalsy()
   })
 })

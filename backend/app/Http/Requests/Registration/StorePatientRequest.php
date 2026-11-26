@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Registration;
 
+use App\Support\GuarantorValidation;
 use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
@@ -214,16 +215,7 @@ class StorePatientRequest extends FormRequest
             }
 
             // 4. Validasi Master Jenis Jaminan
-            if (!empty($guarantorId) && LegacyAccess::isAvailable('ref_jenis_asuransi')) {
-                $validGuar = DB::connection('legacy')->table('ref_jenis_asuransi')
-                    ->where('id', $guarantorId)
-                    ->where('status', '1')
-                    ->exists();
-
-                if (!$validGuar) {
-                    $v->errors()->add('guarantor_id', 'Pilihan jenis jaminan tidak valid atau sudah nonaktif.');
-                }
-            }
+            GuarantorValidation::validateGuarantorId($v, $guarantorId);
         });
     }
 }

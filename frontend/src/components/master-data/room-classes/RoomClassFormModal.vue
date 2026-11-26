@@ -1,395 +1,228 @@
 <script setup>
-import { reactive, watch } from 'vue'
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue'
+import { computed, reactive, ref, useId, watch } from 'vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import {
+  createRoomClassForm,
+  formatPriceDigits,
+  ROOM_CLASS_APLICARE_CODE_MAX_LENGTH,
+  ROOM_CLASS_CODE_MAX_LENGTH,
+  ROOM_CLASS_DESCRIPTION_MAX_LENGTH,
+  ROOM_CLASS_NAME_MAX_LENGTH,
+  ROOM_CLASS_SIRS_CODE_MAX_LENGTH,
+  toRoomClassPayload,
+  validateRoomClassForm,
+} from './room-class.helpers'
 
 const props = defineProps({
-  isOpen: {
+  open: {
     type: Boolean,
-    default: false,
+    required: true,
   },
+  /** null = mode tambah, object = mode edit. */
   roomClass: {
     type: Object,
     default: null,
   },
-  isSubmitting: {
+  saving: {
     type: Boolean,
     default: false,
   },
-  errors: {
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
     type: Object,
     default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal. */
+  generalError: {
+    type: String,
+    default: '',
   },
 })
 
 const emit = defineEmits(['close', 'submit'])
 
-const form = reactive({
-  name: '',
-  code: '',
-  price: '',
-  description: '',
-  aplicare_code: '',
-  sirs_code: '',
-})
+const formId = useId()
+const form = reactive(createRoomClassForm())
+const clientErrors = ref({})
 
-const clientErrors = reactive({})
+const isEdit = computed(() => Boolean(props.roomClass))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
+
+function clearFieldError(field) {
+  if (!clientErrors.value[field]) return
+  const next = { ...clientErrors.value }
+  delete next[field]
+  clientErrors.value = next
+}
 
 watch(
-  () => props.isOpen,
-  (newVal) => {
-    if (newVal) {
-      if (props.roomClass) {
-        form.name = props.roomClass.name || ''
-        form.code = props.roomClass.code || ''
-        form.price = props.roomClass.price !== null && props.roomClass.price !== undefined
-          ? String(props.roomClass.price)
-          : ''
-        form.description = props.roomClass.description || ''
-        form.aplicare_code = props.roomClass.aplicare_code || ''
-        form.sirs_code = props.roomClass.sirs_code || ''
-      } else {
-        form.name = ''
-        form.code = ''
-        form.price = ''
-        form.description = ''
-        form.aplicare_code = ''
-        form.sirs_code = ''
-      }
-      Object.keys(clientErrors).forEach((key) => delete clientErrors[key])
-    } else {
-      form.name = ''
-      form.code = ''
-      form.price = ''
-      form.description = ''
-      form.aplicare_code = ''
-      form.sirs_code = ''
-      Object.keys(clientErrors).forEach((key) => delete clientErrors[key])
-    }
+  [() => props.open, () => props.roomClass],
+  ([isOpen]) => {
+    if (!isOpen) return
+    Object.assign(form, createRoomClassForm(props.roomClass))
+    clientErrors.value = {}
   },
   { immediate: true },
 )
 
-const formatPriceInput = (event) => {
-  let val = event.target.value
-  // Allow only digits and periods/commas
-  val = val.replace(/[^\d]/g, '')
-  if (val === '') {
-    form.price = ''
-    return
-  }
-  const num = Number(val)
-  form.price = num.toLocaleString('id-ID')
+for (const field of ['name', 'code', 'price', 'description', 'aplicare_code', 'sirs_code']) {
+  watch(
+    () => form[field],
+    () => clearFieldError(field),
+  )
 }
 
-const parsePrice = (priceVal) => {
-  if (typeof priceVal === 'number') return priceVal
-  if (!priceVal) return 0
-  const clean = String(priceVal).replace(/[^\d]/g, '')
-  return clean ? Number(clean) : 0
+function handlePriceInput(event) {
+  const formatted = formatPriceDigits(event.target.value)
+  form.price = formatted
+  event.target.value = formatted
 }
 
-const validateForm = () => {
-  Object.keys(clientErrors).forEach((key) => delete clientErrors[key])
-  let isValid = true
-
-  if (!form.name || !form.name.trim()) {
-    clientErrors.name = 'Nama kelas wajib diisi.'
-    isValid = false
-  } else if (form.name.length > 255) {
-    clientErrors.name = 'Nama kelas maksimal 255 karakter.'
-    isValid = false
-  }
-
-  if (!form.code || !form.code.trim()) {
-    clientErrors.code = 'Kode kelas wajib diisi.'
-    isValid = false
-  } else if (form.code.length > 50) {
-    clientErrors.code = 'Kode kelas maksimal 50 karakter.'
-    isValid = false
-  }
-
-  if (form.price === '' || form.price === null || form.price === undefined) {
-    clientErrors.price = 'Harga kelas wajib diisi.'
-    isValid = false
-  } else {
-    const numPrice = parsePrice(form.price)
-    if (isNaN(numPrice)) {
-      clientErrors.price = 'Harga kelas harus berupa angka.'
-      isValid = false
-    } else if (numPrice < 0) {
-      clientErrors.price = 'Harga kelas tidak boleh bernilai negatif.'
-      isValid = false
-    }
-  }
-
-  return isValid
-}
-
-const handleSubmit = () => {
-  if (!validateForm()) return
-
-  emit('submit', {
-    name: form.name.trim(),
-    code: form.code.trim(),
-    price: parsePrice(form.price),
-    description: form.description ? form.description.trim() : null,
-    aplicare_code: form.aplicare_code ? form.aplicare_code.trim() : null,
-    sirs_code: form.sirs_code ? form.sirs_code.trim() : null,
-  })
-}
-
-const handleClose = () => {
-  emit('close')
-}
-
-const getErrorMessage = (field) => {
-  if (clientErrors[field]) return clientErrors[field]
-  if (props.errors[field]) {
-    return Array.isArray(props.errors[field]) ? props.errors[field][0] : props.errors[field]
-  }
-  return null
+function handleSubmit() {
+  if (props.saving) return
+  clientErrors.value = validateRoomClassForm(form)
+  if (Object.keys(clientErrors.value).length > 0) return
+  emit('submit', toRoomClassPayload(form))
 }
 </script>
 
 <template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="roomClass ? 'Edit Kelas' : 'Tambah Kelas'"
-    :submit-text="roomClass ? 'Simpan Perubahan' : 'Simpan'"
-    :is-submitting="isSubmitting"
-    @close="handleClose"
-    @submit="handleSubmit"
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Kelas' : 'Tambah Kelas'"
+    :persistent="saving"
+    @close="emit('close')"
   >
-    <div class="form-container">
-      <!-- 1. Nama Kelas -->
-      <div class="form-group">
-        <label for="room-class-name-input" class="form-label">
-          Nama Kelas <span class="required-mark">*</span>
-        </label>
-        <input autocomplete="off"
-          id="room-class-name-input"
+    <form :id="formId" class="flex flex-col gap-5" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
+
+      <BaseField
+        v-slot="field"
+        label="Nama Kelas"
+        required
+        :error="errors.name"
+        :hint="`Maksimal ${ROOM_CLASS_NAME_MAX_LENGTH} karakter.`"
+      >
+        <BaseInput
+          v-bind="field"
           v-model="form.name"
-          type="text"
-          class="form-input"
-          :class="{ 'has-error': Boolean(getErrorMessage('name')) }"
-          placeholder="Masukkan nama kelas"
-          maxlength="255"
-          :disabled="isSubmitting"
+          placeholder="Contoh: Kelas 1, VIP, ICU"
+          :maxlength="ROOM_CLASS_NAME_MAX_LENGTH"
+          :disabled="saving"
         />
-        <span v-if="getErrorMessage('name')" class="error-message">
-          {{ getErrorMessage('name') }}
-        </span>
-      </div>
+      </BaseField>
 
-      <!-- 2. Kode Kelas -->
-      <div class="form-group">
-        <label for="room-class-code-input" class="form-label">
-          Kode Kelas <span class="required-mark">*</span>
-        </label>
-        <input autocomplete="off"
-          id="room-class-code-input"
-          v-model="form.code"
-          type="text"
-          class="form-input"
-          :class="{ 'has-error': Boolean(getErrorMessage('code')) }"
-          placeholder="Masukkan kode kelas"
-          maxlength="50"
-          :disabled="isSubmitting"
-        />
-        <span v-if="getErrorMessage('code')" class="error-message">
-          {{ getErrorMessage('code') }}
-        </span>
-      </div>
-
-      <!-- 3. Harga Kelas -->
-      <div class="form-group">
-        <label for="room-class-price-input" class="form-label">
-          Harga Kelas <span class="required-mark">*</span>
-        </label>
-        <div class="input-currency-wrapper" :class="{ 'has-error': Boolean(getErrorMessage('price')) }">
-          <span class="currency-prefix">Rp</span>
-          <input autocomplete="off"
-            id="room-class-price-input"
-            v-model="form.price"
-            type="text"
-            class="currency-input"
-            placeholder="Masukkan harga kelas"
-            :disabled="isSubmitting"
-            @input="formatPriceInput"
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <BaseField
+          v-slot="field"
+          label="Kode Kelas"
+          required
+          :error="errors.code"
+          :hint="`Maksimal ${ROOM_CLASS_CODE_MAX_LENGTH} karakter.`"
+        >
+          <BaseInput
+            v-bind="field"
+            v-model="form.code"
+            placeholder="Contoh: KLS-1, VIP"
+            :maxlength="ROOM_CLASS_CODE_MAX_LENGTH"
+            :disabled="saving"
           />
-        </div>
-        <span v-if="getErrorMessage('price')" class="error-message">
-          {{ getErrorMessage('price') }}
-        </span>
+        </BaseField>
+
+        <BaseField
+          v-slot="field"
+          label="Harga Kelas"
+          required
+          :error="errors.price"
+          hint="Tarif kelas per hari dalam Rupiah."
+        >
+          <div
+            class="flex items-stretch overflow-hidden rounded-lg border bg-surface transition-colors focus-within:ring-3"
+            :class="[
+              field.invalid
+                ? 'border-danger focus-within:ring-danger/15'
+                : 'border-line-strong focus-within:border-primary focus-within:ring-primary/15',
+              saving ? 'cursor-not-allowed bg-canvas opacity-70' : '',
+            ]"
+          >
+            <span
+              class="flex items-center border-r border-line bg-canvas px-3 text-sm font-medium text-fg-muted select-none"
+              aria-hidden="true"
+            >
+              Rp
+            </span>
+            <input
+              :id="field.id"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              :value="form.price"
+              placeholder="0"
+              :disabled="saving"
+              class="min-w-0 flex-1 bg-transparent px-3.5 py-2.5 font-sans text-sm text-fg placeholder:text-fg-muted focus:outline-none disabled:cursor-not-allowed"
+              @input="handlePriceInput"
+            />
+          </div>
+        </BaseField>
       </div>
 
-      <!-- 4. Deskripsi -->
-      <div class="form-group">
-        <label for="room-class-description-input" class="form-label">Deskripsi</label>
-        <textarea
-          id="room-class-description-input"
+      <BaseField v-slot="field" label="Deskripsi" :error="errors.description">
+        <BaseTextarea
+          v-bind="field"
           v-model="form.description"
-          class="form-textarea"
-          :class="{ 'has-error': Boolean(getErrorMessage('description')) }"
-          placeholder="Masukkan deskripsi kelas"
-          rows="3"
-          :disabled="isSubmitting"
-        ></textarea>
-        <span v-if="getErrorMessage('description')" class="error-message">
-          {{ getErrorMessage('description') }}
-        </span>
-      </div>
-
-      <!-- 5. Kode Aplicare -->
-      <div class="form-group">
-        <label for="room-class-aplicare-input" class="form-label">Kode Aplicare</label>
-        <input autocomplete="off"
-          id="room-class-aplicare-input"
-          v-model="form.aplicare_code"
-          type="text"
-          class="form-input"
-          :class="{ 'has-error': Boolean(getErrorMessage('aplicare_code')) }"
-          placeholder="Masukkan kode Aplicare"
-          maxlength="50"
-          :disabled="isSubmitting"
+          placeholder="Opsional, deskripsi kelas atau fasilitas ruangan"
+          :maxlength="ROOM_CLASS_DESCRIPTION_MAX_LENGTH"
+          :disabled="saving"
         />
-        <span class="helper-text">
-          Kode sementara disimpan secara lokal dan belum terintegrasi dengan layanan Aplicare/BPJS.
-        </span>
-        <span v-if="getErrorMessage('aplicare_code')" class="error-message">
-          {{ getErrorMessage('aplicare_code') }}
-        </span>
-      </div>
+      </BaseField>
 
-      <!-- 6. Kode SIRS -->
-      <div class="form-group">
-        <label for="room-class-sirs-input" class="form-label">Kode SIRS</label>
-        <input autocomplete="off"
-          id="room-class-sirs-input"
-          v-model="form.sirs_code"
-          type="text"
-          class="form-input"
-          :class="{ 'has-error': Boolean(getErrorMessage('sirs_code')) }"
-          placeholder="Masukkan kode SIRS"
-          maxlength="50"
-          :disabled="isSubmitting"
-        />
-        <span class="helper-text">
-          Kode sementara disimpan secara lokal dan belum terintegrasi dengan layanan SIRS.
-        </span>
-        <span v-if="getErrorMessage('sirs_code')" class="error-message">
-          {{ getErrorMessage('sirs_code') }}
-        </span>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <BaseField
+          v-slot="field"
+          label="Kode Aplicare"
+          :error="errors.aplicare_code"
+          hint="Kosongkan jika tidak perlu bridging ke sistem BPJS Kesehatan."
+        >
+          <BaseInput
+            v-bind="field"
+            v-model="form.aplicare_code"
+            placeholder="Contoh: KL1"
+            :maxlength="ROOM_CLASS_APLICARE_CODE_MAX_LENGTH"
+            :disabled="saving"
+          />
+        </BaseField>
+
+        <BaseField
+          v-slot="field"
+          label="Kode SIRS"
+          :error="errors.sirs_code"
+          hint="Kosongkan jika tidak perlu pelaporan ke sistem SIRS."
+        >
+          <BaseInput
+            v-bind="field"
+            v-model="form.sirs_code"
+            placeholder="Contoh: VIP"
+            :maxlength="ROOM_CLASS_SIRS_CODE_MAX_LENGTH"
+            :disabled="saving"
+          />
+        </BaseField>
       </div>
-    </div>
-  </MasterDataFormModal>
+    </form>
+
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="emit('close')">Batal</BaseButton>
+      <BaseButton type="submit" :form="formId" :loading="saving">
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
-
-<style scoped>
-.form-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.form-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-primary, #1e293b);
-}
-
-.required-mark {
-  color: #ef4444;
-}
-
-.form-input,
-.form-textarea {
-  width: 100%;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.875rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  background-color: #ffffff;
-  color: var(--color-text-primary, #1e293b);
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-
-.form-input:focus,
-.form-textarea:focus {
-  outline: none;
-  border-color: var(--color-primary, #0ea5e9);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
-}
-
-.form-input.has-error,
-.form-textarea.has-error {
-  border-color: #ef4444;
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.input-currency-wrapper {
-  display: flex;
-  align-items: center;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  background-color: #ffffff;
-  transition: all 0.2s ease;
-  overflow: hidden;
-}
-
-.input-currency-wrapper:focus-within {
-  border-color: var(--color-primary, #0ea5e9);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
-}
-
-.input-currency-wrapper.has-error {
-  border-color: #ef4444;
-}
-
-.currency-prefix {
-  padding: 0.625rem 0.875rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background-color: var(--color-page-bg, #f8fafc);
-  color: var(--color-text-secondary, #64748b);
-  border-right: 1px solid var(--color-border-soft, #cbd5e1);
-  user-select: none;
-}
-
-.currency-input {
-  flex: 1;
-  border: none;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.875rem;
-  color: var(--color-text-primary, #1e293b);
-  background: transparent;
-  outline: none;
-}
-
-.currency-input:disabled {
-  background-color: var(--color-page-bg, #f8fafc);
-  cursor: not-allowed;
-}
-
-.helper-text {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #64748b);
-  line-height: 1.3;
-}
-
-.error-message {
-  font-size: 0.75rem;
-  color: #ef4444;
-}
-</style>

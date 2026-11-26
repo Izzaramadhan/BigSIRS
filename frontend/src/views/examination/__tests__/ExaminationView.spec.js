@@ -24,33 +24,114 @@ vi.mock('vue-router', async (importOriginal) => {
   };
 });
 
-vi.mock('@/services/examination.service', () => ({
-  default: {
-    getExaminations: vi.fn(async () => {
-      const all = generateMockExaminations();
-      return {
+vi.mock('@/services/examination.service', async () => {
+  const { generateMockExaminations } = await import('@/mocks/examinations');
+  const mockData = generateMockExaminations();
+  const mockExaminationService = {
+    getExaminations: vi.fn().mockImplementation((params) => {
+      let filtered = [...mockData];
+      if (params?.q) {
+        const q = params.q.toLowerCase();
+        filtered = filtered.filter((x) =>
+          (x.patient_name || '').toLowerCase().includes(q) ||
+          (x.no_rm || '').toLowerCase().includes(q)
+        );
+      }
+      return Promise.resolve({
         data: {
-          data: all,
+          data: filtered,
           meta: {
-            total: all.length,
+            total: filtered.length,
             current_page: 1,
             last_page: 1,
-            from: 1,
-            to: all.length
+            per_page: 10,
+            from: filtered.length > 0 ? 1 : 0,
+            to: filtered.length
           }
         }
-      };
+      });
     }),
-    getExamination: vi.fn(async (id) => ({
+    getExamination: vi.fn().mockImplementation((id) => {
+      const match = mockData.find((x) => String(x.id) === String(id)) || mockData[0];
+      return Promise.resolve({
+        data: {
+          data: {
+            ...match,
+            medical_record_number: match.medical_record_number || match.no_rm || 'RM-001234',
+            patient_name: match.patient_name || 'H. Soedirman Wibowo',
+            birth_place: match.birth_place || 'Yogyakarta',
+            birth_date: match.birth_date || '1965-08-17',
+            gender: match.gender || 'L',
+            address: match.address || 'Jl. Malioboro No. 45, Danurejan, Yogyakarta',
+            guarantor: match.guarantor || 'UMUM',
+            guarantor_type: match.guarantor_type || 'UMUM',
+            visit_history: match.visit_history || []
+          }
+        }
+      });
+    }),
+    saveClinicalNotes: vi.fn().mockResolvedValue({ data: { success: true } }),
+    saveClinical: vi.fn().mockResolvedValue({ data: { success: true } }),
+    getAllergies: vi.fn().mockResolvedValue({
       data: {
-        data: generateMockExaminations().find((e) => e.id === id) || generateMockExaminations()[0]
+        status: 'success',
+        data: {
+          visit_id: 'EXM-0001',
+          allergy_note: 'Debu',
+          notes: 'Debu',
+          has_allergy: true,
+          status: 'ada'
+        }
       }
-    }))
+    }),
+    saveAllergies: vi.fn().mockImplementation((id, payload) => {
+      const note = payload?.allergy_note ?? payload?.notes ?? '';
+      return Promise.resolve({
+        data: {
+          status: 'success',
+          message: 'Data alergi berhasil disimpan.',
+          data: {
+            visit_id: id,
+            allergy_note: note,
+            notes: note,
+            has_allergy: note !== '',
+            status: note !== '' ? 'ada' : 'tidak'
+          }
+        }
+      });
+    }),
+    saveVitals: vi.fn().mockResolvedValue({ data: { success: true } }),
+    addDiagnosis: vi.fn().mockResolvedValue({ data: { success: true, data: { id: 1 } } }),
+    deleteDiagnosis: vi.fn().mockResolvedValue({ data: { success: true } }),
+    addProcedure: vi.fn().mockResolvedValue({ data: { success: true, data: { id: 1 } } }),
+    deleteProcedure: vi.fn().mockResolvedValue({ data: { success: true } }),
+    savePrescription: vi.fn().mockResolvedValue({ data: { success: true } }),
+    saveLabOrder: vi.fn().mockResolvedValue({ data: { success: true } }),
+    saveRadiologyOrder: vi.fn().mockResolvedValue({ data: { success: true } }),
+    updateStatus: vi.fn().mockResolvedValue({ data: { success: true } })
+  };
+
+  return {
+    examinationService: mockExaminationService,
+    default: mockExaminationService
+  };
+});
+
+vi.mock('@/services/polyclinic', () => ({
+  polyclinicService: {
+    getPolyclinics: vi.fn().mockResolvedValue({
+      data: {
+        data: [
+          { id: 1, name: 'Poli Penyakit Dalam' },
+          { id: 2, name: 'Poli Umum' }
+        ]
+      }
+    })
   }
 }));
 
 describe('ExaminationView (Halaman Awal Pemeriksaan Terbaru)', () => {
-  it('renders PEMERIKSAAN PASIEN header, filter section, and 7 standardized columns', () => {
+  it('renders PEMERIKSAAN PASIEN header, filter section, and 7 standardized columns', async () => {
     const wrapper = mount(ExaminationView, {
       global: {
         stubs: {
@@ -58,6 +139,7 @@ describe('ExaminationView (Halaman Awal Pemeriksaan Terbaru)', () => {
         }
       }
     });
+    await flushPromises();
 
     expect(wrapper.text()).toContain('Pemeriksaan Pasien');
     expect(wrapper.text()).toContain('Home');
@@ -154,6 +236,7 @@ describe('ExaminationPatientView (Halaman Pemeriksaan Pasien)', () => {
         }
       }
     });
+    await flushPromises();
 
     expect(wrapper.text()).toContain('Pemeriksaan Pasien');
     expect(wrapper.text()).toContain('Home');
@@ -194,6 +277,7 @@ describe('ExaminationPatientView (Halaman Pemeriksaan Pasien)', () => {
         }
       }
     });
+    await flushPromises();
 
     // 1. Switch to ALERGI tab and save allergy note
     const tabs = wrapper.findAll('.clinical-tabs-bar [role="tab"]');

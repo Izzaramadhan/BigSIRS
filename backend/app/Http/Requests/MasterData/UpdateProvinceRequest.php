@@ -16,15 +16,16 @@ class UpdateProvinceRequest extends FormRequest
     public function rules(): array
     {
         $id = $this->route('province')?->id ?? $this->route('province');
+        $isLegacy = LegacyAccess::isAvailable('ref_provinsi');
 
-        $uniqueRule = LegacyAccess::isAvailable('ref_provinsi')
+        $uniqueRule = $isLegacy
             ? Rule::unique('legacy.ref_provinsi', 'nama')->whereNull('deleted_at')->ignore($id)
-            : Rule::unique('provinces', 'name')->whereNull('deleted_at')->ignore($id);
+            : Rule::unique('provinces', 'name')->ignore($id);
 
         return [
             'name' => ['required', 'string', 'max:255', $uniqueRule],
-            'code' => ['nullable', 'string', 'max:50'],
-            'is_active' => ['nullable', 'boolean'],
+            'code' => $isLegacy ? ['nullable', 'string', 'max:50'] : ['prohibited'],
+            'is_active' => $isLegacy ? ['nullable', 'boolean'] : ['prohibited'],
         ];
     }
 

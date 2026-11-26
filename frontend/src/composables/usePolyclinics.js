@@ -1,145 +1,186 @@
-import { ref, reactive } from 'vue';
-import { polyclinicService } from '../services/polyclinic';
+import { reactive, ref } from 'vue'
+import { getSafePolyclinicErrorMessage } from '@/components/master-data/polyclinics/polyclinic.helpers'
+import { polyclinicService } from '@/services/polyclinic'
+import { normalizeApiError } from '@/utils/http-error'
 
+const isFilled = (value) => value !== '' && value !== null && value !== undefined
+
+/**
+ * Composable modul Poliklinik: mengelola daftar berpaginasi, filter status aktif,
+ * jenis layanan, guard race condition, serta mutasi CRUD tanpa menimpa error tabel.
+ * Tetap mempertahankan `items` & `fetchPolyclinics(params)` untuk caller modul lain (mis. ProcedureFormModal).
+ */
 export function usePolyclinics() {
-  const items = ref([]);
-  const pagination = reactive({
-    current_page: 1,
-    last_page: 1,
-    per_page: 15,
-    total: 0
-  });
+  const items = ref([])
+  const meta = reactive({
+    page: 1,
+    perPage: 15,
+    total: 0,
+    lastPage: 1,
+    from: 0,
+    to: 0,
+  })
   const filters = reactive({
     search: '',
-    is_active: null
-  });
+    is_active: null,
+  })
   const sort = reactive({
     column: 'name',
-    direction: 'asc'
-  });
+    direction: 'asc',
+  })
 
-  const loading = ref(false);
-  const submitting = ref(false);
-  const error = ref(null);
+  const loading = ref(false)
+  const loadError = ref('')
+  const saving = ref(false)
+  const serviceTypes = ref([])
 
-  const serviceTypes = ref([]);
+  let latestListRequest = 0
+  let latestServiceTypesRequest = 0
 
-  const fetchServiceTypes = async () => {
+  async function fetchServiceTypes() {
+    const requestId = ++latestServiceTypesRequest
     try {
-      const response = await polyclinicService.getServiceTypes();
-      serviceTypes.value = response.data.data;
+      const response = await polyclinicService.getServiceTypes()
+      if (requestId !== latestServiceTypesRequest) return
+      const payload = response?.data?.data ?? response?.data ?? response ?? []
+      serviceTypes.value = Array.isArray(payload) ? payload : []
     } catch {
-      serviceTypes.value = [];
+      if (requestId === latestServiceTypesRequest) serviceTypes.value = []
     }
-  };
+  }
 
-  const fetchPolyclinics = async () => {
-    loading.value = true;
-    error.value = null;
+  async function fetchPolyclinics(overrideParams = {}) {
+    const requestId = ++latestListRequest
+    loading.value = true
+    loadError.value = ''
+
+    const baseParams = {
+      page: meta.page,
+      per_page: meta.perPage,
+      sort: sort.column,
+      direction: sort.direction,
+    }
+    if (isFilled(filters.search)) baseParams.search = filters.search
+    if (filters.is_active !== null && filters.is_active !== undefined && filters.is_active !== '') {
+      baseParams.is_active = filters.is_active
+    }
+
+    const params = {
+      ...baseParams,
+      ...(overrideParams && typeof overrideParams === 'object' ? overrideParams : {}),
+    }
 
     try {
-      const params = {
-        page: pagination.current_page,
-        per_page: pagination.per_page,
-        sort: sort.column,
-        direction: sort.direction
-      };
+      const response = await polyclinicService.getPolyclinics(params)
+      if (requestId !== latestListRequest) return
 
-      if (filters.search) params.search = filters.search;
-      if (filters.is_active !== null) params.is_active = filters.is_active;
+      const payload = response?.data ?? response
+      const rows = Array.isArray(payload?.data) ? payload.data : []
+      items.value = rows
 
-      const response = await polyclinicService.getPolyclinics(params);
+      const pageMeta = payload?.meta ?? {}
+      const currentPage = pageMeta.current_page ?? meta.page
+      const perPage = pageMeta.per_page ?? meta.perPage
+      const total = pageMeta.total ?? rows.length
 
-      items.value = response.data.data;
-
-      if (response.data.meta) {
-        pagination.current_page = response.data.meta.current_page;
-        pagination.last_page = response.data.meta.last_page;
-        pagination.per_page = response.data.meta.per_page;
-        pagination.total = response.data.meta.total;
-      }
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Data Poliklinik gagal dimuat.';
+      Object.assign(meta, {
+        page: currentPage,
+        perPage,
+        total,
+        lastPage: pageMeta.last_page ?? 1,
+        from: pageMeta.from ?? (rows.length > 0 ? (currentPage - 1) * perPage + 1 : 0),
+        to: pageMeta.to ?? (rows.length > 0 ? (currentPage - 1) * perPage + rows.length : 0),
+      })
+    } catch (error) {
+      if (requestId !== latestListRequest) return
+      const normalized = normalizeApiError(error, 'Data poliklinik gagal dimuat.')
+      loadError.value = getSafePolyclinicErrorMessage(normalized, 'Data poliklinik gagal dimuat.')
     } finally {
-      loading.value = false;
+      if (requestId === latestListRequest) loading.value = false
     }
-  };
+  }
 
-  const createPolyclinic = async (payload) => {
-    submitting.value = true;
-    try {
-      await polyclinicService.createPolyclinic(payload);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    } finally {
-      submitting.value = false;
-    }
-  };
+  function setPage(page) {
+    if (page < 1 || page > meta.lastPage || page === meta.page) return Promise.resolve()
+    meta.page = page
+    return fetchPolyclinics()
+  }
 
-  const updatePolyclinic = async (id, payload) => {
-    submitting.value = true;
-    try {
-      await polyclinicService.updatePolyclinic(id, payload);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    } finally {
-      submitting.value = false;
-    }
-  };
+  function setFilters(patch) {
+    Object.assign(filters, patch)
+    meta.page = 1
+    return fetchPolyclinics()
+  }
 
-  const toggleStatus = async (id, isActive) => {
-    try {
-      await polyclinicService.updatePolyclinicStatus(id, isActive);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    }
-  };
+  function resetFilters() {
+    return setFilters({ search: '', is_active: null })
+  }
 
-  const archivePolyclinic = async (id) => {
-    try {
-      await polyclinicService.archivePolyclinic(id);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    }
-  };
-
-  const setPage = (page) => {
-    if (page >= 1 && page <= pagination.last_page) {
-      pagination.current_page = page;
-      fetchPolyclinics();
-    }
-  };
-
-  const setSort = (column) => {
+  function setSort(column) {
     if (sort.column === column) {
-      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc';
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
     } else {
-      sort.column = column;
-      sort.direction = 'asc';
+      sort.column = column
+      sort.direction = 'asc'
     }
-    fetchPolyclinics();
-  };
+    meta.page = 1
+    return fetchPolyclinics()
+  }
+
+  async function mutate(requestFn, fallbackMessage, afterSuccess) {
+    saving.value = true
+    try {
+      const data = await requestFn()
+      if (afterSuccess) afterSuccess()
+      await fetchPolyclinics()
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: normalizeApiError(error, fallbackMessage) }
+    } finally {
+      saving.value = false
+    }
+  }
+
+  const create = (payload) =>
+    mutate(
+      () => polyclinicService.createPolyclinic(payload),
+      'Data poliklinik gagal ditambahkan.',
+    )
+
+  const update = (id, payload) =>
+    mutate(
+      () => polyclinicService.updatePolyclinic(id, payload),
+      'Data poliklinik gagal diperbarui.',
+    )
+
+  const remove = (id) =>
+    mutate(
+      () => polyclinicService.archivePolyclinic(id),
+      'Data poliklinik gagal diarsipkan.',
+      () => {
+        if (items.value.length === 1 && meta.page > 1) {
+          meta.page -= 1
+        }
+      },
+    )
 
   return {
     items,
-    pagination,
+    meta,
     filters,
     sort,
     loading,
-    submitting,
-    error,
+    loadError,
+    saving,
     serviceTypes,
     fetchPolyclinics,
     fetchServiceTypes,
-    createPolyclinic,
-    updatePolyclinic,
-    toggleStatus,
-    archivePolyclinic,
+    create,
+    update,
+    remove,
     setPage,
-    setSort
-  };
+    setFilters,
+    resetFilters,
+    setSort,
+  }
 }

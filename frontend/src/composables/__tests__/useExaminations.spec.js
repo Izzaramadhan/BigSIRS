@@ -1,124 +1,237 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useExaminations } from '../useExaminations';
+import { examinationService } from '@/services/examination.service';
+
+vi.mock('@/services/examination.service', () => ({
+  examinationService: {
+    getExaminations: vi.fn(),
+    getExamination: vi.fn(),
+    updateStatus: vi.fn(),
+    saveVitals: vi.fn(),
+    saveClinical: vi.fn(),
+    addDiagnosis: vi.fn(),
+    deleteDiagnosis: vi.fn(),
+    addProcedure: vi.fn(),
+    deleteProcedure: vi.fn(),
+    savePrescription: vi.fn(),
+    saveLabOrder: vi.fn(),
+    saveRadiologyOrder: vi.fn(),
+  }
+}));
 
 describe('useExaminations composable', () => {
   let exam;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     exam = useExaminations();
   });
 
-  it('initializes with 252 mock examinations matching required statistics', () => {
-    expect(exam.examinations.value.length).toBe(252);
-    expect(exam.statistics.value.waiting).toBe(37);
-    expect(exam.statistics.value.inService).toBe(18);
-    expect(exam.statistics.value.completed).toBe(193);
-    expect(exam.statistics.value.cancelled).toBe(4);
-    expect(exam.paginationInfo.value.activeQueueCount).toBe(55);
+  it('initializes with empty examinations list and default states', () => {
+    expect(exam.examinations.value).toEqual([]);
+    expect(exam.loading.value).toBe(false);
+    expect(exam.error.value).toBeNull();
+    expect(exam.paginationInfo.value.total).toBe(0);
+    expect(exam.pagination.currentPage).toBe(1);
+    expect(exam.pagination.perPage).toBe(10);
   });
 
-  it('searches examinations by patient name', () => {
-    exam.searchQuery.value = 'Soedirman';
-    expect(exam.filteredExaminations.value.length).toBeGreaterThanOrEqual(1);
-    expect(exam.filteredExaminations.value[0].patient_name).toContain('Soedirman');
+  it('fetches examinations data from API successfully', async () => {
+    const mockList = [
+      {
+        id: 786,
+        visit_id: 786,
+        admission_id: 544,
+        patient_id: 789,
+        patient_name: 'SURYO BROTO',
+        medical_record_number: 'RM-000001',
+        queue_number: '001',
+        polyclinic: 'Poli Penyakit Dalam',
+        doctor: 'dr. Budi Santoso',
+        status: 'Menunggu'
+      }
+    ];
+
+    examinationService.getExaminations.mockResolvedValueOnce({
+      data: {
+        data: mockList,
+        meta: {
+          total: 1,
+          current_page: 1,
+          per_page: 10,
+          last_page: 1,
+          from: 1,
+          to: 1
+        }
+      }
+    });
+
+    await exam.fetchExaminations();
+
+    expect(examinationService.getExaminations).toHaveBeenCalled();
+    expect(exam.examinations.value.length).toBe(1);
+    expect(exam.examinations.value[0].patient_name).toBe('SURYO BROTO');
+    expect(exam.paginationInfo.value.total).toBe(1);
+    expect(exam.paginationInfo.value.from).toBe(1);
+    expect(exam.paginationInfo.value.to).toBe(1);
+    expect(exam.error.value).toBeNull();
   });
 
-  it('searches examinations by No. RM', () => {
-    exam.searchQuery.value = 'RM-000181';
-    expect(exam.filteredExaminations.value.length).toBe(1);
-    expect(exam.filteredExaminations.value[0].medical_record_number).toBe('RM-000181');
+  it('handles empty API response without falling back to mock data', async () => {
+    examinationService.getExaminations.mockResolvedValueOnce({
+      data: {
+        data: [],
+        meta: {
+          total: 0,
+          current_page: 1,
+          per_page: 10,
+          last_page: 1,
+          from: 0,
+          to: 0
+        }
+      }
+    });
+
+    await exam.fetchExaminations();
+
+    expect(exam.examinations.value).toEqual([]);
+    expect(exam.paginationInfo.value.total).toBe(0);
+    expect(exam.paginationInfo.value.from).toBe(0);
+    expect(exam.paginationInfo.value.to).toBe(0);
+    expect(exam.error.value).toBeNull();
   });
 
-  it('searches examinations by No. Antrean', () => {
-    exam.searchQuery.value = 'A-001';
-    expect(exam.filteredExaminations.value.length).toBeGreaterThanOrEqual(1);
-    expect(exam.filteredExaminations.value[0].queue_number).toBe('A-001');
+  it('handles API error without falling back to mock data', async () => {
+    examinationService.getExaminations.mockRejectedValueOnce({
+      response: {
+        data: {
+          message: 'Gagal mengambil data dari database legacy'
+        }
+      }
+    });
+
+    await exam.fetchExaminations();
+
+    expect(exam.examinations.value).toEqual([]);
+    expect(exam.error.value).toBe('Gagal mengambil data dari database legacy');
+    expect(exam.paginationInfo.value.total).toBe(0);
   });
 
-  it('searches examinations by NIK', () => {
-    exam.searchQuery.value = '3174021204520001';
-    expect(exam.filteredExaminations.value.length).toBe(1);
-    expect(exam.filteredExaminations.value[0].patient_name).toContain('Soedirman');
-  });
+  it('sends search query and filter parameters to API', async () => {
+    examinationService.getExaminations.mockResolvedValueOnce({
+      data: { data: [], meta: { total: 0 } }
+    });
 
-  it('filters by polyclinic', () => {
+    exam.searchQuery.value = 'AYU';
+    exam.filters.customStartDate = '2026-09-01';
+    exam.filters.customEndDate = '2026-09-30';
     exam.filters.polyclinic = 'Poli Penyakit Dalam';
-    expect(exam.filteredExaminations.value.every((i) => i.polyclinic === 'Poli Penyakit Dalam')).toBe(true);
-  });
-
-  it('filters by doctor', () => {
-    exam.filters.doctor = 'dr. Budi Santoso, Sp.PD';
-    expect(exam.filteredExaminations.value.every((i) => i.doctor === 'dr. Budi Santoso, Sp.PD')).toBe(true);
-  });
-
-  it('filters by examination status', () => {
     exam.filters.status = 'Menunggu';
-    expect(exam.filteredExaminations.value.length).toBe(37);
-    expect(exam.filteredExaminations.value.every((i) => i.status === 'Menunggu')).toBe(true);
+
+    await exam.applyFilters();
+
+    expect(examinationService.getExaminations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        q: 'AYU',
+        date_from: '2026-09-01',
+        date_to: '2026-09-30',
+        polyclinic: 'Poli Penyakit Dalam',
+        status: 'Menunggu',
+        page: 1,
+        per_page: 10
+      })
+    );
   });
 
-  it('filters by guarantor', () => {
-    exam.filters.guarantor = 'BPJS Kesehatan';
-    expect(exam.filteredExaminations.value.every((i) => i.guarantor_type.includes('BPJS'))).toBe(true);
+  it('updates pagination with metadata from backend', async () => {
+    examinationService.getExaminations.mockResolvedValueOnce({
+      data: {
+        data: [{ id: 780, patient_name: 'Patient Page 2' }],
+        meta: {
+          total: 25,
+          current_page: 2,
+          per_page: 10,
+          last_page: 3,
+          from: 11,
+          to: 20
+        }
+      }
+    });
+
+    exam.pagination.lastPage = 3;
+    exam.setPage(2);
+
+    expect(exam.pagination.currentPage).toBe(2);
+    expect(examinationService.getExaminations).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 2, per_page: 10 })
+    );
   });
 
-  it('resets filters and returns to initial state', () => {
+  it('resets filters and returns to initial state', async () => {
+    examinationService.getExaminations.mockResolvedValueOnce({
+      data: { data: [], meta: { total: 0 } }
+    });
+
     exam.searchQuery.value = 'Custom Name';
     exam.filters.status = 'Menunggu';
     exam.filters.polyclinic = 'Poli Penyakit Dalam';
     exam.pagination.currentPage = 3;
 
-    exam.resetFilters();
+    await exam.resetFilters();
 
     expect(exam.searchQuery.value).toBe('');
     expect(exam.filters.status).toBe('Semua Status');
     expect(exam.filters.polyclinic).toBe('Semua Poliklinik');
     expect(exam.pagination.currentPage).toBe(1);
+    expect(examinationService.getExaminations).toHaveBeenCalled();
   });
 
-  it('paginates records correctly', () => {
-    exam.setPerPage(10);
-    expect(exam.paginatedExaminations.value.length).toBe(10);
-    expect(exam.paginationInfo.value.from).toBe(1);
-    expect(exam.paginationInfo.value.to).toBe(10);
+  it('starts examination via API (Mulai Periksa)', async () => {
+    examinationService.updateStatus.mockResolvedValueOnce({
+      data: { success: true, message: 'Status pemeriksaan berhasil diperbarui.' }
+    });
 
-    exam.setPage(2);
-    expect(exam.paginationInfo.value.from).toBe(11);
-    expect(exam.paginationInfo.value.to).toBe(20);
+    exam.examinations.value = [
+      { id: 786, status: 'Menunggu', patient_name: 'SURYO' }
+    ];
 
-    exam.setPerPage(25);
-    expect(exam.paginatedExaminations.value.length).toBe(25);
-    expect(exam.pagination.currentPage).toBe(1);
-  });
+    const result = await exam.startExamination(786);
 
-  it('simulates starting examination (Mulai Periksa)', () => {
-    const waitingPatient = exam.examinations.value.find((p) => p.status === 'Menunggu');
-    expect(waitingPatient).toBeDefined();
-
-    const result = exam.startExamination(waitingPatient.id);
+    expect(examinationService.updateStatus).toHaveBeenCalledWith(786, 'Sedang Diperiksa');
     expect(result.success).toBe(true);
-    expect(waitingPatient.status).toBe('Sedang Diperiksa');
-    expect(exam.lastCalledPatient.value.id).toBe(waitingPatient.id);
+    expect(exam.examinations.value[0].status).toBe('Sedang Diperiksa');
+    expect(exam.lastCalledPatient.value.id).toBe(786);
   });
 
-  it('simulates entering clinic (Masuk Poli)', () => {
-    const target = exam.examinations.value[0];
-    const result = exam.enterClinic(target.id);
-    expect(result.success).toBe(true);
-    expect(target.status).toBe('Sedang Diperiksa');
+  it('completes examination via API (Selesai)', async () => {
+    examinationService.updateStatus.mockResolvedValueOnce({
+      data: { success: true }
+    });
+
+    exam.examinations.value = [
+      { id: 786, status: 'Sedang Diperiksa', patient_name: 'SURYO' }
+    ];
+
+    await exam.completeExamination(786);
+
+    expect(examinationService.updateStatus).toHaveBeenCalledWith(786, 'Selesai');
+    expect(exam.examinations.value[0].status).toBe('Selesai');
   });
 
-  it('simulates calling next queue (Panggil Antrean Berikut)', () => {
-    const result = exam.callNextQueue();
-    expect(result.success).toBe(true);
-    expect(result.patient.status).toBe('Dipanggil');
-    expect(exam.lastCalledPatient.value.id).toBe(result.patient.id);
-  });
+  it('calls next queue and replays queue audio correctly', () => {
+    exam.examinations.value = [
+      { id: 786, queue_number: '001', patient_name: 'SURYO BROTO', polyclinic: 'Poli Dalam', room: 'Ruang 1', status: 'Menunggu' }
+    ];
 
-  it('simulates replaying queue audio', () => {
-    const result = exam.replayQueueAudio();
-    expect(result.success).toBe(true);
-    expect(result.queueNumber).toBeDefined();
-    expect(result.patientName).toBeDefined();
+    const callRes = exam.callNextQueue();
+    expect(callRes.success).toBe(true);
+    expect(callRes.queueNumber).toBe('001');
+    expect(callRes.patientName).toBe('SURYO BROTO');
+    expect(exam.examinations.value[0].status).toBe('Dipanggil');
+
+    const replayRes = exam.replayQueueAudio();
+    expect(replayRes.success).toBe(true);
+    expect(replayRes.queueNumber).toBe('001');
+    expect(replayRes.patientName).toBe('SURYO BROTO');
   });
 });

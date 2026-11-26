@@ -149,9 +149,13 @@ const clearSearch = () => {
         <label class="filter-label" for="filter-guarantor">Jenis Penjamin</label>
         <select id="filter-guarantor" v-model="filters.guarantor" class="form-select">
           <option value="all">Semua Penjamin</option>
-          <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-          <option value="Pasien Umum / Mandiri">Pasien Umum / Mandiri</option>
-          <option value="Asuransi Swasta">Asuransi Swasta</option>
+          <option
+            v-for="g in guarantors"
+            :key="g.id ?? g.name ?? g"
+            :value="g.name ?? g.label ?? g"
+          >
+            {{ g.label ?? g.name ?? g }}
+          </option>
         </select>
       </div>
 

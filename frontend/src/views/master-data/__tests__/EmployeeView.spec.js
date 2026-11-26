@@ -1,182 +1,295 @@
-import { mount } from '@vue/test-utils';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import EmployeeView from '../EmployeeView.vue';
-import { ref } from 'vue';
-import { useEmployees } from '../../../composables/useEmployees';
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import EmployeeView from '../EmployeeView.vue'
+import { useToast } from '@/composables/core/useToast'
+import employeeService from '@/services/employee.service'
+import lookupService from '@/services/lookup.service'
+import axios from '@/utils/axios'
 
-vi.mock('../../../composables/useEmployees');
-
-vi.mock('../../../services/employee.service', () => ({
-  default: {
-    getPositions: vi.fn().mockResolvedValue({ data: [] })
+vi.mock('@/services/employee.service', async (importOriginal) => {
+  const actual = await importOriginal()
+  const actualService = actual.employeeService
+  return {
+    employeeService: actualService,
+    default: actualService,
   }
-}));
+})
 
-let mockMeta;
-let fetchEmployeesMock;
+vi.mock('@/services/lookup.service', () => ({
+  default: {
+    getEducations: vi.fn(),
+    getOccupations: vi.fn(),
+    getProvinces: vi.fn(),
+    getRegencies: vi.fn(),
+    getDistricts: vi.fn(),
+    getVillages: vi.fn(),
+  },
+}))
 
-describe('EmployeeView.vue Pagination', () => {
+vi.mock('@/utils/axios', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+const mockRows = [
+  {
+    id: 1,
+    code: '19900101',
+    name: 'dr. Budi Santoso',
+    position: { id: 10, name: 'Dokter Umum' },
+  },
+  {
+    id: 2,
+    code: '19920202',
+    name: 'Ns. Siti Aminah',
+    position: null,
+  },
+]
+
+function rawPaginatorResponse(data = mockRows, overrides = {}) {
+  return {
+    data: {
+      current_page: 1,
+      last_page: 1,
+      per_page: 15,
+      total: data.length,
+      from: data.length > 0 ? 1 : 0,
+      to: data.length,
+      data,
+      ...overrides,
+    },
+  }
+}
+
+const toast = useToast()
+const toastMessages = () => toast.toasts.value.map((item) => item.message)
+
+async function mountView() {
+  const wrapper = mount(EmployeeView, {
+    global: {
+      stubs: {
+        Teleport: true,
+      },
+    },
+  })
+  await flushPromises()
+  return wrapper
+}
+
+function findButtonByText(wrapper, label) {
+  return wrapper.findAll('button').find((button) => button.text().trim() === label)
+}
+
+function findControlByLabel(wrapper, labelText) {
+  const label = wrapper
+    .findAll('label')
+    .find((node) => node.text().replace('*', '').trim() === labelText)
+  return wrapper.get(`[id="${label.attributes('for')}"]`)
+}
+
+function tableCells(wrapper) {
+  return wrapper.findAll('tbody tr').map((row) => row.findAll('td').map((cell) => cell.text()))
+}
+
+describe('EmployeeView', () => {
   beforeEach(() => {
-    mockMeta = ref(null);
-    fetchEmployeesMock = vi.fn();
-    vi.mocked(useEmployees).mockReturnValue({
-      employees: ref([]),
-      loading: ref(false),
-      error: ref(null),
-      meta: mockMeta,
-      fetchEmployees: fetchEmployeesMock,
-      deleteEmployee: vi.fn()
-    });
-    vi.clearAllMocks();
-  });
+    vi.resetAllMocks()
+    vi.useRealTimers()
+    toast.clear()
 
-  const mountComponent = () => {
-    return mount(EmployeeView, {
-      global: {
-        stubs: ['EmployeeFormModal']
+    axios.get.mockImplementation((url) => {
+      if (url === '/master-data/employees') {
+        return Promise.resolve(rawPaginatorResponse())
       }
-    });
-  };
+      if (url === '/lookups/positions') {
+        return Promise.resolve({ data: { data: [{ id: 10, name: 'Dokter Umum' }] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    lookupService.getEducations.mockResolvedValue([])
+    lookupService.getOccupations.mockResolvedValue([])
+    lookupService.getProvinces.mockResolvedValue([])
+    lookupService.getRegencies.mockResolvedValue([])
+    lookupService.getDistricts.mockResolvedValue([])
+    lookupService.getVillages.mockResolvedValue([])
+  })
 
-  it('1. Summary halaman pertama (Menampilkan 1–10 dari 87 pegawai)', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.employee-table-footer__summary').text()).toBe('Menampilkan 1–10 dari 87 pegawai');
-  });
+  afterEach(() => {
+    vi.useRealTimers()
+    document.body.innerHTML = ''
+  })
 
-  it('2. Summary halaman terakhir dengan jumlah tidak penuh', async () => {
-    mockMeta.value = { current_page: 9, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.employee-table-footer__summary').text()).toBe('Menampilkan 81–87 dari 87 pegawai');
-  });
+  it('merender header, breadcrumbs, tombol tambah, 5 kolom standar, dan fallback jabatan kosong', async () => {
+    const wrapper = await mountView()
 
-  it('3. Summary data kosong', async () => {
-    mockMeta.value = { current_page: 1, last_page: 1, per_page: 10, total: 0 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.employee-table-footer__summary').text()).toBe('Menampilkan 0 dari 0 pegawai');
-  });
+    expect(wrapper.get('h1').text()).toBe('Pegawai')
+    expect(wrapper.text()).toContain(
+      'Kelola data pegawai, unit kerja, jabatan, dan informasi profil lainnya.',
+    )
 
-  it('4. Total 9 halaman pada current page 1 menghasilkan 1, 2, 3, ellipsis, 9', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const visiblePages = wrapper.vm.visiblePages;
-    expect(visiblePages).toEqual([1, 2, 3, 'ellipsis-end', 9]);
-  });
+    const breadcrumbs = wrapper
+      .get('nav[aria-label="Breadcrumb"]')
+      .findAll('li')
+      .map((li) => li.text().replace('/', '').trim())
+    expect(breadcrumbs).toEqual(['Dashboard', 'Master Data', 'Data Pegawai', 'Pegawai'])
 
-  it('5. Current page 5 menghasilkan 1, ellipsis, 4, 5, 6, ellipsis, 9', async () => {
-    mockMeta.value = { current_page: 5, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const visiblePages = wrapper.vm.visiblePages;
-    expect(visiblePages).toEqual([1, 'ellipsis-start', 4, 5, 6, 'ellipsis-end', 9]);
-  });
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toEqual(['No', 'NIP / ID', 'Nama Pegawai', 'Jabatan', 'Aksi'])
 
-  it('6. Current page 9 menghasilkan 1, ellipsis, 7, 8, 9', async () => {
-    mockMeta.value = { current_page: 9, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const visiblePages = wrapper.vm.visiblePages;
-    expect(visiblePages).toEqual([1, 'ellipsis-start', 7, 8, 9]);
-  });
+    const rows = tableCells(wrapper)
+    expect(rows[0].slice(0, 4)).toEqual(['1', '19900101', 'dr. Budi Santoso', 'Dokter Umum'])
+    expect(rows[1].slice(0, 4)).toEqual(['2', '19920202', 'Ns. Siti Aminah', '—'])
+  })
 
-  it('7. Tidak ada nomor halaman duplikat', async () => {
-    mockMeta.value = { current_page: 4, last_page: 5, per_page: 10, total: 50 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const visiblePages = wrapper.vm.visiblePages;
-    const uniquePages = new Set(visiblePages);
-    expect(uniquePages.size).toBe(visiblePages.length);
-    expect(visiblePages).toEqual([1, 2, 3, 4, 5]);
-  });
+  it('mengirim parameter sort_by dan sort_desc serta mendukung paginasi raw Laravel paginator', async () => {
+    axios.get.mockImplementation((url, config) => {
+      if (url === '/master-data/employees') {
+        const page = config?.params?.page ?? 1
+        return Promise.resolve(
+          rawPaginatorResponse(
+            page === 2 ? [{ id: 16, code: '1999', name: 'Pegawai 16', position: null }] : mockRows,
+            { current_page: page, last_page: 2, total: 16, from: page === 2 ? 16 : 1, to: page === 2 ? 16 : 15 },
+          ),
+        )
+      }
+      return Promise.resolve({ data: [] })
+    })
 
-  it('8. Ellipsis bukan tombol dan memakai aria-hidden', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const ellipsis = wrapper.find('.page-ellipsis');
-    expect(ellipsis.element.tagName.toLowerCase()).not.toBe('button');
-    expect(ellipsis.attributes('aria-hidden')).toBe('true');
-  });
+    const wrapper = await mountView()
 
-  it('9. Active page memakai aria-current', async () => {
-    mockMeta.value = { current_page: 3, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const activeBtn = wrapper.find('.btn-page.active');
-    expect(activeBtn.exists()).toBe(true);
-    expect(activeBtn.attributes('aria-current')).toBe('page');
-    expect(activeBtn.text()).toBe('3');
-  });
+    expect(axios.get).toHaveBeenCalledWith('/master-data/employees', {
+      params: { page: 1, per_page: 15, sort_by: 'created_at', sort_desc: 1 },
+    })
+    expect(wrapper.text()).toContain('Menampilkan 1–15 dari 16 data')
 
-  it('10. Tombol Sebelumnya disabled pada page 1', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const prevBtn = wrapper.findAll('.btn-page').at(0);
-    expect(prevBtn.text()).toContain('Sebelumnya');
-    expect(prevBtn.attributes('disabled')).toBeDefined();
-  });
+    await wrapper.get('button[aria-label="Halaman berikutnya"]').trigger('click')
+    await flushPromises()
 
-  it('11. Tombol Selanjutnya disabled pada halaman terakhir', async () => {
-    mockMeta.value = { current_page: 9, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const buttons = wrapper.findAll('.btn-page');
-    const nextBtn = buttons.at(buttons.length - 1);
-    expect(nextBtn.text()).toContain('Selanjutnya');
-    expect(nextBtn.attributes('disabled')).toBeDefined();
-  });
+    expect(axios.get).toHaveBeenLastCalledWith('/master-data/employees', {
+      params: { page: 2, per_page: 15, sort_by: 'created_at', sort_desc: 1 },
+    })
+    expect(tableCells(wrapper)[0].slice(0, 3)).toEqual(['16', '1999', 'Pegawai 16'])
+  })
 
-  it('12. Klik nomor halaman memanggil fungsi ganti halaman (fetchData)', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    
-    fetchEmployeesMock.mockClear();
-    
-    const page2Btn = wrapper.findAll('.btn-page').filter(w => w.text() === '2').at(0);
-    await page2Btn.trigger('click');
-    
-    expect(fetchEmployeesMock).toHaveBeenCalled();
-  });
+  it('melakukan debounce pencarian 400ms dan menampilkan empty state pencarian serta tombol reset', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+    axios.get.mockClear()
 
-  it('13. Klik Sebelumnya/Selanjutnya memancarkan halaman yang benar', async () => {
-    mockMeta.value = { current_page: 2, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    
-    fetchEmployeesMock.mockClear();
-    
-    const buttons = wrapper.findAll('.btn-page');
-    const prevBtn = buttons.at(0);
-    const nextBtn = buttons.at(buttons.length - 1);
-    
-    await prevBtn.trigger('click');
-    expect(fetchEmployeesMock).toHaveBeenCalled();
-    
-    fetchEmployeesMock.mockClear();
-    await nextBtn.trigger('click');
-    expect(fetchEmployeesMock).toHaveBeenCalled();
-  });
+    axios.get.mockResolvedValue(rawPaginatorResponse([], { total: 0, from: 0, to: 0 }))
 
-  it('14. Footer menggunakan class layout yang benar', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const footer = wrapper.find('footer.employee-table-footer');
-    expect(footer.exists()).toBe(true);
-    expect(footer.classes()).toContain('employee-table-footer');
-  });
+    const searchInput = wrapper.get('input[placeholder="Cari NIP / Nama..."]')
+    await searchInput.setValue('Andi')
+    expect(axios.get).not.toHaveBeenCalled()
 
-  it('15. Tidak ada elemen pagination dengan absolute positioning', async () => {
-    mockMeta.value = { current_page: 1, last_page: 9, per_page: 10, total: 87 };
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-    const footer = wrapper.find('.employee-table-footer');
-    expect(footer.attributes('style')).toBeUndefined();
-  });
-});
+    await vi.advanceTimersByTimeAsync(400)
+    await flushPromises()
+
+    expect(axios.get).toHaveBeenCalledWith('/master-data/employees', {
+      params: {
+        page: 1,
+        per_page: 15,
+        sort_by: 'created_at',
+        sort_desc: 1,
+        search: 'Andi',
+      },
+    })
+    expect(wrapper.text()).toContain('Pegawai tidak ditemukan')
+
+    axios.get.mockResolvedValue(rawPaginatorResponse())
+    await findButtonByText(wrapper, 'Reset Pencarian').trigger('click')
+    await flushPromises()
+    expect(tableCells(wrapper)).toHaveLength(2)
+  })
+
+  it('menangani empty state awal dan state gagal memuat dengan tombol muat ulang', async () => {
+    axios.get.mockRejectedValueOnce({ response: { status: 500, data: { message: 'Server error' } } })
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('Gagal memuat data pegawai')
+
+    axios.get.mockResolvedValueOnce(rawPaginatorResponse([], { total: 0, from: 0, to: 0 }))
+    await findButtonByText(wrapper, 'Muat Ulang').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Belum ada data pegawai')
+    expect(findButtonByText(wrapper, 'Tambah Pegawai')).toBeTruthy()
+  })
+
+  it('mendukung tambah pegawai, edit, hapus, serta sanitasi error server SQL/422', async () => {
+    const postSpy = axios.post.mockResolvedValue({ data: { id: 99 } })
+    const delSpy = axios.delete.mockResolvedValue({ data: { message: 'deleted' } })
+
+    const wrapper = await mountView()
+
+    await findButtonByText(wrapper, 'Tambah Pegawai').trigger('click')
+    await flushPromises()
+
+    await findControlByLabel(wrapper, 'Nomor KTP (NIK)').setValue('3578010101010009')
+    await findControlByLabel(wrapper, 'Nama Lengkap').setValue('Budi Baru')
+    await findControlByLabel(wrapper, 'NIP (Nomor Induk Pegawai)').setValue('2024001')
+    await findControlByLabel(wrapper, 'Jabatan').setValue('10')
+
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(postSpy).toHaveBeenCalledWith(
+      '/master-data/employees',
+      expect.any(FormData),
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
+    expect(toastMessages()).toContain('Data pegawai berhasil ditambahkan.')
+
+    // Edit error 500 SQL harus disamarkan menjadi fallback aman
+    axios.get.mockImplementation((url) => {
+      if (url === '/master-data/employees/1') {
+        return Promise.resolve({
+          data: {
+            id: 1,
+            national_id: '357801',
+            name: 'dr. Budi Santoso',
+            code: '19900101',
+            position_id: 10,
+          },
+        })
+      }
+      if (url === '/lookups/positions') {
+        return Promise.resolve({ data: { data: [{ id: 10, name: 'Dokter Umum' }] } })
+      }
+      return Promise.resolve(rawPaginatorResponse())
+    })
+    axios.post.mockRejectedValueOnce({
+      response: { status: 500, data: { message: 'SQLSTATE[42S22]: Column not found' } },
+    })
+
+    await wrapper.get('button[aria-label="Edit dr. Budi Santoso"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(toastMessages()).toContain('Data pegawai gagal diperbarui.')
+    await findButtonByText(wrapper, 'Batal').trigger('click')
+
+    // Hapus pegawai
+    await wrapper.get('button[aria-label="Hapus Ns. Siti Aminah"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Ns. Siti Aminah')
+    await findButtonByText(wrapper, 'Ya, Hapus').trigger('click')
+    await flushPromises()
+
+    expect(delSpy).toHaveBeenCalledWith('/master-data/employees/2')
+    expect(toastMessages()).toContain('Data pegawai berhasil dihapus.')
+
+    // Pastikan helper buildFormData tetap berfungsi untuk _method=PUT
+    const putData = employeeService.buildFormData(
+      { code: '1990', remove_signature: true, signature: null },
+      'PUT',
+    )
+    expect(putData.get('_method')).toBe('PUT')
+    expect(putData.get('remove_signature')).toBe('1')
+  })
+})

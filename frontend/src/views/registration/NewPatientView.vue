@@ -1,14 +1,21 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
 import patientService from '@/services/patient.service';
 import lookupService from '@/services/lookup.service';
-import { guarantorsService } from '@/services/master-data/guarantors.service';
 import { occupationsService } from '@/services/master-data/occupations.service';
+import { useGuarantorOptions } from '@/composables/useGuarantorOptions';
 
 const router = useRouter();
+const {
+  loading: guarantorsLoading,
+  error: guarantorsError,
+  isEmpty: guarantorsEmpty,
+  fetchGuarantors,
+  ensureSavedOption
+} = useGuarantorOptions();
 
 // Toast Notification State
 const toast = ref({
@@ -56,8 +63,8 @@ const form = ref({
   marital_status: 'BELUM KAWIN',
   occupation: '',
   occupation_id: '',
-  guarantor: '',
   guarantor_id: '',
+  guarantor: '',
   insurance_number: '',
   hak_kelas: '',
 
@@ -83,11 +90,9 @@ const errors = ref({});
 // Master Data Lists (Database live via API)
 const educations = ref([]);
 const occupations = ref([]);
-const guarantorList = ref([]);
 
 const loadingEducations = ref(false);
 const loadingOccupations = ref(false);
-const loadingGuarantors = ref(false);
 
 // Wilayah Autocomplete State
 const wilayahSearchQuery = ref('');
@@ -201,15 +206,33 @@ const onOccupationChange = () => {
   if (errors.value.occupation_id) delete errors.value.occupation_id;
 };
 
-const selectedGuarantor = computed(() => {
-  return guarantorList.value.find((g) => String(g.id) === String(form.value.guarantor_id));
-});
+const guarantorOptions = computed(() =>
+  ensureSavedOption(
+    form.value.guarantor_id || form.value.guarantor
+      ? { id: form.value.guarantor_id || null, name: form.value.guarantor || null }
+      : null
+  )
+);
+
+const selectedGuarantor = computed(() =>
+  guarantorOptions.value.find((g) => String(g.id) === String(form.value.guarantor_id)) || null
+);
+
+const isSelfPaySelected = computed(() => Boolean(selectedGuarantor.value?.is_self_pay));
 
 const isBpjsOrInsurance = computed(() => {
   if (!selectedGuarantor.value) return false;
+  if (selectedGuarantor.value.is_self_pay) return false;
   const t = String(selectedGuarantor.value.type || '').toUpperCase();
   const n = String(selectedGuarantor.value.name || '').toUpperCase();
-  return t === 'BPJS' || t === 'PRIVATE' || n.includes('BPJS') || n.includes('JKN') || n.includes('ASURANSI');
+  return (
+    t === 'BPJS' ||
+    t === 'PRIVATE' ||
+    t === 'PRIVATE_INSURANCE' ||
+    n.includes('BPJS') ||
+    n.includes('JKN') ||
+    n.includes('ASURANSI')
+  );
 });
 
 const isCheckingBpjs = ref(false);
@@ -228,22 +251,27 @@ const handleCheckBpjs = () => {
   if (errors.value.hak_kelas) delete errors.value.hak_kelas;
 };
 
-const onGuarantorChange = () => {
-  if (selectedGuarantor.value) {
-    form.value.guarantor = selectedGuarantor.value.name;
-  } else {
-    form.value.guarantor = '';
+watch(
+  () => form.value.guarantor_id,
+  () => {
+    if (selectedGuarantor.value) {
+      form.value.guarantor = selectedGuarantor.value.name;
+      if (selectedGuarantor.value.is_self_pay) {
+        form.value.insurance_number = '';
+        form.value.hak_kelas = '';
+        bpjsCheckError.value = '';
+      }
+    } else if (!form.value.guarantor_id) {
+      form.value.guarantor = '';
+    }
+    if (errors.value.guarantor_id) delete errors.value.guarantor_id;
+    if (errors.value.guarantor) delete errors.value.guarantor;
   }
-  if (!isBpjsOrInsurance.value) {
-    form.value.insurance_number = '';
-    form.value.hak_kelas = '';
-    bpjsCheckError.value = '';
-  }
-  if (errors.value.guarantor_id) delete errors.value.guarantor_id;
-  if (errors.value.guarantor) delete errors.value.guarantor;
-};
+);
 
 onMounted(async () => {
+  fetchGuarantors();
+
   // Master Pendidikan
   loadingEducations.value = true;
   try {
@@ -287,17 +315,6 @@ onMounted(async () => {
     }
   } finally {
     loadingOccupations.value = false;
-  }
-
-  // Master Jenis Jaminan
-  loadingGuarantors.value = true;
-  try {
-    const res = await guarantorsService.getGuarantors({ per_page: 100, is_active: true });
-    guarantorList.value = res.data || [];
-  } catch (err) {
-    console.error('Gagal memuat master jenis jaminan:', err);
-  } finally {
-    loadingGuarantors.value = false;
   }
 });
 
@@ -377,6 +394,7 @@ const validateForm = () => {
   }
   if (!form.value.guarantor_id && !form.value.guarantor) {
     err.guarantor_id = 'Jenis jaminan wajib dipilih.';
+    err.guarantor = 'Jenis jaminan wajib dipilih.';
   }
   if (isBpjsOrInsurance.value && (!form.value.insurance_number || !form.value.insurance_number.trim())) {
     err.insurance_number = 'No. Jaminan / No. BPJS wajib diisi untuk penjamin BPJS/Asuransi.';
@@ -417,9 +435,10 @@ const handleReset = () => {
     marital_status: 'BELUM KAWIN',
     occupation: '',
     occupation_id: '',
-    guarantor: '',
     guarantor_id: '',
+    guarantor: '',
     insurance_number: '',
+    hak_kelas: '',
     emergency_contact: {
       name: '',
       relationship: '',
@@ -471,9 +490,9 @@ const handleSubmit = async () => {
       religion: form.value.religion,
       marital_status: form.value.marital_status,
       blood_type: form.value.blood_type,
-      guarantor_id: form.value.guarantor_id ? Number(form.value.guarantor_id) : null,
+      guarantor_id: selectedGuarantor.value?.numericId ?? (form.value.guarantor_id ? Number(form.value.guarantor_id) : null),
       guarantor: selectedGuarantor.value?.name || form.value.guarantor || null,
-      insurance_number: form.value.insurance_number ? form.value.insurance_number.trim() : null,
+      insurance_number: isSelfPaySelected.value ? null : (form.value.insurance_number ? form.value.insurance_number.trim() : null),
       hak_kelas: isBpjsOrInsurance.value ? (form.value.hak_kelas ? form.value.hak_kelas.trim() : null) : null,
       has_allergy: form.value.has_allergy === 'Ada' ? 'ada' : 'tidak',
       allergy_notes: form.value.has_allergy === 'Ada' ? (form.value.allergy_notes ? form.value.allergy_notes.trim() : '') : '',
@@ -1034,15 +1053,28 @@ const registerAnother = () => {
                   <select
                     id="guarantor"
                     v-model="form.guarantor_id"
-                    @change="onGuarantorChange"
                     class="form-select"
-                    :disabled="loadingGuarantors"
+                    :disabled="guarantorsLoading && guarantorOptions.length === 0"
                   >
-                    <option value="">{{ loadingGuarantors ? 'Memuat Master Jaminan...' : '-- silahkan pilih --' }}</option>
-                    <option v-for="g in guarantorList" :key="g.id" :value="g.id">
-                      {{ g.name }}
+                    <option value="">
+                      {{ guarantorsLoading ? 'Memuat daftar penjamin...' : '-- silahkan pilih --' }}
+                    </option>
+                    <option
+                      v-for="g in guarantorOptions"
+                      :key="g.id"
+                      :value="g.id"
+                    >
+                      {{ g.label }}
                     </option>
                   </select>
+                  <span v-if="guarantorsLoading" class="guarantor-helper-muted">Memuat data penjamin...</span>
+                  <span v-else-if="guarantorsError" class="error-message guarantor-helper-error">
+                    {{ guarantorsError }}
+                    <button type="button" class="btn-retry-guarantor" @click="fetchGuarantors()">Coba Lagi</button>
+                  </span>
+                  <span v-else-if="guarantorsEmpty && guarantorOptions.length === 0" class="guarantor-helper-muted">
+                    Belum ada data penjamin aktif di Master Data.
+                  </span>
                   <span v-if="errors.guarantor_id || errors.guarantor" class="error-message">
                     {{ errors.guarantor_id || errors.guarantor }}
                   </span>
@@ -1059,7 +1091,8 @@ const registerAnother = () => {
                       v-model="form.insurance_number"
                       type="text"
                       class="form-input"
-                      :placeholder="isBpjsOrInsurance ? 'No jaminan' : 'Tidak diperlukan untuk pasien Umum'"
+                      :disabled="isSelfPaySelected"
+                      :placeholder="isSelfPaySelected ? 'Tidak diperlukan untuk pasien UMUM' : 'No jaminan'"
                       autocomplete="off"
                       @input="bpjsCheckError = ''"
                     />
@@ -2355,6 +2388,36 @@ const registerAnother = () => {
 
 .w-full {
   width: 100%;
+}
+
+.guarantor-helper-muted {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.guarantor-helper-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.btn-retry-guarantor {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-retry-guarantor:hover {
+  opacity: 0.85;
 }
 
 .font-mono {

@@ -1,0 +1,65 @@
+/*
+ * Entry CSS aplikasi.
+ *
+ * Urutan layer menjamin utility Tailwind SELALU menang atas CSS global lama,
+ * tanpa perlu !important.
+ */
+@layer theme, base, legacy, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+/*
+ * Preflight (reset bawaan Tailwind) sengaja BELUM diimpor: reset-nya akan
+ * mengubah tampilan ratusan komponen lama. Aktifkan setelah migrasi selesai.
+ *
+ * source(none) + daftar @source di bawah = Tailwind HANYA membuat utility
+ * dari modul yang sudah dimigrasi, sehingga kelas lama seperti `.badge`,
+ * `.hidden`, `.table` di file lama tidak tertimpa utility Tailwind.
+ */
+@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+
+@import './tokens.css';
+@import '../main.css' layer(legacy);
+@import './legacy-aliases.css' layer(legacy);
+
+/* ── Modul yang sudah dimigrasi (tambahkan path baru di sini + eslint.config.js) ── */
+@source '../../components/ui';
+@source '../../components/master-data/buildings';
+@source '../../views/master-data/bed/BuildingView.vue';
+@source '../../components/master-data/beds';
+@source '../../views/master-data/bed/BedView.vue';
+@source '../../components/master-data/floors';
+@source '../../views/master-data/bed/FloorView.vue';
+@source '../../components/master-data/wards';
+@source '../../views/master-data/bed/WardView.vue';
+@source '../../components/master-data/rooms';
+@source '../../views/master-data/bed/RoomView.vue';
+@source '../../components/master-data/room-classes';
+@source '../../views/master-data/bed/RoomClassView.vue';
+@source '../../components/master-data/sirs-bed-availability';
+@source '../../views/master-data/bed/SirsBedAvailabilityView.vue';
+@source '../../components/master-data/educations';
+@source '../../views/master-data/EducationView.vue';
+@source '../../components/master-data/occupations';
+@source '../../views/master-data/OccupationView.vue';
+@source '../../components/master-data/positions';
+@source '../../views/master-data/PositionView.vue';
+@source '../../components/master-data/employees';
+@source '../../components/master-data/EmployeeFormModal.vue';
+@source '../../views/master-data/EmployeeView.vue';
+@source '../../components/master-data/doctors';
+@source '../../views/master-data/DoctorView.vue';
+@source '../../components/master-data/doctor-schedules';
+@source '../../views/master-data/DoctorScheduleView.vue';
+@source '../../components/master-data/polyclinics';
+@source '../../views/master-data/PolyclinicView.vue';
+@source '../../components/master-data/service-types';
+@source '../../views/master-data/ServiceTypeView.vue';
+@source '../../components/master-data/insurance-types';
+@source '../../views/master-data/InsuranceTypeView.vue';
+@source '../../components/master-data/nutrition-care';
+@source '../../views/master-data/DietTypeView.vue';
+@source '../../components/master-data/activity-type';
+@source '../../views/master-data/ActivityTypeView.vue';
+@source '../../components/master-data/letter-types';
+@source '../../components/master-data/LetterTypeFormModal.vue';
+@source '../../views/master-data/LetterTypeView.vue';

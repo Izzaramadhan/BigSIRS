@@ -1,106 +1,36 @@
-import { ref, reactive } from 'vue';
-import { positionsService } from '../services/master-data/positions.service';
+import { reactive } from 'vue'
+import { useCrudResource } from '@/composables/core/useCrudResource'
+import { positionsService } from '@/services/master-data/positions.service'
 
+/**
+ * Composable modul Jabatan berbasis useCrudResource.
+ * Default sorting diselaraskan dengan PositionController::index (name ascending).
+ */
 export function usePositions() {
-  const items = ref([]);
-  const pagination = reactive({
-    current_page: 1,
-    last_page: 1,
-    per_page: 10,
-    total: 0
-  });
-  const filters = reactive({
-    search: ''
-  });
+  const sort = reactive({
+    column: 'name',
+    direction: 'asc',
+  })
 
-  const loading = ref(false);
-  const submitting = ref(false);
-  const error = ref(null);
+  const crud = useCrudResource(positionsService, {
+    label: 'jabatan',
+    sort,
+  })
 
-  const fetchPositions = async () => {
-    loading.value = true;
-    error.value = null;
-    
-    try {
-      const params = {
-        page: pagination.current_page,
-        per_page: pagination.per_page
-      };
-
-      if (filters.search) params.search = filters.search;
-
-      const response = await positionsService.getPositions(params);
-      
-      items.value = response.data;
-      if (response.meta) {
-        pagination.current_page = response.meta.current_page;
-        pagination.last_page = response.meta.last_page;
-        pagination.per_page = response.meta.per_page;
-        pagination.total = response.meta.total;
-      }
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memuat data jabatan.';
-      console.error('Error fetching positions:', err);
-    } finally {
-      loading.value = false;
+  function setSort(column) {
+    if (sort.column === column) {
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      sort.column = column
+      sort.direction = 'asc'
     }
-  };
-
-  const createPosition = async (payload) => {
-    submitting.value = true;
-    try {
-      await positionsService.createPosition(payload);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    } finally {
-      submitting.value = false;
-    }
-  };
-
-  const updatePosition = async (id, payload) => {
-    submitting.value = true;
-    try {
-      await positionsService.updatePosition(id, payload);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err };
-    } finally {
-      submitting.value = false;
-    }
-  };
-
-  const deletePosition = async (id) => {
-    submitting.value = true;
-    try {
-      await positionsService.deletePosition(id);
-      return { success: true };
-    } catch (err) {
-      return {
-        success: false,
-        error: err
-      };
-    } finally {
-      submitting.value = false;
-    }
-  };
-
-  const setPage = (page) => {
-    pagination.current_page = page;
-    fetchPositions();
-  };
+    crud.meta.page = 1
+    return crud.fetchItems()
+  }
 
   return {
-    items,
-    pagination,
-    filters,
-    loading,
-    submitting,
-    error,
-    fetchPositions,
-    createPosition,
-    updatePosition,
-    deletePosition,
-    setPage
-  };
+    ...crud,
+    sort,
+    setSort,
+  }
 }

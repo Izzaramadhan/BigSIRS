@@ -1,310 +1,205 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRooms } from '@/composables/useRooms'
-import RoomTable from '@/components/master-data/rooms/RoomTable.vue'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
 import RoomFilters from '@/components/master-data/rooms/RoomFilters.vue'
 import RoomFormModal from '@/components/master-data/rooms/RoomFormModal.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import AppToast from '@/components/common/AppToast.vue'
+import RoomTable from '@/components/master-data/rooms/RoomTable.vue'
+import {
+  EMPTY,
+  formatRoomWard,
+  getSafeRoomErrorMessage,
+} from '@/components/master-data/rooms/room.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useRooms } from '@/composables/useRooms'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
   loading,
-  submitting,
-  error,
-  fetchRooms,
-  createRoom,
-  updateRoom,
-  deleteRoom,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useRooms()
+const toast = useToast()
 
-const formModalOpen = ref(false)
-const deleteDialogOpen = ref(false)
-const selectedRoom = ref(null)
-const roomToDelete = ref(null)
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingRoom = ref(null)
 const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: '',
+function openForm(room = null) {
+  editingRoom.value = room
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
+
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingRoom.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
+
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
+
+  const isEdit = Boolean(editingRoom.value)
+  const fallback = isEdit ? 'Data kamar gagal diperbarui.' : 'Data kamar gagal ditambahkan.'
+  const result = isEdit ? await update(editingRoom.value.id, payload) : await create(payload)
+
+  if (!result.ok) {
+    const safeMessage = getSafeRoomErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
+  }
+
+  closeForm()
+  toast.success(isEdit ? 'Data kamar berhasil diperbarui.' : 'Data kamar berhasil ditambahkan.')
+}
+
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingRoom = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingRoom.value) return ''
+  const formattedWard = formatRoomWard(deletingRoom.value)
+  const wardLabel = formattedWard === EMPTY ? 'Bangsal' : formattedWard
+  return `Apakah Anda yakin ingin menghapus kamar “${deletingRoom.value.name}” dari “${wardLabel}”?`
 })
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
-}
+async function handleDelete() {
+  if (saving.value || !deletingRoom.value) return
+  const result = await remove(deletingRoom.value.id)
+  deletingRoom.value = null
 
-const closeToast = () => {
-  toast.value.show = false
-}
-
-const openAddModal = () => {
-  selectedRoom.value = null
-  formErrors.value = {}
-  formModalOpen.value = true
-}
-
-const openEditModal = (item) => {
-  selectedRoom.value = item
-  formErrors.value = {}
-  formModalOpen.value = true
-}
-
-const closeFormModal = () => {
-  formModalOpen.value = false
-  selectedRoom.value = null
-  formErrors.value = {}
-}
-
-const openDeleteDialog = (item) => {
-  roomToDelete.value = item
-  deleteDialogOpen.value = true
-}
-
-const closeDeleteDialog = () => {
-  deleteDialogOpen.value = false
-  roomToDelete.value = null
-}
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value
-  pagination.current_page = 1
-  fetchRooms()
-}
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {}
-
-  const isEditing = Boolean(selectedRoom.value)
-  let result
-
-  if (isEditing) {
-    result = await updateRoom(selectedRoom.value.id, payload)
+  if (result.ok) {
+    toast.success('Data kamar berhasil dihapus.')
   } else {
-    result = await createRoom(payload)
-  }
-
-  if (result.success) {
-    closeFormModal()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing ? 'Data kamar berhasil diperbarui.' : 'Data kamar berhasil ditambahkan.',
-    })
-    fetchRooms()
-  } else {
-    if (result.error?.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {}
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message:
-          result.error.response.data.message ||
-          'Data kamar tidak valid. Silakan periksa kembali form pengisian.',
-      })
-    } else {
-      const errorMsg =
-        result.error?.response?.data?.message ||
-        `Terjadi kesalahan saat ${isEditing ? 'memperbarui' : 'menambahkan'} data kamar.`
-      formErrors.value = { general: errorMsg }
-      showToast({
-        type: 'error',
-        title: 'Gagal',
-        message: errorMsg,
-      })
-    }
+    toast.error(getSafeRoomErrorMessage(result.error, 'Data kamar gagal dihapus.'))
   }
 }
 
-const handleDeleteConfirm = async () => {
-  if (!roomToDelete.value) return
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeRoomErrorMessage({ message: loadError.value }, 'Data kamar gagal dimuat.')
+    : '',
+)
 
-  const idToDelete = roomToDelete.value.id
-  const result = await deleteRoom(idToDelete)
-
-  if (result.success) {
-    closeDeleteDialog()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data kamar berhasil dihapus.',
-    })
-
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--
-    }
-
-    fetchRooms()
-  } else {
-    const errorMsg = result.error?.response?.data?.message || 'Data kamar gagal dihapus.'
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMsg,
-    })
-    closeDeleteDialog()
-  }
-}
-
-const getDeleteConfirmMessage = (room) => {
-  if (!room) return ''
-  const wardDisplay =
-    room.ward_display_name ||
-    (room.ward
-      ? room.ward.floor
-        ? room.ward.floor.building?.name
-          ? `${room.ward.name} (${room.ward.floor.name} - ${room.ward.floor.building.name})`
-          : `${room.ward.name} (${room.ward.floor.name})`
-        : room.ward.name
-      : 'Bangsal')
-  return `Apakah Anda yakin ingin menghapus kamar “${room.name}” dari “${wardDisplay}”?`
-}
-
-onMounted(() => {
-  fetchRooms()
-})
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Data Kamar"
-      subtitle="Kelola data kamar berdasarkan bangsal, lantai, gedung, dan kelas perawatan rumah sakit."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Bed', active: false },
-        { label: 'Data Kamar', active: true },
-      ]"
+      description="Kelola data kamar berdasarkan bangsal, lantai, gedung, dan kelas perawatan rumah sakit."
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Bed', 'Data Kamar']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Kamar
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <RoomFilters
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchRooms"
-      />
-
-      <MasterDataErrorState v-if="error" :error="error" @retry="fetchRooms" />
-
-      <template v-else>
-        <MasterDataEmptyState v-if="!loading && items.length === 0" :is-search="!!filters.search">
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Kamar</button>
-          </template>
-        </MasterDataEmptyState>
-
-        <template v-else>
-          <RoomTable
-            :items="items"
-            :pagination="pagination"
-            :loading="loading"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-
-          <MasterDataPagination
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <RoomFormModal
-      :is-open="formModalOpen"
-      :room="selectedRoom"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="closeFormModal"
-      @submit="handleFormSubmit"
-      @toast="showToast"
+    <RoomFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog
-      :is-open="deleteDialogOpen"
-      :is-deleting="submitting"
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data kamar gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
+        </template>
+      </BaseEmptyState>
+    </div>
+
+    <template v-else>
+      <RoomTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingRoom = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Kamar tidak ditemukan"
+            :description="`Tidak ada kamar yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data kamar"
+            description="Tambahkan kamar pertama untuk mulai mengelola data kamar."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Kamar</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </RoomTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <RoomFormModal
+      :open="formOpen"
+      :room="editingRoom"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingRoom)"
       title="Hapus Kamar"
-      :confirm-message="getDeleteConfirmMessage(roomToDelete)"
+      :message="deleteMessage"
       confirm-text="Hapus"
-      @close="closeDeleteDialog"
-      @confirm="handleDeleteConfirm"
+      :loading="saving"
+      @close="deletingRoom = null"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  padding: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.page-content {
-  margin-top: 1.5rem;
-}
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--color-primary);
-  color: #ffffff;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.btn-primary:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-</style>

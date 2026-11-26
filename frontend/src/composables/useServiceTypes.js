@@ -1,102 +1,36 @@
-import { ref } from 'vue'
-import ServiceTypeService from '@/services/serviceType.service'
+import { reactive } from 'vue'
+import { useCrudResource } from '@/composables/core/useCrudResource'
+import { serviceTypeService } from '@/services/serviceType.service'
 
+/**
+ * Composable modul Jenis Layanan berbasis useCrudResource.
+ * Default sorting diselaraskan dengan ServiceTypeController::index (`name` ascending).
+ */
 export function useServiceTypes() {
-  const serviceTypes = ref([])
-  const loading = ref(false)
-  const error = ref(null)
-  const meta = ref({
-    current_page: 1,
-    last_page: 1,
-    total: 0,
-    per_page: 10
+  const sort = reactive({
+    column: 'name',
+    direction: 'asc',
   })
 
-  const fetchServiceTypes = async (params = {}) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await ServiceTypeService.getAll(params)
-      serviceTypes.value = response.data
-      meta.value = response.meta || {
-        current_page: 1,
-        last_page: 1,
-        total: response.data.length,
-        per_page: 10
-      }
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memuat data jenis layanan'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
+  const crud = useCrudResource(serviceTypeService, {
+    label: 'jenis layanan',
+    sort,
+  })
 
-  const createServiceType = async (data) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await ServiceTypeService.create(data)
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menyimpan data jenis layanan'
-      throw err
-    } finally {
-      loading.value = false
+  function setSort(column) {
+    if (sort.column === column) {
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      sort.column = column
+      sort.direction = 'asc'
     }
-  }
-
-  const updateServiceType = async (id, data) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await ServiceTypeService.update(id, data)
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui data jenis layanan'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const updateStatus = async (id, isActive) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await ServiceTypeService.updateStatus(id, isActive)
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal mengubah status jenis layanan'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const deleteServiceType = async (id) => {
-    loading.value = true
-    error.value = null
-    try {
-      await ServiceTypeService.delete(id)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menghapus data jenis layanan'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    crud.meta.page = 1
+    return crud.fetchItems()
   }
 
   return {
-    serviceTypes,
-    loading,
-    error,
-    meta,
-    fetchServiceTypes,
-    createServiceType,
-    updateServiceType,
-    updateStatus,
-    deleteServiceType
+    ...crud,
+    sort,
+    setSort,
   }
 }

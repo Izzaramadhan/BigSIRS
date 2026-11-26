@@ -1,307 +1,205 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useWards } from '@/composables/useWards'
-import WardTable from '@/components/master-data/wards/WardTable.vue'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
 import WardFilters from '@/components/master-data/wards/WardFilters.vue'
 import WardFormModal from '@/components/master-data/wards/WardFormModal.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import AppToast from '@/components/common/AppToast.vue'
+import WardTable from '@/components/master-data/wards/WardTable.vue'
+import {
+  EMPTY,
+  formatWardFloor,
+  getSafeWardErrorMessage,
+} from '@/components/master-data/wards/ward.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useWards } from '@/composables/useWards'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
   loading,
-  submitting,
-  error,
-  fetchWards,
-  createWard,
-  updateWard,
-  deleteWard,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useWards()
+const toast = useToast()
 
-const formModalOpen = ref(false)
-const deleteDialogOpen = ref(false)
-const selectedWard = ref(null)
-const wardToDelete = ref(null)
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingWard = ref(null)
 const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: '',
+function openForm(ward = null) {
+  editingWard.value = ward
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
+
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingWard.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
+
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
+
+  const isEdit = Boolean(editingWard.value)
+  const fallback = isEdit ? 'Data bangsal gagal diperbarui.' : 'Data bangsal gagal ditambahkan.'
+  const result = isEdit ? await update(editingWard.value.id, payload) : await create(payload)
+
+  if (!result.ok) {
+    const safeMessage = getSafeWardErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
+  }
+
+  closeForm()
+  toast.success(isEdit ? 'Data bangsal berhasil diperbarui.' : 'Data bangsal berhasil ditambahkan.')
+}
+
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingWard = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingWard.value) return ''
+  const formattedFloor = formatWardFloor(deletingWard.value)
+  const floorLabel = formattedFloor === EMPTY ? 'Lantai' : formattedFloor
+  return `Apakah Anda yakin ingin menghapus bangsal “${deletingWard.value.name}” dari “${floorLabel}”?`
 })
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
-}
+async function handleDelete() {
+  if (saving.value || !deletingWard.value) return
+  const result = await remove(deletingWard.value.id)
+  deletingWard.value = null
 
-const closeToast = () => {
-  toast.value.show = false
-}
-
-const openAddModal = () => {
-  selectedWard.value = null
-  formErrors.value = {}
-  formModalOpen.value = true
-}
-
-const openEditModal = (item) => {
-  selectedWard.value = item
-  formErrors.value = {}
-  formModalOpen.value = true
-}
-
-const closeFormModal = () => {
-  formModalOpen.value = false
-  selectedWard.value = null
-  formErrors.value = {}
-}
-
-const openDeleteDialog = (item) => {
-  wardToDelete.value = item
-  deleteDialogOpen.value = true
-}
-
-const closeDeleteDialog = () => {
-  deleteDialogOpen.value = false
-  wardToDelete.value = null
-}
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value
-  pagination.current_page = 1
-  fetchWards()
-}
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {}
-
-  const isEditing = Boolean(selectedWard.value)
-  let result
-
-  if (isEditing) {
-    result = await updateWard(selectedWard.value.id, payload)
+  if (result.ok) {
+    toast.success('Data bangsal berhasil dihapus.')
   } else {
-    result = await createWard(payload)
-  }
-
-  if (result.success) {
-    closeFormModal()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing ? 'Data bangsal berhasil diperbarui.' : 'Data bangsal berhasil ditambahkan.',
-    })
-    fetchWards()
-  } else {
-    if (result.error?.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {}
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message:
-          result.error.response.data.message ||
-          'Data bangsal tidak valid. Silakan periksa kembali form pengisian.',
-      })
-    } else {
-      const errorMsg =
-        result.error?.response?.data?.message ||
-        `Terjadi kesalahan saat ${isEditing ? 'memperbarui' : 'menambahkan'} data bangsal.`
-      formErrors.value = { general: errorMsg }
-      showToast({
-        type: 'error',
-        title: 'Gagal',
-        message: errorMsg,
-      })
-    }
+    toast.error(getSafeWardErrorMessage(result.error, 'Data bangsal gagal dihapus.'))
   }
 }
 
-const handleDeleteConfirm = async () => {
-  if (!wardToDelete.value) return
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeWardErrorMessage({ message: loadError.value }, 'Data bangsal gagal dimuat.')
+    : '',
+)
 
-  const idToDelete = wardToDelete.value.id
-  const result = await deleteWard(idToDelete)
-
-  if (result.success) {
-    closeDeleteDialog()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data bangsal berhasil dihapus.',
-    })
-
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--
-    }
-
-    fetchWards()
-  } else {
-    const errorMsg = result.error?.response?.data?.message || 'Data bangsal gagal dihapus.'
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMsg,
-    })
-    closeDeleteDialog()
-  }
-}
-
-const getDeleteConfirmMessage = (ward) => {
-  if (!ward) return ''
-  const floorDisplay =
-    ward.floor_display_name ||
-    (ward.floor
-      ? ward.floor.building?.name
-        ? `${ward.floor.name} - ${ward.floor.building.name}`
-        : ward.floor.name
-      : 'Lantai')
-  return `Apakah Anda yakin ingin menghapus bangsal “${ward.name}” dari “${floorDisplay}”?`
-}
-
-onMounted(() => {
-  fetchWards()
-})
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Data Bangsal"
-      subtitle="Kelola data bangsal berdasarkan lantai dan gedung untuk mendukung pengaturan ruangan serta tempat tidur rumah sakit."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Bed', active: false },
-        { label: 'Data Bangsal', active: true },
-      ]"
+      description="Kelola data bangsal berdasarkan lantai dan gedung untuk mendukung pengaturan ruangan serta tempat tidur rumah sakit."
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Bed', 'Data Bangsal']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Bangsal
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <WardFilters
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchWards"
-      />
-
-      <MasterDataErrorState v-if="error" :error="error" @retry="fetchWards" />
-
-      <template v-else>
-        <MasterDataEmptyState v-if="!loading && items.length === 0" :is-search="!!filters.search">
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Bangsal</button>
-          </template>
-        </MasterDataEmptyState>
-
-        <template v-else>
-          <WardTable
-            :items="items"
-            :pagination="pagination"
-            :loading="loading"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-
-          <MasterDataPagination
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <WardFormModal
-      :is-open="formModalOpen"
-      :ward="selectedWard"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="closeFormModal"
-      @submit="handleFormSubmit"
+    <WardFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog
-      :is-open="deleteDialogOpen"
-      :is-deleting="submitting"
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data bangsal gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
+        </template>
+      </BaseEmptyState>
+    </div>
+
+    <template v-else>
+      <WardTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingWard = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Bangsal tidak ditemukan"
+            :description="`Tidak ada bangsal yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data bangsal"
+            description="Tambahkan bangsal pertama untuk mulai mengelola data bangsal."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Bangsal</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </WardTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <WardFormModal
+      :open="formOpen"
+      :ward="editingWard"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingWard)"
       title="Hapus Bangsal"
-      :confirm-message="getDeleteConfirmMessage(wardToDelete)"
+      :message="deleteMessage"
       confirm-text="Hapus"
-      @close="closeDeleteDialog"
-      @confirm="handleDeleteConfirm"
+      :loading="saving"
+      @close="deletingWard = null"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  padding: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.page-content {
-  margin-top: 1.5rem;
-}
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--color-primary);
-  color: #ffffff;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.btn-primary:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-</style>

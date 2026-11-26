@@ -10,7 +10,6 @@ import AdmissionPrintModal from './components/AdmissionPrintModal.vue';
 import AdmissionNewModal from './components/AdmissionNewModal.vue';
 import PatientDetailModal from '@/views/registration/components/PatientDetailModal.vue';
 import { useAdmissions } from '@/composables/useAdmissions';
-import { mockPatients } from '@/mocks/patients';
 import patientService from '@/services/patient.service';
 import admissionService from '@/services/admission.service';
 import lookupService from '@/services/lookup.service';
@@ -29,11 +28,14 @@ const {
   loading: mockLoading,
   mockPolyclinics,
   mockDoctors,
+  masterGuarantors,
+  guarantorsLoading,
+  guarantorsError,
+  fetchGuarantors,
   setSort: mockSetSort,
   setPage: mockSetPage,
   setPerPage: mockSetPerPage,
-  deleteAdmission,
-  addAdmission
+  deleteAdmission
 } = useAdmissions();
 
 // Real API Admissions state
@@ -67,7 +69,7 @@ const loadAdmissions = async () => {
     realLastPage.value = meta.last_page ?? 1;
     realFrom.value = meta.from ?? (data.length > 0 ? (realCurrentPage.value - 1) * realPerPage.value + 1 : 0);
     realTo.value = meta.to ?? (data.length > 0 ? realFrom.value + data.length - 1 : 0);
-  } catch (err) {
+  } catch {
     realAdmissions.value = paginatedAdmissions.value;
     realTotal.value = paginationInfo.value.total;
     realCurrentPage.value = paginationInfo.value.current_page;
@@ -342,6 +344,7 @@ const handleSubmitNew = async (newRecordData) => {
       patient_id: patientId,
       polyclinic: newRecordData.polyclinic,
       doctor: newRecordData.doctor,
+      guarantor_id: newRecordData.guarantor_id || undefined,
       notes: newRecordData.notes || '',
       admission_date: newRecordData.admission_date
     };
@@ -364,6 +367,7 @@ const handleSubmitNew = async (newRecordData) => {
 };
 
 onMounted(async () => {
+  fetchGuarantors();
   await loadAdmissions();
 
   // If patient_id passed in query string from Registration handoff
@@ -403,7 +407,9 @@ onMounted(async () => {
     if (polyData.length > 0) {
       polyclinicsList.value = polyData.map((p) => p.name || p.nama_poliklinik);
     }
-  } catch {}
+  } catch {
+    // Gunakan daftar default apabila API poliklinik gagal dimuat
+  }
 
   try {
     const docRes = await lookupService.getDoctors();
@@ -411,7 +417,9 @@ onMounted(async () => {
     if (docData.length > 0) {
       doctorsList.value = docData.map((d) => d.name || d.nama_lengkap || d.nama);
     }
-  } catch {}
+  } catch {
+    // Gunakan daftar default apabila API dokter gagal dimuat
+  }
 });
 </script>
 
@@ -467,6 +475,9 @@ onMounted(async () => {
         :sort-key="sort.key"
         :sort-direction="sort.direction"
         :loading="realLoading || mockLoading"
+        :guarantors="masterGuarantors"
+        :guarantors-loading="guarantorsLoading"
+        :guarantors-error="guarantorsError"
         @update:guarantorFilter="handleGuarantorChange"
         @update:perPage="handlePerPageChange"
         @page-change="handlePageChange"
@@ -475,6 +486,7 @@ onMounted(async () => {
         @delete-admission="handleOpenDelete"
         @print-document="handleOpenPrint"
         @reset-filter="handleResetGuarantor"
+        @retry-guarantors="fetchGuarantors"
       />
     </div>
 
@@ -502,6 +514,7 @@ onMounted(async () => {
       :is-open="isNewOpen"
       :polyclinics="polyclinicsList.length > 0 ? polyclinicsList : mockPolyclinics"
       :doctors="doctorsList.length > 0 ? doctorsList : mockDoctors"
+      :guarantors="masterGuarantors"
       :next-queue-number="nextQueueNumber"
       :patient="selectedOldPatient"
       @close="handleCloseNewModal"

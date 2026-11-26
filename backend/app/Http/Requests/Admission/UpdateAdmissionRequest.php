@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Admission;
 
+use App\Models\Legacy\LegacyAdmission;
+use App\Support\GuarantorValidation;
 use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +65,15 @@ class UpdateAdmissionRequest extends FormRequest
                     $validator->errors()->add('doctor_id', 'Dokter yang dipilih tidak bertugas atau tidak memiliki jadwal aktif pada poliklinik ini.');
                 }
             }
+
+            $currentGuarantorId = null;
+            $admissionId = $this->route('id');
+            if ($admissionId && LegacyAccess::isAvailable('trx_admisi')) {
+                $current = LegacyAdmission::find($admissionId);
+                $currentGuarantorId = $current?->id_jenis_asuransi ? (int) $current->id_jenis_asuransi : null;
+            }
+
+            GuarantorValidation::validateGuarantorId($validator, $this->input('guarantor_id'), $currentGuarantorId);
         });
     }
 

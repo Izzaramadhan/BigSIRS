@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import InvoiceView from '../InvoiceView.vue';
 import InvoiceSummaryCards from '../components/InvoiceSummaryCards.vue';
@@ -8,6 +8,7 @@ import InvoiceStatusBadge from '../components/InvoiceStatusBadge.vue';
 import InvoiceFormModal from '../components/InvoiceFormModal.vue';
 import InvoiceDetailModal from '../components/InvoiceDetailModal.vue';
 import InvoiceDeleteDialog from '../components/InvoiceDeleteDialog.vue';
+import { invoicesService } from '@/services/logistics/invoices.service';
 import { useInvoices } from '@/composables/useInvoices';
 
 describe('Invoice Module Tests', () => {
@@ -16,6 +17,10 @@ describe('Invoice Module Tests', () => {
 
     beforeEach(() => {
       composable = useInvoices();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
     it('initializes with default mock invoices and valid summary stats', () => {
@@ -36,6 +41,39 @@ describe('Invoice Module Tests', () => {
 
     it('adds, updates, and deletes an invoice in local state', async () => {
       const initialCount = composable.invoices.value.length;
+
+      vi.spyOn(invoicesService, 'createInvoice').mockResolvedValueOnce({
+        data: {
+          id: 9999,
+          invoiceNumber: 'FKT-TEST-999',
+          referenceNumber: 'PO-TEST-999',
+          invoiceDate: '2026-09-15',
+          dueDate: '2026-10-15',
+          supplierId: 1,
+          status: 'Belum Lunas',
+          notes: 'Test note',
+          totalAmount: 500000,
+          items: [
+            { id: 1, medicineId: 1, medicineName: 'Paracetamol 500 mg Tablet', quantity: 10, unit: 'Box', price: 50000, discount: 0, subtotal: 500000 }
+          ]
+        }
+      });
+      vi.spyOn(invoicesService, 'updateInvoice').mockResolvedValueOnce({
+        data: {
+          id: 9999,
+          invoiceNumber: 'FKT-TEST-999-EDITED',
+          referenceNumber: 'PO-TEST-999',
+          invoiceDate: '2026-09-15',
+          dueDate: '2026-10-15',
+          supplierId: 1,
+          status: 'Lunas',
+          totalAmount: 1000000,
+          items: [
+            { id: 1, medicineId: 1, medicineName: 'Paracetamol 500 mg Tablet', quantity: 20, unit: 'Box', price: 50000, discount: 0, subtotal: 1000000 }
+          ]
+        }
+      });
+      vi.spyOn(invoicesService, 'deleteInvoice').mockResolvedValueOnce({ success: true });
 
       // Add
       const addRes = await composable.addInvoice({

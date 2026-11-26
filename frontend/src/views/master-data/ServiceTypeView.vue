@@ -1,269 +1,221 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useServiceTypes } from '@/composables/useServiceTypes'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import ServiceTypeFilters from '@/components/master-data/service-types/ServiceTypeFilters.vue'
 import ServiceTypeFormModal from '@/components/master-data/service-types/ServiceTypeFormModal.vue'
-import AppToast from '@/components/common/AppToast.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import MasterDataSearchInput from '@/components/master-data/shared/MasterDataSearchInput.vue'
-import MasterDataActionButtons from '@/components/master-data/shared/MasterDataActionButtons.vue'
+import ServiceTypeTable from '@/components/master-data/service-types/ServiceTypeTable.vue'
+import { getSafeServiceTypeErrorMessage } from '@/components/master-data/service-types/service-type.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useServiceTypes } from '@/composables/useServiceTypes'
 
 const {
-  serviceTypes,
+  items,
   meta,
+  filters,
   loading,
-  error,
-  fetchServiceTypes,
-  deleteServiceType
+  loadError,
+  saving,
+  fetchItems,
+  setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useServiceTypes()
+const toast = useToast()
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
-})
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingServiceType = ref(null)
+const formErrors = ref({})
+const formGeneralError = ref('')
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
+function openForm(serviceType = null) {
+  editingServiceType.value = serviceType
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
 }
 
-const closeToast = () => {
-  toast.value.show = false
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingServiceType.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
 }
 
-const searchQuery = ref('')
-const currentPage = ref(1)
-const perPage = ref(10)
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
 
-const isFormModalOpen = ref(false)
-const selectedServiceType = ref(null)
+  const isEdit = Boolean(editingServiceType.value)
+  const fallback = isEdit
+    ? 'Data jenis layanan gagal diperbarui.'
+    : 'Data jenis layanan gagal ditambahkan.'
+  const result = isEdit
+    ? await update(editingServiceType.value.id, payload)
+    : await create(payload)
 
-const isDeleteModalOpen = ref(false)
-const serviceTypeToDelete = ref(null)
-const deleteError = ref(null)
-
-const handleSearch = () => {
-  currentPage.value = 1
-  loadData()
-}
-
-const handleRefresh = () => {
-  loadData()
-}
-
-const handlePageChange = (page) => {
-  if (page < 1 || page > meta.value.last_page) return
-  currentPage.value = page
-  loadData()
-}
-
-const loadData = async () => {
-  try {
-    await fetchServiceTypes({
-      page: currentPage.value,
-      per_page: perPage.value,
-      search: searchQuery.value
-    })
-  } catch (err) {
-    console.error('Failed to load service types:', err)
+  if (!result.ok) {
+    const safeMessage = getSafeServiceTypeErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
   }
+
+  closeForm()
+  toast.success(
+    isEdit
+      ? 'Data jenis layanan berhasil diperbarui.'
+      : 'Data jenis layanan berhasil ditambahkan.',
+  )
 }
 
-const openAddModal = () => {
-  selectedServiceType.value = null
-  isFormModalOpen.value = true
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingServiceType = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingServiceType.value) return ''
+  return `Apakah Anda yakin ingin menghapus jenis layanan “${deletingServiceType.value.name}”?`
+})
+
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingServiceType.value = null
 }
 
-const openEditModal = (serviceType) => {
-  selectedServiceType.value = { ...serviceType }
-  isFormModalOpen.value = true
-}
+async function handleDelete() {
+  if (saving.value || !deletingServiceType.value) return
+  const result = await remove(deletingServiceType.value.id)
+  deletingServiceType.value = null
 
-const onFormSuccess = () => {
-  const isEditing = Boolean(selectedServiceType.value)
-  isFormModalOpen.value = false
-  loadData()
-  showToast({
-    type: 'success',
-    title: 'Berhasil',
-    message: isEditing ? 'Data jenis layanan berhasil diperbarui.' : 'Data jenis layanan berhasil ditambahkan.'
-  })
-}
-
-const confirmDelete = (serviceType) => {
-  serviceTypeToDelete.value = serviceType
-  deleteError.value = null
-  isDeleteModalOpen.value = true
-}
-
-const handleDelete = async () => {
-  if (!serviceTypeToDelete.value) return
-  
-  try {
-    await deleteServiceType(serviceTypeToDelete.value.id)
-    isDeleteModalOpen.value = false
-    loadData()
-    showToast({ type: 'success', title: 'Berhasil', message: 'Data jenis layanan berhasil dihapus.' })
-  } catch (err) {
-    showToast({ 
-      type: 'error', 
-      title: 'Gagal Menghapus', 
-      message: err.response?.data?.message || 'Data jenis layanan gagal dihapus.' 
-    })
-    isDeleteModalOpen.value = false
+  if (result.ok) {
+    toast.success('Data jenis layanan berhasil dihapus.')
+    return
   }
+
+  toast.error(
+    getSafeServiceTypeErrorMessage(result.error, 'Data jenis layanan gagal dihapus.'),
+  )
 }
 
-let searchTimeout
-watch(searchQuery, () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    handleSearch()
-  }, 300)
-})
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeServiceTypeErrorMessage({ message: loadError.value }, 'Data jenis layanan gagal dimuat.')
+    : '',
+)
 
-onMounted(() => {
-  loadData()
-})
-
-const getRowNumber = (index) => {
-  return (currentPage.value - 1) * perPage.value + index + 1;
-};
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast 
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <MasterDataPageHeader 
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Jenis Layanan"
-      subtitle="Kelola data dasar jenis layanan."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Data Dasar', active: false },
-        { label: 'Jenis Layanan', active: true }
-      ]"
+      description="Kelola data dasar jenis layanan."
+      :breadcrumbs="['Dashboard', 'Data Dasar', 'Jenis Layanan']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Jenis Layanan
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <div class="page-content">
-      <div class="filters-container">
-        <MasterDataSearchInput 
-          v-model="searchQuery" 
-          placeholder="Cari jenis layanan..." 
-        />
-
-        <div class="filter-selects">
-          <div class="filters-actions">
-            <button type="button" class="btn-icon" @click="handleRefresh" title="Refresh Data" :disabled="loading">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ 'spin': loading }">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error" 
-        @retry="loadData" 
-      />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && serviceTypes.length === 0" 
-          :is-search="!!searchQuery"
-        >
-          <template #action v-if="!searchQuery">
-            <button class="btn-primary" @click="openAddModal">Tambah Jenis Layanan</button>
-          </template>
-        </MasterDataEmptyState>
-        
-        <template v-else>
-          <div class="table-wrapper">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th class="col-no">No</th>
-                    <th class="col-name">Jenis Layanan</th>
-                    <th class="col-actions text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template v-if="loading">
-                    <tr v-for="i in 5" :key="`skeleton-${i}`" class="skeleton-row">
-                      <td><div class="skeleton-box skeleton-small"></div></td>
-                      <td><div class="skeleton-box skeleton-medium"></div></td>
-                      <td><div class="skeleton-box skeleton-circle"></div></td>
-                    </tr>
-                  </template>
-
-                  <template v-else>
-                    <tr v-for="(item, index) in serviceTypes" :key="item.id">
-                      <td class="col-no text-muted">{{ getRowNumber(index) }}</td>
-                      <td class="col-name font-medium text-navy">{{ item.name }}</td>
-                      <td class="actions-cell">
-                        <MasterDataActionButtons 
-                          :show-toggle="false"
-                          @edit="openEditModal(item)"
-                          @delete="confirmDelete(item)"
-                        />
-                      </td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <MasterDataPagination 
-            v-if="meta"
-            :pagination="{ current_page: currentPage, last_page: meta.last_page || 1, per_page: perPage, total: meta.total || 0, from: meta.from, to: meta.to }"
-            :loading="loading"
-            :item-count="serviceTypes.length"
-            @page-change="handlePageChange"
-          />
-        </template>
-      </template>
-    </div>
-    
-    <ServiceTypeFormModal 
-      :is-open="isFormModalOpen"
-      :service-type="selectedServiceType"
-      @close="isFormModalOpen = false"
-      @success="onFormSuccess"
+    <ServiceTypeFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog 
-      :is-open="isDeleteModalOpen"
+    <ServiceTypeTable
+      :items="items"
+      :loading="loading"
+      :offset="(meta.page - 1) * meta.perPage"
+      @edit="openForm($event)"
+      @delete="deletingServiceType = $event"
+    >
+      <template #empty>
+        <BaseEmptyState
+          v-if="loadError"
+          :icon="CircleAlert"
+          tone="danger"
+          title="Gagal memuat data jenis layanan"
+          :description="safeLoadError"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="fetchItems">Coba Lagi</BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else-if="filters.search"
+          :icon="SearchX"
+          title="Jenis layanan tidak ditemukan"
+          :description="`Tidak ada jenis layanan yang cocok dengan kata kunci “${filters.search}”.`"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="setFilters({ search: '' })">
+              Reset Pencarian
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else
+          :icon="Inbox"
+          title="Belum ada data jenis layanan"
+          description="Tambahkan jenis layanan pertama untuk melengkapi data referensi."
+        >
+          <template #action>
+            <BaseButton @click="openForm()">
+              <template #icon><Plus class="size-4" aria-hidden="true" /></template>
+              Tambah Jenis Layanan
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+      </template>
+    </ServiceTypeTable>
+
+    <BasePagination
+      :page="meta.page"
+      :last-page="meta.lastPage"
+      :total="meta.total"
+      :from="meta.from"
+      :to="meta.to"
+      :disabled="loading"
+      @change="setPage"
+    />
+
+    <ServiceTypeFormModal
+      :open="formOpen"
+      :service-type="editingServiceType"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingServiceType)"
       title="Hapus Jenis Layanan?"
-      :item-name="serviceTypeToDelete?.name || ''"
-      warning-message="Tindakan ini tidak dapat dibatalkan."
-      :is-submitting="loading"
-      @close="isDeleteModalOpen = false"
+      :message="deleteMessage"
+      confirm-text="Ya, Hapus"
+      :loading="saving"
+      @close="closeDeleteDialog"
       @confirm="handleDelete"
     />
   </div>

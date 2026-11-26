@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
-import DoctorScheduleView from '../DoctorScheduleView.vue';
-import doctorScheduleService from '@/services/master-data/doctor-schedules.service';
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import DoctorScheduleView from '../DoctorScheduleView.vue'
+import { useToast } from '@/composables/core/useToast'
+import lookupService from '@/services/lookup.service'
+import doctorScheduleService from '@/services/master-data/doctor-schedules.service'
+import { polyclinicService } from '@/services/polyclinic'
 
 vi.mock('@/services/master-data/doctor-schedules.service', () => ({
   default: {
@@ -10,287 +13,342 @@ vi.mock('@/services/master-data/doctor-schedules.service', () => ({
     getDoctorSchedule: vi.fn(),
     createDoctorSchedule: vi.fn(),
     updateDoctorSchedule: vi.fn(),
-    deleteDoctorSchedule: vi.fn()
-  }
-}));
+    deleteDoctorSchedule: vi.fn(),
+  },
+}))
+
+vi.mock('@/services/lookup.service', () => ({
+  default: {
+    getDoctors: vi.fn(),
+  },
+}))
+
+vi.mock('@/services/polyclinic', () => ({
+  polyclinicService: {
+    getPolyclinics: vi.fn(),
+  },
+}))
+
+const mockPaginatedResponse = {
+  data: [
+    {
+      id: 1,
+      doctor_id: 101,
+      doctor: { id: 101, name: 'dr. Andi Sp.PD' },
+      polyclinic_id: 10,
+      polyclinic: { id: 10, name: 'Poli Penyakit Dalam' },
+      day_of_week: 1,
+      start_time: '08:00',
+      end_time: '12:00',
+      is_holiday: false,
+      online_quota: 20,
+    },
+  ],
+  meta: {
+    current_page: 1,
+    last_page: 2,
+    per_page: 10,
+    total: 12,
+    from: 1,
+    to: 10,
+  },
+}
+
+const mockRecapResponse = {
+  data: [
+    {
+      id: 1,
+      doctor_id: 101,
+      doctor: { id: 101, name: 'dr. Andi Sp.PD', specialization: 'Spesialis Penyakit Dalam' },
+      polyclinic_id: 10,
+      polyclinic: { id: 10, name: 'Poli Penyakit Dalam' },
+      day_of_week: 1,
+      start_time: '08:00',
+      end_time: '12:00',
+      is_holiday: false,
+    },
+    {
+      id: 2,
+      doctor_id: 102,
+      doctor: { id: 102, name: 'dr. Budi Sp.A', specialization: 'Spesialis Anak' },
+      polyclinic_id: 20,
+      polyclinic: { id: 20, name: 'Poli Anak' },
+      day_of_week: 2,
+      start_time: '09:00',
+      end_time: '13:00',
+      is_holiday: false,
+    },
+  ],
+}
+
+const toast = useToast()
+const toastEntries = () => toast.toasts.value
+
+async function mountView() {
+  const wrapper = mount(DoctorScheduleView, {
+    global: {
+      stubs: {
+        Teleport: true,
+      },
+    },
+  })
+  await flushPromises()
+  return wrapper
+}
+
+function findButtonByText(wrapper, label) {
+  return wrapper.findAll('button').find((button) => button.text().trim() === label)
+}
+
+function findControlByLabel(wrapper, labelText) {
+  const label = wrapper
+    .findAll('label')
+    .find((node) => node.text().replace('*', '').trim() === labelText)
+  return wrapper.get(`[id="${label.attributes('for')}"]`)
+}
 
 describe('DoctorScheduleView.vue', () => {
-  const mockPaginatedResponse = {
-    data: [
-      {
-        id: 1,
-        doctor_id: 101,
-        doctor: { id: 101, name: 'dr. Andi Sp.PD' },
-        polyclinic_id: 10,
-        polyclinic: { id: 10, name: 'Poli Penyakit Dalam' },
-        day_of_week: 1,
-        start_time: '08:00',
-        end_time: '12:00',
-        is_holiday: false
-      }
-    ],
-    meta: {
-      current_page: 1,
-      last_page: 2,
-      per_page: 1,
-      total: 2
-    }
-  };
-
-  const mockRecapResponse = {
-    data: [
-      {
-        id: 1,
-        doctor_id: 101,
-        doctor: { id: 101, name: 'dr. Andi Sp.PD', specialization: 'Spesialis Penyakit Dalam' },
-        polyclinic_id: 10,
-        polyclinic: { id: 10, name: 'Poli Penyakit Dalam' },
-        day_of_week: 1,
-        start_time: '08:00',
-        end_time: '12:00',
-        is_holiday: false
-      },
-      {
-        id: 2,
-        doctor_id: 102,
-        doctor: { id: 102, name: 'dr. Budi Sp.A', specialization: 'Spesialis Anak' },
-        polyclinic_id: 20,
-        polyclinic: { id: 20, name: 'Poli Anak' },
-        day_of_week: 2,
-        start_time: '09:00',
-        end_time: '13:00',
-        is_holiday: false
-      }
-    ]
-  };
-
   beforeEach(() => {
-    vi.clearAllMocks();
-    doctorScheduleService.getDoctorSchedules.mockResolvedValue(mockPaginatedResponse);
-    doctorScheduleService.getRecap.mockResolvedValue(mockRecapResponse);
-  });
+    vi.resetAllMocks()
+    vi.useRealTimers()
+    toast.clear()
 
-  it('fetches both paginated schedules and unpaginated recap on mount', async () => {
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
+    doctorScheduleService.getDoctorSchedules.mockResolvedValue(mockPaginatedResponse)
+    doctorScheduleService.getRecap.mockResolvedValue(mockRecapResponse)
+    lookupService.getDoctors.mockResolvedValue({
+      data: [
+        { id: 101, name: 'dr. Andi Sp.PD', specialization_name: 'Penyakit Dalam', is_active: true },
+      ],
+    })
+    polyclinicService.getPolyclinics.mockResolvedValue({
+      data: {
+        data: [{ id: 10, name: 'Poli Penyakit Dalam' }],
+      },
+    })
+  })
 
-    await flushPromises();
+  afterEach(() => {
+    vi.useRealTimers()
+    document.body.innerHTML = ''
+  })
 
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(1);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1);
+  it('memuat daftar berpaginasi dan rekap mingguan saat mount, merender 8 kolom standar, serta tanpa filter yang dihapus', async () => {
+    const wrapper = await mountView()
 
-    // Both tables should be rendered
-    expect(wrapper.findComponent({ name: 'DoctorScheduleTable' }).exists()).toBe(true);
-    expect(wrapper.findComponent({ name: 'DoctorScheduleRecapTable' }).exists()).toBe(true);
-  });
+    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(1)
+    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1)
 
-  it('changing pagination does not refetch recap data', async () => {
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
+    expect(wrapper.get('h1').text()).toBe('Data Jadwal Dokter')
+    const headers = wrapper
+      .findAll('table')
+      .at(0)
+      .findAll('thead th')
+      .map((th) => th.text())
+    expect(headers).toEqual([
+      'No',
+      'Nama Dokter',
+      'Poliklinik',
+      'Hari Praktik',
+      'Jam Mulai',
+      'Jam Selesai',
+      'Status',
+      'Aksi',
+    ])
 
-    await flushPromises();
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(1);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1);
+    const text = wrapper.text()
+    expect(text).not.toContain('Semua Hari')
+    expect(text).not.toContain('Semua Status')
+    expect(text).not.toContain('Reset Filter')
+  })
 
-    // Simulate page change from pagination component
-    const paginationComp = wrapper.findComponent({ name: 'MasterDataPagination' });
-    await paginationComp.vm.$emit('page-change', 2);
-    await flushPromises();
+  it('perpindahan halaman paginasi memuat halaman baru tanpa me-refetch rekap, sedangkan refresh memuat ulang keduanya', async () => {
+    doctorScheduleService.getDoctorSchedules
+      .mockResolvedValueOnce(mockPaginatedResponse)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 11,
+            doctor_id: 101,
+            doctor: { id: 101, name: 'dr. Halaman Dua' },
+            polyclinic_id: 10,
+            polyclinic: { id: 10, name: 'Poli Penyakit Dalam' },
+            day_of_week: 5,
+            start_time: '08:00',
+            end_time: '10:00',
+            is_holiday: false,
+          },
+        ],
+        meta: { current_page: 2, last_page: 2, per_page: 10, total: 12, from: 11, to: 12 },
+      })
+      .mockResolvedValueOnce(mockPaginatedResponse)
 
-    // getDoctorSchedules called for page 2
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2);
+    const wrapper = await mountView()
+
+    await wrapper.get('button[aria-label="Halaman berikutnya"]').trigger('click')
+    await flushPromises()
+
+    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2)
     expect(doctorScheduleService.getDoctorSchedules).toHaveBeenLastCalledWith(
-      expect.objectContaining({ page: 2 })
-    );
+      expect.objectContaining({ page: 2 }),
+    )
+    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('table').at(0).get('tbody tr td:first-child').text()).toBe('11')
 
-    // getRecap should NOT be refetched by page change
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1);
-  });
+    await wrapper.get('button[aria-label="Muat ulang data"]').trigger('click')
+    await flushPromises()
 
-  it('clicking refresh button calls both fetchSchedules and fetchRecap', async () => {
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
+    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(3)
+    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(2)
+  })
 
-    await flushPromises();
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(1);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1);
+  it('melakukan debounce pencarian 400ms, menampilkan empty state pencarian, dan mencegah stale response menimpa data terbaru', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
 
-    // Emit refresh from filters component
-    const filtersComp = wrapper.findComponent({ name: 'DoctorScheduleFilters' });
-    await filtersComp.vm.$emit('refresh');
-    await flushPromises();
+    let resolveSlow
+    const slowPromise = new Promise((resolve) => {
+      resolveSlow = resolve
+    })
+    doctorScheduleService.getDoctorSchedules.mockReturnValueOnce(slowPromise)
 
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(2);
-  });
+    const searchInput = wrapper.get('input[placeholder="Cari dokter atau poliklinik..."]')
+    await searchInput.setValue('Andi')
+    await vi.advanceTimersByTimeAsync(400)
 
-  it('synchronizes both list and recap after creating a new schedule', async () => {
-    doctorScheduleService.createDoctorSchedule.mockResolvedValue({ data: { id: 3 } });
+    // Pencarian kedua selesai lebih cepat (hasil kosong)
+    doctorScheduleService.getDoctorSchedules.mockResolvedValueOnce({
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 10, total: 0, from: 0, to: 0 },
+    })
+    await searchInput.setValue('TidakAda')
+    await vi.advanceTimersByTimeAsync(400)
+    await flushPromises()
 
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
+    expect(wrapper.text()).toContain('Jadwal dokter tidak ditemukan')
 
-    await flushPromises();
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(1);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(1);
+    // Request pertama yang lambat resolve belakangan — harus diabaikan
+    resolveSlow(mockPaginatedResponse)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Jadwal dokter tidak ditemukan')
 
-    // Open add modal and submit
-    const formModal = wrapper.findComponent({ name: 'DoctorScheduleFormModal' });
-    await formModal.vm.$emit('save', {
+    // Reset Pencarian memuat ulang data normal
+    doctorScheduleService.getDoctorSchedules.mockResolvedValueOnce(mockPaginatedResponse)
+    await findButtonByText(wrapper, 'Reset Pencarian').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('dr. Andi Sp.PD')
+  })
+
+  it('menyinkronkan tabel utama dan rekap setelah tambah, edit, hapus, serta menampilkan toast warning jika rekap gagal', async () => {
+    doctorScheduleService.createDoctorSchedule.mockResolvedValue({ data: { id: 3 } })
+    doctorScheduleService.updateDoctorSchedule.mockResolvedValue({ data: { id: 1 } })
+    doctorScheduleService.deleteDoctorSchedule.mockResolvedValue({})
+
+    const wrapper = await mountView()
+
+    // 1. Tambah jadwal baru -> sinkron list + recap + toast sukses
+    await findButtonByText(wrapper, 'Tambah Jadwal Dokter').trigger('click')
+    await flushPromises()
+
+    await findControlByLabel(wrapper, 'Nama Dokter').setValue('101')
+    await findControlByLabel(wrapper, 'Poliklinik').setValue('10')
+    await findControlByLabel(wrapper, 'Hari Praktik').setValue('3')
+    await findControlByLabel(wrapper, 'Jam Mulai').setValue('10:00')
+    await findControlByLabel(wrapper, 'Jam Selesai').setValue('14:00')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(doctorScheduleService.createDoctorSchedule).toHaveBeenCalledWith({
       doctor_id: 101,
       polyclinic_id: 10,
       day_of_week: 3,
       start_time: '10:00',
       end_time: '14:00',
-      is_holiday: false
-    });
-    await flushPromises();
+      is_holiday: false,
+      online_quota: null,
+    })
+    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2)
+    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(2)
+    expect(toastEntries().at(-1)).toMatchObject({
+      tone: 'success',
+      message: 'Jadwal dokter berhasil ditambahkan.',
+    })
 
-    expect(doctorScheduleService.createDoctorSchedule).toHaveBeenCalled();
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(2);
+    // 2. Edit jadwal + simulasi gagal muat rekap -> warning toast
+    doctorScheduleService.getRecap.mockRejectedValueOnce(new Error('Network error on recap'))
+    await wrapper
+      .get('button[aria-label="Edit dr. Andi Sp.PD di Poli Penyakit Dalam (Senin, 08:00 – 12:00)"]')
+      .trigger('click')
+    await flushPromises()
 
-    const toast = wrapper.findComponent({ name: 'AppToast' });
-    expect(toast.props('type')).toBe('success');
-    expect(toast.props('message')).toContain('Jadwal dokter berhasil ditambahkan.');
-  });
-
-  it('synchronizes both list and recap after updating a schedule', async () => {
-    doctorScheduleService.updateDoctorSchedule.mockResolvedValue({ data: { id: 1 } });
-
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
-
-    await flushPromises();
-
-    // Trigger edit on row
-    const table = wrapper.findComponent({ name: 'DoctorScheduleTable' });
-    await table.vm.$emit('edit', mockPaginatedResponse.data[0]);
-
-    // Submit modal
-    const formModal = wrapper.findComponent({ name: 'DoctorScheduleFormModal' });
-    await formModal.vm.$emit('save', {
-      doctor_id: 101,
-      polyclinic_id: 10,
-      day_of_week: 4,
-      start_time: '11:00',
-      end_time: '15:00',
-      is_holiday: true
-    });
-    await flushPromises();
+    await findControlByLabel(wrapper, 'Hari Praktik').setValue('4')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(doctorScheduleService.updateDoctorSchedule).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ day_of_week: 4, is_holiday: true })
-    );
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(2);
+      expect.objectContaining({ day_of_week: 4 }),
+    )
+    expect(toastEntries().slice(-2)).toMatchObject([
+      { tone: 'success', message: 'Jadwal dokter berhasil diperbarui.' },
+      { tone: 'danger', message: 'Data rekap jadwal gagal dimuat ulang. Silakan klik Coba Lagi pada rekap.' },
+    ])
 
-    const toast = wrapper.findComponent({ name: 'AppToast' });
-    expect(toast.props('type')).toBe('success');
-    expect(toast.props('message')).toContain('Jadwal dokter berhasil diperbarui.');
-  });
+    // 3. Hapus jadwal -> sinkron list + recap
+    await wrapper
+      .get('button[aria-label="Hapus dr. Andi Sp.PD di Poli Penyakit Dalam (Senin, 08:00 – 12:00)"]')
+      .trigger('click')
+    await flushPromises()
+    await findButtonByText(wrapper, 'Ya, Hapus').trigger('click')
+    await flushPromises()
 
-  it('synchronizes both list and recap after deleting a schedule', async () => {
-    doctorScheduleService.deleteDoctorSchedule.mockResolvedValue({});
+    expect(doctorScheduleService.deleteDoctorSchedule).toHaveBeenCalledWith(1)
+    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(4)
+    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(4)
+    expect(toastEntries().at(-1)).toMatchObject({
+      tone: 'success',
+      message: 'Jadwal dokter berhasil dihapus.',
+    })
+  })
 
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
+  it('menampilkan error 422 bentrok jadwal dan state gagal memuat dengan tombol Muat Ulang', async () => {
+    doctorScheduleService.getDoctorSchedules.mockRejectedValueOnce({
+      response: { status: 500, data: { message: 'SQLSTATE[42000]: syntax' } },
+    })
 
-    await flushPromises();
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('Gagal memuat jadwal dokter')
+    expect(wrapper.text()).toContain('Data jadwal dokter gagal dimuat.')
 
-    // Trigger delete dialog on row
-    const table = wrapper.findComponent({ name: 'DoctorScheduleTable' });
-    await table.vm.$emit('delete', mockPaginatedResponse.data[0]);
+    doctorScheduleService.getDoctorSchedules.mockResolvedValueOnce(mockPaginatedResponse)
+    await findButtonByText(wrapper, 'Muat Ulang').trigger('click')
+    await flushPromises()
 
-    // Confirm deletion
-    const deleteDialog = wrapper.findComponent({ name: 'MasterDataDeleteDialog' });
-    await deleteDialog.vm.$emit('confirm');
-    await flushPromises();
+    doctorScheduleService.createDoctorSchedule.mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: {
+          message: 'Dokter sudah memiliki jadwal yang bertabrakan pada hari dan waktu tersebut.',
+          errors: {
+            start_time: ['Jadwal bertabrakan dengan jadwal yang sudah ada.'],
+          },
+        },
+      },
+    })
 
-    expect(doctorScheduleService.deleteDoctorSchedule).toHaveBeenCalledWith(1);
-    expect(doctorScheduleService.getDoctorSchedules).toHaveBeenCalledTimes(2);
-    expect(doctorScheduleService.getRecap).toHaveBeenCalledTimes(2);
+    await findButtonByText(wrapper, 'Tambah Jadwal Dokter').trigger('click')
+    await flushPromises()
+    await findControlByLabel(wrapper, 'Nama Dokter').setValue('101')
+    await findControlByLabel(wrapper, 'Poliklinik').setValue('10')
+    await findControlByLabel(wrapper, 'Hari Praktik').setValue('1')
+    await findControlByLabel(wrapper, 'Jam Mulai').setValue('08:00')
+    await findControlByLabel(wrapper, 'Jam Selesai').setValue('10:00')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
 
-    const toast = wrapper.findComponent({ name: 'AppToast' });
-    expect(toast.props('type')).toBe('success');
-    expect(toast.props('message')).toContain('Jadwal dokter berhasil dihapus.');
-  });
-
-  it('shows warning toast if save succeeds but recap fetch fails', async () => {
-    doctorScheduleService.createDoctorSchedule.mockResolvedValue({ data: { id: 3 } });
-
-    const wrapper = mount(DoctorScheduleView, {
-      global: {
-        stubs: {
-          DoctorScheduleFormModal: true,
-          MasterDataDeleteDialog: true,
-          Teleport: true
-        }
-      }
-    });
-
-    await flushPromises();
-
-    // Next getRecap call fails
-    doctorScheduleService.getRecap.mockRejectedValueOnce(new Error('Network error on recap'));
-
-    const formModal = wrapper.findComponent({ name: 'DoctorScheduleFormModal' });
-    await formModal.vm.$emit('save', {
-      doctor_id: 101,
-      polyclinic_id: 10,
-      day_of_week: 5,
-      start_time: '08:00',
-      end_time: '12:00',
-      is_holiday: false
-    });
-    await flushPromises();
-
-    const toast = wrapper.findComponent({ name: 'AppToast' });
-    expect(toast.props('type')).toBe('warning');
-    expect(toast.props('title')).toBe('Data Tersimpan');
-    expect(toast.props('message')).toContain('tetapi data rekap gagal dimuat ulang');
-  });
-});
+    expect(wrapper.text()).toContain('Jadwal bertabrakan dengan jadwal yang sudah ada.')
+    expect(toastEntries().at(-1)).toMatchObject({
+      tone: 'danger',
+      message: 'Dokter sudah memiliki jadwal yang bertabrakan pada hari dan waktu tersebut.',
+    })
+  })
+})

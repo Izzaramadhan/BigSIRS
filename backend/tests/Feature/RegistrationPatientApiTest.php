@@ -865,5 +865,64 @@ class RegistrationPatientApiTest extends TestCase
             ->assertJsonValidationErrors(['district_id']);
         $this->assertStringContainsString('Kecamatan memerlukan pilihan Kabupaten/Kota yang valid', $missingRegRes->json('errors.district_id.0'));
     }
+
+    public function test_patient_registration_and_update_validate_master_guarantor_and_preserve_historical_record(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        DB::connection('legacy')->table('ref_jenis_asuransi')->insert([
+            ['id' => 10, 'jenis_asuransi' => 'Asuransi Perusahaan XYZ', 'type' => 'PRIVATE', 'status' => '1'],
+            ['id' => 11, 'jenis_asuransi' => 'Asuransi Nonaktif', 'type' => 'PRIVATE', 'status' => '0'],
+        ]);
+
+        // 1. Rejects inactive master guarantor on create
+        $this->postJson('/api/v1/patients', [
+            'nik' => '3404021205980010',
+            'name' => 'Pasien Jaminan Nonaktif',
+            'birth_place' => 'Sleman',
+            'birth_date' => '1995-01-10',
+            'gender' => 'L',
+            'address' => 'Jl. Magelang',
+            'phone' => '081200011122',
+            'guarantor_id' => 11,
+        ])->assertStatus(422)->assertJsonValidationErrors(['guarantor_id']);
+
+        // 2. Creates patient with active newly added master guarantor
+        $createRes = $this->postJson('/api/v1/patients', [
+            'nik' => '3404021205980011',
+            'name' => 'Pasien Jaminan Aktif',
+            'birth_place' => 'Sleman',
+            'birth_date' => '1995-01-10',
+            'gender' => 'P',
+            'address' => 'Jl. Kaliurang',
+            'phone' => '081200011133',
+            'guarantor_id' => 10,
+            'insurance_number' => 'POL-XYZ-001',
+        ]);
+        $createRes->assertCreated()
+            ->assertJsonPath('data.guarantor.id', 10)
+            ->assertJsonPath('data.guarantor.name', 'Asuransi Perusahaan XYZ')
+            ->assertJsonPath('data.insurance_number', 'POL-XYZ-001');
+
+        $patientId = (int) $createRes->json('data.id');
+
+        // 3. Deactivate master guarantor after registration; guarantor delete is blocked by ref_pasien
+        DB::connection('legacy')->table('ref_jenis_asuransi')->where('id', 10)->update(['status' => '0']);
+        $this->deleteJson('/api/v1/master-data/guarantors/10')
+            ->assertStatus(422);
+
+        // 4. Updating patient keeping unchanged historical guarantor 10 succeeds, while changing to another inactive guarantor fails
+        $this->putJson("/api/v1/patients/{$patientId}", [
+            'name' => 'Pasien Jaminan Diperbarui',
+            'guarantor_id' => 10,
+            'insurance_number' => 'POL-XYZ-001',
+        ])->assertOk()
+            ->assertJsonPath('data.guarantor.id', 10)
+            ->assertJsonPath('data.guarantor.name', 'Asuransi Perusahaan XYZ');
+
+        $this->putJson("/api/v1/patients/{$patientId}", [
+            'guarantor_id' => 11,
+        ])->assertStatus(422)->assertJsonValidationErrors(['guarantor_id']);
+    }
 }
 

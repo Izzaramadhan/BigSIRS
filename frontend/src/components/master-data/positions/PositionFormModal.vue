@@ -1,176 +1,135 @@
 <script setup>
-import { reactive, watch } from 'vue';
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import { computed, reactive, ref, useId, watch } from 'vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import {
+  createPositionForm,
+  POSITION_DESCRIPTION_MAX_LENGTH,
+  POSITION_NAME_MAX_LENGTH,
+  toPositionPayload,
+  validatePositionForm,
+} from './position.helpers'
 
 const props = defineProps({
-  isOpen: {
+  open: {
     type: Boolean,
-    default: false
+    required: true,
   },
+  /** null = mode tambah, object = mode edit. */
   position: {
     type: Object,
-    default: null
+    default: null,
   },
-  isSubmitting: {
+  saving: {
     type: Boolean,
-    default: false
+    default: false,
   },
-  errors: {
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
     type: Object,
-    default: () => ({})
-  }
-});
+    default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal. */
+  generalError: {
+    type: String,
+    default: '',
+  },
+})
 
-const emit = defineEmits(['close', 'submit']);
+const emit = defineEmits(['close', 'submit'])
 
-const form = reactive({
-  name: '',
-  description: ''
-});
+const formId = useId()
+const form = reactive(createPositionForm())
+const clientErrors = ref({})
 
-const populateForm = (data) => {
-  form.name = data.name || '';
-  form.description = data.description || '';
-};
+const isEdit = computed(() => Boolean(props.position))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
 
-const resetForm = () => {
-  form.name = '';
-  form.description = '';
-};
+watch(
+  [() => props.open, () => props.position],
+  ([isOpen]) => {
+    if (!isOpen) return
+    Object.assign(form, createPositionForm(props.position))
+    clientErrors.value = {}
+  },
+  { immediate: true },
+)
 
-watch(() => props.isOpen, (isOpen) => {
-  if (!isOpen) return;
+for (const field of ['name', 'description']) {
+  watch(
+    () => form[field],
+    () => {
+      if (clientErrors.value[field]) {
+        const next = { ...clientErrors.value }
+        delete next[field]
+        clientErrors.value = next
+      }
+    },
+  )
+}
 
-  if (props.position) {
-    populateForm(props.position);
-  } else {
-    resetForm();
-  }
-}, { immediate: true });
-
-const handleSubmit = () => {
-  const payload = {
-    name: form.name.trim(),
-    description: form.description ? form.description.trim() : null
-  };
-  emit('submit', payload);
-};
-
-const fieldError = (field) => props.errors?.[field]?.[0] || null;
+function handleSubmit() {
+  if (props.saving) return
+  clientErrors.value = validatePositionForm(form)
+  if (Object.keys(clientErrors.value).length > 0) return
+  emit('submit', toPositionPayload(form))
+}
 </script>
 
 <template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="position ? 'Edit Jabatan' : 'Tambah Jabatan'"
-    :is-submitting="isSubmitting"
-    size="md"
-    @close="$emit('close')"
-    @submit="handleSubmit"
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Jabatan' : 'Tambah Jabatan'"
+    size="sm"
+    :persistent="saving"
+    @close="emit('close')"
   >
-    <div class="modal-form">
-      <!-- General error -->
-      <div v-if="errors.general" class="alert-error">
-        {{ errors.general }}
-      </div>
+    <form :id="formId" class="flex flex-col gap-5" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
 
-      <div class="form-group">
-        <label for="name" class="form-label required">Nama Jabatan</label>
-        <input autocomplete="off"
-          id="name"
+      <BaseField
+        v-slot="field"
+        label="Nama Jabatan"
+        required
+        :error="errors.name"
+        :hint="`Maksimal ${POSITION_NAME_MAX_LENGTH} karakter.`"
+      >
+        <BaseInput
+          v-bind="field"
           v-model="form.name"
-          type="text"
-          class="form-control"
-          :class="{ 'is-invalid': fieldError('name') }"
           placeholder="Misal: Administrator"
-          required
-        >
-        <div v-if="fieldError('name')" class="invalid-feedback">{{ fieldError('name') }}</div>
-      </div>
+          :maxlength="POSITION_NAME_MAX_LENGTH"
+          :disabled="saving"
+        />
+      </BaseField>
 
-      <div class="form-group">
-        <label for="description" class="form-label">Deskripsi</label>
-        <textarea
-          id="description"
+      <BaseField
+        v-slot="field"
+        label="Deskripsi"
+        :error="errors.description"
+        :hint="`Opsional, maksimal ${POSITION_DESCRIPTION_MAX_LENGTH} karakter.`"
+      >
+        <BaseTextarea
+          v-bind="field"
           v-model="form.description"
-          class="form-control form-textarea"
-          :class="{ 'is-invalid': fieldError('description') }"
-          placeholder="Misal: Deskripsi lengkap tentang jabatan ini..."
-          rows="3"
-        ></textarea>
-        <div v-if="fieldError('description')" class="invalid-feedback">{{ fieldError('description') }}</div>
-      </div>
-    </div>
-  </MasterDataFormModal>
+          placeholder="Misal: Deskripsi singkat tentang jabatan ini..."
+          :maxlength="POSITION_DESCRIPTION_MAX_LENGTH"
+          :disabled="saving"
+        />
+      </BaseField>
+    </form>
+
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="emit('close')">Batal</BaseButton>
+      <BaseButton type="submit" :form="formId" :loading="saving">
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
-
-<style scoped>
-.modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.alert-error {
-  background-color: #fee2e2;
-  border-left: 4px solid #ef4444;
-  color: #b91c1c;
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-label {
-  font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
-}
-
-.required::after {
-  content: '*';
-  color: #ef4444;
-  margin-left: 0.25rem;
-}
-
-.form-control {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.95rem;
-  transition: all 0.2s;
-  background-color: #fff;
-  width: 100%;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.is-invalid {
-  border-color: #ef4444;
-}
-
-.is-invalid:focus {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-.invalid-feedback {
-  font-size: 0.8rem;
-  color: #ef4444;
-  margin-top: 0.25rem;
-}
-</style>

@@ -1,86 +1,36 @@
-import { ref } from 'vue';
-import letterTypeService from '../services/letterType.service';
+import { reactive } from 'vue'
+import { useCrudResource } from '@/composables/core/useCrudResource'
+import { letterTypeService } from '@/services/letterType.service'
 
+/**
+ * Composable modul Surat-Surat berbasis useCrudResource.
+ * Default sorting diselaraskan dengan LetterTypeService::getPaginated (`name` ascending).
+ */
 export function useLetterTypes() {
-  const letterTypes = ref([]);
-  const loading = ref(false);
-  const error = ref(null);
-  const meta = ref(null);
+  const sort = reactive({
+    column: 'name',
+    direction: 'asc',
+  })
 
-  const fetchLetterTypes = async (params = {}) => {
-    loading.value = true;
-    error.value = null;
-    try {
-      const response = await letterTypeService.getLetterTypes(params);
-      letterTypes.value = response.data;
-      meta.value = response.meta;
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memuat data surat-surat';
-    } finally {
-      loading.value = false;
+  const crud = useCrudResource(letterTypeService, {
+    label: 'surat-surat',
+    sort,
+  })
+
+  function setSort(column) {
+    if (sort.column === column) {
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      sort.column = column
+      sort.direction = 'asc'
     }
-  };
-
-  const createLetterType = async (data) => {
-    loading.value = true;
-    error.value = null;
-    try {
-      await letterTypeService.createLetterType(data);
-      return true;
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menambahkan surat';
-      if (err.response?.data?.errors || err.response?.status === 422 || err.response?.status === 409) {
-        throw err;
-      }
-      return false;
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const updateLetterType = async (id, data) => {
-    loading.value = true;
-    error.value = null;
-    try {
-      await letterTypeService.updateLetterType(id, data);
-      return true;
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui surat';
-      if (err.response?.data?.errors || err.response?.status === 422 || err.response?.status === 409) {
-        throw err;
-      }
-      return false;
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const deleteLetterType = async (id) => {
-    loading.value = true;
-    error.value = null;
-    try {
-      await letterTypeService.deleteLetterType(id);
-      return true;
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menghapus surat';
-      if (err.response?.status === 409 || err.response?.data?.message) {
-        throw err;
-      }
-      return false;
-    } finally {
-      loading.value = false;
-    }
-  };
-
+    crud.meta.page = 1
+    return crud.fetchItems()
+  }
 
   return {
-    letterTypes,
-    loading,
-    error,
-    meta,
-    fetchLetterTypes,
-    createLetterType,
-    updateLetterType,
-    deleteLetterType
-  };
+    ...crud,
+    sort,
+    setSort,
+  }
 }

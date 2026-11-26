@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admission;
 
+use App\Support\GuarantorValidation;
 use App\Support\LegacyAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +86,8 @@ class StoreAdmissionRequest extends FormRequest
                     $validator->errors()->add('doctor_id', 'Dokter yang dipilih tidak bertugas atau tidak memiliki jadwal aktif pada poliklinik ini.');
                 }
             }
+
+            GuarantorValidation::validateGuarantorId($validator, $this->input('guarantor_id'));
         });
     }
 

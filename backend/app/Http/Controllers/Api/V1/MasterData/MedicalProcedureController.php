@@ -120,6 +120,17 @@ class MedicalProcedureController extends Controller
         }
 
         $query = $this->buildFilteredQuery($request);
+        if ($request->filled('tariff_type_id')) {
+            $tariffTypeId = $request->input('tariff_type_id');
+            if (is_numeric($tariffTypeId) && (int) $tariffTypeId > 0) {
+                $query->with([
+                    'tariffs' => function ($q) use ($tariffTypeId) {
+                        $q->where('tariff_type_id', (int) $tariffTypeId)
+                            ->with('tariffType');
+                    },
+                ]);
+            }
+        }
         $procedures = $query->get();
 
         if ($procedures->isEmpty()) {

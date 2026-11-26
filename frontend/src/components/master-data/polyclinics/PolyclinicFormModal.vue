@@ -1,367 +1,344 @@
 <script setup>
-import { reactive, watch, ref } from 'vue';
-import { polyclinicService } from '@/services/polyclinic';
-import lookupService from '@/services/lookup.service';
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
+import { computed, reactive, ref, useId, watch } from 'vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import { fieldControlClass } from '@/components/ui/fieldControlClass'
+import lookupService from '@/services/lookup.service'
+import { polyclinicService } from '@/services/polyclinic'
+import { normalizeApiError } from '@/utils/http-error'
+import {
+  createPolyclinicForm,
+  ensureSavedWarehouseOptions,
+  getSafePolyclinicErrorMessage,
+  POLYCLINIC_BPJS_CODE_MAX_LENGTH,
+  POLYCLINIC_CODE_MAX_LENGTH,
+  POLYCLINIC_DESCRIPTION_MAX_LENGTH,
+  POLYCLINIC_NAME_MAX_LENGTH,
+  toPolyclinicPayload,
+  validatePolyclinicForm,
+} from './polyclinic.helpers'
 
 const props = defineProps({
-  isOpen: { type: Boolean, default: false },
-  polyclinic: { type: Object, default: null },
-  serviceTypes: { type: Array, default: () => [] },
-  isSubmitting: { type: Boolean, default: false },
-  errors: { type: Object, default: () => ({}) }
-});
+  open: {
+    type: Boolean,
+    required: true,
+  },
+  /** null = mode tambah, object = mode edit. */
+  polyclinic: {
+    type: Object,
+    default: null,
+  },
+  serviceTypes: {
+    type: Array,
+    default: () => [],
+  },
+  saving: {
+    type: Boolean,
+    default: false,
+  },
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
+    type: Object,
+    default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal (mis. 409/500). */
+  generalError: {
+    type: String,
+    default: '',
+  },
+})
 
-const emit = defineEmits(['close', 'submit']);
+const emit = defineEmits(['close', 'submit'])
 
-const form = reactive({
-  code: '',
-  name: '',
-  service_type: '',
-  description: '',
-  is_visible: true,
-  is_online_visible: false,
-  quota: 0,
-  jkn_quota: 0,
-  warehouse_id: '',
-  bpjs_code: '',
-});
+const formId = useId()
+const form = reactive(createPolyclinicForm())
+const clientErrors = ref({})
 
-const warehouses = ref([]);
-const loadingWarehouses = ref(false);
+const rawWarehouses = ref([])
+const polyclinicDetail = ref(null)
+const loadingDetail = ref(false)
+const loadingWarehouses = ref(false)
+const lookupError = ref('')
 
-const populateForm = (data) => {
-  form.code = data.code || '';
-  form.name = data.name || '';
-  form.service_type = data.service_type || '';
-  form.description = data.description || '';
-  form.is_visible = data.is_visible !== undefined ? data.is_visible : true;
-  form.is_online_visible = data.is_online_visible !== undefined ? data.is_online_visible : false;
-  form.quota = data.quota ?? 0;
-  form.jkn_quota = data.jkn_quota ?? 0;
-  form.warehouse_id = data.warehouse_id || '';
-  form.bpjs_code = data.bpjs_code ?? '';
-};
+let latestOpenRequest = 0
 
-const resetForm = () => {
-  form.code = '';
-  form.name = '';
-  form.service_type = '';
-  form.description = '';
-  form.is_visible = true;
-  form.is_online_visible = false;
-  form.quota = 0;
-  form.jkn_quota = 0;
-  form.warehouse_id = '';
-  form.bpjs_code = '';
-};
+const isEdit = computed(() => Boolean(props.polyclinic?.id))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
+const warehouseOptions = computed(() =>
+  ensureSavedWarehouseOptions(rawWarehouses.value, polyclinicDetail.value || props.polyclinic),
+)
 
-watch(() => props.isOpen, async (isOpen) => {
-  if (!isOpen) return;
+async function loadModalData(targetPolyclinic) {
+  const requestId = ++latestOpenRequest
+  lookupError.value = ''
 
-  if (props.polyclinic) {
-    // Load fresh from API on edit
-    try {
-      const response = await polyclinicService.getPolyclinic(props.polyclinic.id);
-      populateForm(response?.data?.data || response?.data || props.polyclinic);
-    } catch (err) {
-      console.error(err);
-      populateForm(props.polyclinic);
+  let detailPromise = Promise.resolve(null)
+  if (targetPolyclinic?.id) {
+    loadingDetail.value = true
+    detailPromise = polyclinicService.getPolyclinic(targetPolyclinic.id)
+  }
+
+  const needsWarehouses = rawWarehouses.value.length === 0
+  let warehousesPromise = Promise.resolve(null)
+  if (needsWarehouses) {
+    loadingWarehouses.value = true
+    warehousesPromise = lookupService.getWarehouses()
+  }
+
+  const [detailResult, warehouseResult] = await Promise.allSettled([
+    detailPromise,
+    warehousesPromise,
+  ])
+
+  if (requestId !== latestOpenRequest) return
+
+  loadingDetail.value = false
+  loadingWarehouses.value = false
+
+  if (targetPolyclinic?.id) {
+    if (detailResult.status === 'fulfilled') {
+      const resolved =
+        detailResult.value?.data?.data ?? detailResult.value?.data ?? targetPolyclinic
+      polyclinicDetail.value = resolved
+      Object.assign(form, createPolyclinicForm(resolved))
+    } else {
+      polyclinicDetail.value = targetPolyclinic
+      lookupError.value = getSafePolyclinicErrorMessage(
+        normalizeApiError(detailResult.reason, 'Detail terbaru poliklinik gagal dimuat.'),
+        'Detail terbaru poliklinik gagal dimuat.',
+      )
     }
-  } else {
-    resetForm();
   }
 
-  // Load warehouses
-  loadingWarehouses.value = true;
-  try {
-    warehouses.value = await lookupService.getWarehouses();
-  } catch (err) {
-    console.error('Failed to load warehouses', err);
-  } finally {
-    loadingWarehouses.value = false;
+  if (needsWarehouses) {
+    if (warehouseResult.status === 'fulfilled') {
+      rawWarehouses.value = Array.isArray(warehouseResult.value) ? warehouseResult.value : []
+    } else {
+      lookupError.value =
+        lookupError.value ||
+        getSafePolyclinicErrorMessage(
+          normalizeApiError(warehouseResult.reason, 'Daftar gudang gagal dimuat.'),
+          'Daftar gudang gagal dimuat.',
+        )
+    }
   }
-}, { immediate: true });
+}
 
-const handleSubmit = () => {
-  const payload = {
-    code: form.code.trim().toUpperCase(),
-    name: form.name,
-    service_type: form.service_type,
-    description: form.description.trim() || null,
-    is_visible: form.is_visible,
-    is_online_visible: form.is_online_visible,
-    quota: parseInt(form.quota) || 0,
-    jkn_quota: parseInt(form.jkn_quota) || 0,
-    warehouse_id: form.warehouse_id || null,
-    bpjs_code: form.bpjs_code.trim() || null,
-  };
-  emit('submit', payload);
-};
+watch(
+  [() => props.open, () => props.polyclinic],
+  ([isOpen, polyclinic]) => {
+    if (!isOpen) return
+    clientErrors.value = {}
+    polyclinicDetail.value = polyclinic
+    Object.assign(form, createPolyclinicForm(polyclinic))
+    loadModalData(polyclinic)
+  },
+  { immediate: true },
+)
 
-const fieldError = (field) => props.errors?.[field]?.[0] || null;
+function clearFieldError(field) {
+  if (!clientErrors.value[field]) return
+  const next = { ...clientErrors.value }
+  delete next[field]
+  clientErrors.value = next
+}
+
+function handleSubmit() {
+  if (props.saving) return
+  const validation = validatePolyclinicForm(form)
+  clientErrors.value = validation
+  if (Object.keys(validation).length > 0) return
+
+  emit('submit', toPolyclinicPayload(form))
+}
+
+function requestClose() {
+  if (!props.saving) emit('close')
+}
 </script>
 
 <template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="polyclinic ? 'Edit Poliklinik' : 'Tambah Poliklinik'"
-    :is-submitting="isSubmitting"
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Poliklinik' : 'Tambah Poliklinik'"
+    description="Atur identitas poliklinik, jenis layanan, kuota, dan integrasi BPJS."
     size="md"
-    @close="$emit('close')"
-    @submit="handleSubmit"
+    :persistent="saving"
+    @close="requestClose"
   >
-    <div class="modal-form">
-          <!-- General error -->
-          <div v-if="errors.general" class="alert-error">
-            {{ errors.general }}
+    <form :id="formId" class="space-y-4" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
+
+      <BaseAlert v-if="lookupError" tone="warning">
+        {{ lookupError }}
+      </BaseAlert>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <BaseField v-slot="field" id="code" label="Kode Poliklinik" required :error="errors.code">
+          <BaseInput
+            v-bind="field"
+            v-model="form.code"
+            placeholder="Contoh: POLI-01"
+            :maxlength="POLYCLINIC_CODE_MAX_LENGTH"
+            class="uppercase"
+            @update:model-value="clearFieldError('code')"
+          />
+        </BaseField>
+
+        <BaseField v-slot="field" id="name" label="Nama Poliklinik" required :error="errors.name">
+          <BaseInput
+            v-bind="field"
+            v-model="form.name"
+            placeholder="Contoh: Poli Umum"
+            :maxlength="POLYCLINIC_NAME_MAX_LENGTH"
+            @update:model-value="clearFieldError('name')"
+          />
+        </BaseField>
+      </div>
+
+      <BaseField
+        v-slot="field"
+        id="service_type"
+        label="Jenis Layanan"
+        required
+        :error="errors.service_type"
+      >
+        <select
+          :id="field.id"
+          v-model="form.service_type"
+          :aria-invalid="field.invalid || undefined"
+          :aria-describedby="field['aria-describedby']"
+          :class="fieldControlClass({ invalid: field.invalid })"
+          @change="clearFieldError('service_type')"
+        >
+          <option value="">-- Pilih Jenis Layanan --</option>
+          <option v-for="st in serviceTypes" :key="st.value" :value="st.value">
+            {{ st.label }}
+          </option>
+        </select>
+      </BaseField>
+
+      <BaseField v-slot="field" id="description" label="Deskripsi" :error="errors.description">
+        <BaseTextarea
+          v-bind="field"
+          v-model="form.description"
+          :rows="2"
+          placeholder="Deskripsi singkat poliklinik"
+          :maxlength="POLYCLINIC_DESCRIPTION_MAX_LENGTH"
+          @update:model-value="clearFieldError('description')"
+        />
+      </BaseField>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <span class="text-sm font-medium text-fg">Pengaturan Tampilan</span>
+          <div class="flex flex-col gap-2.5 pt-1">
+            <label
+              for="is_visible"
+              class="inline-flex cursor-pointer items-center gap-2.5 text-sm text-fg"
+            >
+              <input
+                id="is_visible"
+                v-model="form.is_visible"
+                type="checkbox"
+                class="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                class="relative h-6 w-10 shrink-0 rounded-full bg-line-strong transition-colors peer-checked:bg-primary peer-focus-visible:ring-3 peer-focus-visible:ring-primary/20 after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-surface after:shadow-xs after:transition-transform peer-checked:after:translate-x-4"
+              />
+              <span>Tampil di Antrian</span>
+            </label>
+
+            <label
+              for="is_online_visible"
+              class="inline-flex cursor-pointer items-center gap-2.5 text-sm text-fg"
+            >
+              <input
+                id="is_online_visible"
+                v-model="form.is_online_visible"
+                type="checkbox"
+                class="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                class="relative h-6 w-10 shrink-0 rounded-full bg-line-strong transition-colors peer-checked:bg-primary peer-focus-visible:ring-3 peer-focus-visible:ring-primary/20 after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-surface after:shadow-xs after:transition-transform peer-checked:after:translate-x-4"
+              />
+              <span>Tampil Online</span>
+            </label>
           </div>
+        </div>
 
-          <div class="form-grid">
-            <!-- 1. Kode -->
-            <div class="form-group">
-              <label for="code" class="form-label required">Kode</label>
-              <input autocomplete="off"
-                id="code"
-                v-model="form.code"
-                type="text"
-                class="form-control"
-                :class="{ 'is-invalid': fieldError('code') }"
-                placeholder="Contoh: OP001"
-                maxlength="30"
-                @input="form.code = form.code.toUpperCase()"
-                required
-              >
-              <div v-if="fieldError('code')" class="invalid-feedback">{{ fieldError('code') }}</div>
-            </div>
+        <BaseField
+          v-slot="field"
+          id="warehouse_id"
+          label="Gudang Default"
+          :error="errors.warehouse_id"
+          :hint="loadingWarehouses ? 'Memuat daftar gudang...' : ''"
+        >
+          <select
+            :id="field.id"
+            v-model="form.warehouse_id"
+            :disabled="loadingWarehouses || loadingDetail"
+            :aria-invalid="field.invalid || undefined"
+            :aria-describedby="field['aria-describedby']"
+            :class="fieldControlClass({ invalid: field.invalid })"
+            @change="clearFieldError('warehouse_id')"
+          >
+            <option value="">Pilih Gudang Default</option>
+            <option v-for="wh in warehouseOptions" :key="wh.id" :value="wh.id">
+              {{ wh.code ? `${wh.code} — ${wh.name}` : wh.name }}
+            </option>
+          </select>
+        </BaseField>
+      </div>
 
-            <!-- 2. Nama -->
-            <div class="form-group">
-              <label for="name" class="form-label required">Nama Poliklinik</label>
-              <input autocomplete="off"
-                id="name"
-                v-model="form.name"
-                type="text"
-                class="form-control"
-                :class="{ 'is-invalid': fieldError('name') }"
-                placeholder="Nama lengkap poliklinik"
-                maxlength="150"
-                required
-              >
-              <div v-if="fieldError('name')" class="invalid-feedback">{{ fieldError('name') }}</div>
-            </div>
+      <BaseField v-slot="field" id="bpjs_code" label="Kode BPJS" :error="errors.bpjs_code">
+        <BaseInput
+          v-bind="field"
+          v-model="form.bpjs_code"
+          placeholder="Masukkan kode BPJS"
+          :maxlength="POLYCLINIC_BPJS_CODE_MAX_LENGTH"
+          @update:model-value="clearFieldError('bpjs_code')"
+        />
+      </BaseField>
 
-            <!-- 3. Jenis Layanan -->
-            <div class="form-group form-group--full">
-              <label for="service_type" class="form-label required">Jenis Layanan</label>
-              <select
-                id="service_type"
-                v-model="form.service_type"
-                class="form-control form-select"
-                :class="{ 'is-invalid': fieldError('service_type') }"
-                required
-              >
-                <option value="">-- Pilih Jenis Layanan --</option>
-                <option v-for="st in serviceTypes" :key="st.value" :value="st.value">
-                  {{ st.label }}
-                </option>
-              </select>
-              <div v-if="fieldError('service_type')" class="invalid-feedback">{{ fieldError('service_type') }}</div>
-            </div>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <BaseField v-slot="field" id="quota" label="Kuota" :error="errors.quota">
+          <BaseInput
+            v-bind="field"
+            v-model.number="form.quota"
+            type="number"
+            min="0"
+            placeholder="0"
+            @update:model-value="clearFieldError('quota')"
+          />
+        </BaseField>
 
-            <!-- 4. Deskripsi -->
-            <div class="form-group form-group--full">
-              <label for="description" class="form-label">Deskripsi</label>
-              <textarea
-                id="description"
-                v-model="form.description"
-                class="form-control form-textarea"
-                :class="{ 'is-invalid': fieldError('description') }"
-                placeholder="Keterangan singkat poliklinik (opsional)"
-                rows="3"
-                maxlength="255"
-              ></textarea>
-              <div v-if="fieldError('description')" class="invalid-feedback">{{ fieldError('description') }}</div>
-            </div>
+        <BaseField v-slot="field" id="jkn_quota" label="Kuota JKN" :error="errors.jkn_quota">
+          <BaseInput
+            v-bind="field"
+            v-model.number="form.jkn_quota"
+            type="number"
+            min="0"
+            placeholder="0"
+            @update:model-value="clearFieldError('jkn_quota')"
+          />
+        </BaseField>
+      </div>
+    </form>
 
-            <!-- 5 & 10. Tampil + Tampil Online -->
-            <div class="form-group">
-              <span class="form-label">Opsi Tampil</span>
-              <div class="toggle-group">
-                <label class="toggle-row">
-                  <input id="is_visible" type="checkbox" v-model="form.is_visible" class="toggle-input">
-                  <span class="toggle-track"></span>
-                  <span class="toggle-label-text">Tampil di Antrian</span>
-                </label>
-                <label class="toggle-row">
-                  <input id="is_online_visible" type="checkbox" v-model="form.is_online_visible" class="toggle-input">
-                  <span class="toggle-track"></span>
-                  <span class="toggle-label-text">Tampil Online</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- 6. Gudang Default -->
-            <div class="form-group">
-              <label for="warehouse_id" class="form-label">Gudang Default</label>
-              <select
-                id="warehouse_id"
-                v-model="form.warehouse_id"
-                class="form-control form-select"
-                :class="{ 'is-invalid': fieldError('warehouse_id') }"
-                :disabled="loadingWarehouses"
-              >
-                <option value="">Pilih Gudang Default</option>
-                <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">
-                  {{ wh.code ? `${wh.code} — ${wh.name}` : wh.name }}
-                </option>
-              </select>
-              <div v-if="loadingWarehouses" class="text-xs text-muted mt-1">Memuat daftar gudang...</div>
-              <div v-else-if="fieldError('warehouse_id')" class="invalid-feedback">{{ fieldError('warehouse_id') }}</div>
-            </div>
-
-            <!-- Kode BPJS -->
-            <div class="form-group form-group--full">
-              <label for="bpjs_code" class="form-label">Kode BPJS</label>
-              <input autocomplete="off"
-                id="bpjs_code"
-                v-model="form.bpjs_code"
-                type="text"
-                class="form-control"
-                :class="{ 'is-invalid': fieldError('bpjs_code') }"
-                placeholder="Masukkan kode BPJS"
-                maxlength="50"
-              >
-              <div
-                v-if="fieldError('bpjs_code')"
-                class="invalid-feedback"
-              >
-                {{ fieldError('bpjs_code') }}
-              </div>
-            </div>
-
-            <!-- 7. Kuota -->
-            <div class="form-group">
-              <label for="quota" class="form-label">Kuota</label>
-              <input autocomplete="off"
-                id="quota"
-                v-model.number="form.quota"
-                type="number"
-                class="form-control"
-                :class="{ 'is-invalid': fieldError('quota') }"
-                min="0"
-                placeholder="0"
-              >
-              <div v-if="fieldError('quota')" class="invalid-feedback">{{ fieldError('quota') }}</div>
-            </div>
-
-            <!-- 8. Kuota JKN -->
-            <div class="form-group">
-              <label for="jkn_quota" class="form-label">Kuota JKN</label>
-              <input autocomplete="off"
-                id="jkn_quota"
-                v-model.number="form.jkn_quota"
-                type="number"
-                class="form-control"
-                :class="{ 'is-invalid': fieldError('jkn_quota') }"
-                min="0"
-                placeholder="0"
-              >
-              <div v-if="fieldError('jkn_quota')" class="invalid-feedback">{{ fieldError('jkn_quota') }}</div>
-            </div>
-          </div>
-    </div>
-  </MasterDataFormModal>
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="requestClose">Batal</BaseButton>
+      <BaseButton type="submit" :form="formId" :loading="saving">
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
-
-<style scoped>
-
-
-.alert-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-}
-
-.form-group--full {
-  grid-column: 1 / -1;
-}
-
-
-
-/* Toggle styles */
-.toggle-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: pointer;
-}
-
-.toggle-input {
-  display: none;
-}
-
-.toggle-track {
-  width: 38px;
-  height: 22px;
-  background: #cbd5e1;
-  border-radius: 999px;
-  position: relative;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-
-.toggle-track::after {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background: #ffffff;
-  border-radius: 50%;
-  top: 3px;
-  left: 3px;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.toggle-input:checked + .toggle-track {
-  background: var(--color-primary);
-}
-
-.toggle-input:checked + .toggle-track::after {
-  transform: translateX(16px);
-}
-
-.toggle-label-text {
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-}
-
-
-
-@media (max-width: 600px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  .form-group--full {
-    grid-column: auto;
-  }
-}
-</style>

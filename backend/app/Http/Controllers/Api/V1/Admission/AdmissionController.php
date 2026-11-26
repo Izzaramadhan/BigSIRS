@@ -11,6 +11,7 @@ use App\Models\Legacy\LegacyDoctor;
 use App\Models\Legacy\LegacyPatient;
 use App\Models\Legacy\LegacyPolyclinic;
 use App\Models\Legacy\LegacyVisit;
+use App\Support\GuarantorValidation;
 use App\Support\LegacyAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -59,6 +60,19 @@ class AdmissionController extends Controller
             $query->whereHas('latestVisit', function ($vq) use ($doctorId) {
                 $vq->where('id_dokter', $doctorId);
             });
+        }
+
+        // Filter Guarantor (ID atau nama penjamin)
+        $guarantorFilter = trim((string) ($request->get('guarantor_id') ?? $request->get('guarantor') ?? ''));
+        if ($guarantorFilter !== '' && strtolower($guarantorFilter) !== 'all') {
+            if (is_numeric($guarantorFilter)) {
+                $query->where('id_jenis_asuransi', (int) $guarantorFilter);
+            } else {
+                $likeGuar = '%' . mb_strtolower($guarantorFilter, 'UTF-8') . '%';
+                $query->whereHas('guarantor', function ($gq) use ($likeGuar) {
+                    $gq->whereRaw('LOWER(jenis_asuransi) LIKE ?', [$likeGuar]);
+                });
+            }
         }
 
         // Filter Date
@@ -185,11 +199,11 @@ class AdmissionController extends Controller
             $admissionDateTime = now()->format('Y-m-d H:i:s');
         }
 
-        $guarantorId = $validated['guarantor_id'] ?? $patient->id_jenis_asuransi ?? 2;
+        $guarantorId = (int) ($validated['guarantor_id'] ?? $patient->id_jenis_asuransi ?? GuarantorValidation::resolveDefaultSelfPayId());
         $insuranceNumber = $validated['insurance_number'] ?? null;
-        if ((int) $guarantorId === 2) {
+        if (GuarantorValidation::isSelfPay($guarantorId)) {
             $insuranceNumber = null;
-        } elseif (empty($insuranceNumber) && (int) $guarantorId === (int) ($patient->id_jenis_asuransi ?? null)) {
+        } elseif (empty($insuranceNumber) && $guarantorId === (int) ($patient->id_jenis_asuransi ?? 0)) {
             $insuranceNumber = $patient->no_bpjs ?? null;
         }
 
@@ -410,9 +424,10 @@ class AdmissionController extends Controller
             $now = now();
 
             // Update existing trx_admisi record directly (NO INSERT)
+            $isSelfPay = GuarantorValidation::isSelfPay((int) $validated['guarantor_id']);
             $admissionUpdates = [
                 'id_jenis_asuransi' => $validated['guarantor_id'],
-                'no_bpjs' => $validated['insurance_number'] ?? null,
+                'no_bpjs' => $isSelfPay ? null : ($validated['insurance_number'] ?? null),
                 'id_asal_rujukan' => $validated['referral_source_id'] ?? null,
                 'asal_rujukan' => $validated['referral_name'] ?? $validated['referral_source'] ?? null,
                 'updated_at' => $now,

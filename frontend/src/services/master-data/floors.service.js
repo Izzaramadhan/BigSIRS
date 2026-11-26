@@ -1,30 +1,9 @@
-import axios from '@/utils/axios'
+import { createResourceService } from '@/services/core/createResourceService'
 
-class FloorsService {
-  async getFloors(params) {
-    const response = await axios.get('/master-data/floors', { params })
-    return response.data
-  }
+const resource = createResourceService('/master-data/floors')
 
-  async getFloor(id) {
-    const response = await axios.get(`/master-data/floors/${id}`)
-    return response.data
-  }
-
-  async createFloor(data) {
-    const response = await axios.post('/master-data/floors', data)
-    return response.data
-  }
-
-  async updateFloor(id, data) {
-    const response = await axios.put(`/master-data/floors/${id}`, data)
-    return response.data
-  }
-
-  async deleteFloor(id) {
-    const response = await axios.delete(`/master-data/floors/${id}`)
-    return response.data
-  }
+export const floorsService = {
+  ...resource,
+  // Dipertahankan sementara untuk pemanggil lookup lama (WardFormModal.vue, WardView.spec.js).
+  getFloors: (params) => resource.list(params),
 }
-
-export const floorsService = new FloorsService()

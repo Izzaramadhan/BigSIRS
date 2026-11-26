@@ -1,7 +1,9 @@
 <script setup>
-import MasterDataSkeletonRow from '@/components/master-data/shared/MasterDataSkeletonRow.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseDataTable from '@/components/ui/BaseDataTable.vue'
+import { formatBedCount, formatSirsLastUpdate, formatTextCell } from './sirs-bed-availability.helpers'
 
-defineProps({
+const props = defineProps({
   items: {
     type: Array,
     required: true,
@@ -16,209 +18,74 @@ defineProps({
   },
 })
 
-const getRowNumber = (index, pagination) => {
-  const currentPage = pagination?.current_page || 1
-  const perPage = pagination?.per_page || 10
-  return (currentPage - 1) * perPage + index + 1
-}
+const columns = [
+  { key: 'no', label: 'No', align: 'center', class: 'w-16' },
+  { key: 'className', label: 'Kelas', class: 'min-w-36' },
+  { key: 'roomName', label: 'Ruang', class: 'min-w-48' },
+  { key: 'capacity', label: 'Kapasitas', align: 'center', class: 'w-28' },
+  { key: 'available', label: 'Tersedia', align: 'center', class: 'w-28' },
+  { key: 'lastUpdatedAt', label: 'Last Update', class: 'min-w-44 whitespace-nowrap' },
+  { key: 'actions', label: 'Aksi', align: 'center', class: 'w-40' },
+]
 
-/**
- * Format tanggal dan waktu ke format Indonesia:
- * Contoh: 22 Oktober 2026, 09.30
- */
-const formatLastUpdate = (dateVal) => {
-  if (!dateVal) return '—'
-  const date = new Date(dateVal)
-  if (isNaN(date.getTime())) return '—'
-
-  try {
-    const datePart = date.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    return `${datePart}, ${hours}.${minutes}`
-  } catch {
-    return '—'
-  }
-}
-
-const formatNumber = (val) => {
-  if (val === null || val === undefined || val === '') return '—'
-  const num = Number(val)
-  return isNaN(num) ? '—' : String(num)
+function rowNumber(index) {
+  const page = props.pagination?.current_page || 1
+  const perPage = props.pagination?.per_page || 10
+  return (page - 1) * perPage + index + 1
 }
 </script>
 
 <template>
-  <div class="table-wrapper">
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="col-no text-center">No</th>
-            <th class="col-class">Kelas</th>
-            <th class="col-room">Ruang</th>
-            <th class="col-capacity text-center">Kapasitas</th>
-            <th class="col-available text-center">Tersedia</th>
-            <th class="col-updated">Last Update</th>
-            <th class="col-actions text-center">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-if="loading">
-            <MasterDataSkeletonRow :columns="7" :rows="5" />
-          </template>
+  <BaseDataTable
+    :columns="columns"
+    :rows="items"
+    :loading="loading"
+    caption="Daftar ketersediaan bed SIRS"
+  >
+    <template #cell-no="{ index }">
+      <span class="text-fg-muted">{{ rowNumber(index) }}</span>
+    </template>
 
-          <template v-else>
-            <tr v-for="(item, index) in items" :key="item.id || index">
-              <td class="col-no text-center text-muted">
-                {{ getRowNumber(index, pagination) }}
-              </td>
-              <td class="col-class font-medium text-navy">
-                {{ item.className || '—' }}
-              </td>
-              <td class="col-room text-navy">
-                {{ item.roomName || '—' }}
-              </td>
-              <td class="col-capacity text-center font-semibold text-navy">
-                {{ formatNumber(item.capacity) }}
-              </td>
-              <td class="col-available text-center font-semibold text-emerald">
-                {{ formatNumber(item.available) }}
-              </td>
-              <td class="col-updated text-muted">
-                {{ formatLastUpdate(item.lastUpdatedAt) }}
-              </td>
-              <td class="col-actions text-center">
-                <button
-                  type="button"
-                  class="btn-action-disabled"
-                  disabled
-                  title="Alur tindakan belum ditentukan."
-                  aria-label="Alur tindakan belum ditentukan"
-                >
-                  Belum tersedia
-                </button>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
-  </div>
+    <template #cell-className="{ row }">
+      <span class="font-medium text-fg">{{ formatTextCell(row.className) }}</span>
+    </template>
+
+    <template #cell-roomName="{ row }">
+      <span class="text-fg">{{ formatTextCell(row.roomName) }}</span>
+    </template>
+
+    <template #cell-capacity="{ row }">
+      <span class="font-semibold text-fg tabular-nums">{{ formatBedCount(row.capacity) }}</span>
+    </template>
+
+    <template #cell-available="{ row }">
+      <span class="font-semibold text-success tabular-nums">{{
+        formatBedCount(row.available)
+      }}</span>
+    </template>
+
+    <template #cell-lastUpdatedAt="{ row }">
+      <span class="whitespace-nowrap text-fg-muted">{{
+        formatSirsLastUpdate(row.lastUpdatedAt)
+      }}</span>
+    </template>
+
+    <template #cell-actions>
+      <div class="flex justify-center">
+        <BaseButton
+          variant="secondary"
+          size="sm"
+          disabled
+          title="Alur tindakan belum ditentukan."
+          aria-label="Alur tindakan belum ditentukan"
+        >
+          Belum tersedia
+        </BaseButton>
+      </div>
+    </template>
+
+    <template #empty>
+      <slot name="empty" />
+    </template>
+  </BaseDataTable>
 </template>
-
-<style scoped>
-.table-wrapper {
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid var(--color-border-soft, #e2e8f0);
-  overflow: hidden;
-}
-
-.table-container {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  white-space: nowrap;
-}
-
-.data-table th,
-.data-table td {
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--color-border-soft, #e2e8f0);
-}
-
-.data-table th {
-  background-color: var(--color-page-bg, #f8fafc);
-  color: var(--color-text-secondary, #64748b);
-  font-weight: 600;
-  font-size: 0.825rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  text-align: left;
-}
-
-.data-table tbody tr {
-  transition: background-color 0.2s;
-}
-
-.data-table tbody tr:hover {
-  background-color: var(--color-page-bg, #f8fafc);
-}
-
-.text-center {
-  text-align: center;
-}
-
-.text-muted {
-  color: var(--color-text-secondary, #64748b);
-  font-size: 0.9rem;
-}
-
-.text-navy {
-  color: var(--color-text-navy, #1e293b);
-}
-
-.text-emerald {
-  color: #059669;
-}
-
-.font-medium {
-  font-weight: 500;
-}
-
-.font-semibold {
-  font-weight: 600;
-}
-
-.col-no {
-  width: 60px;
-}
-
-.col-class {
-  min-width: 140px;
-}
-
-.col-room {
-  min-width: 180px;
-}
-
-.col-capacity {
-  width: 110px;
-}
-
-.col-available {
-  width: 110px;
-}
-
-.col-updated {
-  min-width: 200px;
-}
-
-.col-actions {
-  width: 130px;
-}
-
-/* Tombol aksi non-aktif sementara */
-.btn-action-disabled {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.775rem;
-  font-weight: 500;
-  color: var(--color-text-secondary, #94a3b8);
-  background-color: #f1f5f9;
-  border: 1px dashed #cbd5e1;
-  border-radius: 6px;
-  cursor: not-allowed;
-  user-select: none;
-}
-</style>

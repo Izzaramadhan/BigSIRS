@@ -1,301 +1,204 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoomClasses } from '@/composables/useRoomClasses'
-import RoomClassTable from '@/components/master-data/room-classes/RoomClassTable.vue'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
 import RoomClassFilters from '@/components/master-data/room-classes/RoomClassFilters.vue'
 import RoomClassFormModal from '@/components/master-data/room-classes/RoomClassFormModal.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import AppToast from '@/components/common/AppToast.vue'
+import RoomClassTable from '@/components/master-data/room-classes/RoomClassTable.vue'
+import { getSafeRoomClassErrorMessage } from '@/components/master-data/room-classes/room-class.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useRoomClasses } from '@/composables/useRoomClasses'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
   loading,
-  submitting,
-  error,
-  fetchRoomClasses,
-  createRoomClass,
-  updateRoomClass,
-  deleteRoomClass,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useRoomClasses()
+const toast = useToast()
 
-const formModalOpen = ref(false)
-const deleteDialogOpen = ref(false)
-const selectedRoomClass = ref(null)
-const roomClassToDelete = ref(null)
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingRoomClass = ref(null)
 const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: '',
+function openForm(roomClass = null) {
+  editingRoomClass.value = roomClass
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
+
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingRoomClass.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
+
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
+
+  const isEdit = Boolean(editingRoomClass.value)
+  const fallback = isEdit ? 'Data kelas gagal diperbarui.' : 'Data kelas gagal ditambahkan.'
+  const result = isEdit ? await update(editingRoomClass.value.id, payload) : await create(payload)
+
+  if (!result.ok) {
+    const safeMessage = getSafeRoomClassErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
+    }
+    toast.error(safeMessage)
+    return
+  }
+
+  closeForm()
+  toast.success(isEdit ? 'Data kelas berhasil diperbarui.' : 'Data kelas berhasil ditambahkan.')
+}
+
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingRoomClass = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingRoomClass.value) return ''
+  return `Apakah Anda yakin ingin menghapus kelas “${deletingRoomClass.value.name}”?`
 })
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingRoomClass.value = null
 }
 
-const closeToast = () => {
-  toast.value.show = false
-}
+async function handleDelete() {
+  if (saving.value || !deletingRoomClass.value) return
+  const result = await remove(deletingRoomClass.value.id)
+  deletingRoomClass.value = null
 
-const openAddModal = () => {
-  selectedRoomClass.value = null
-  formErrors.value = {}
-  formModalOpen.value = true
-}
-
-const openEditModal = (item) => {
-  selectedRoomClass.value = item
-  formErrors.value = {}
-  formModalOpen.value = true
-}
-
-const closeFormModal = () => {
-  formModalOpen.value = false
-  selectedRoomClass.value = null
-  formErrors.value = {}
-}
-
-const openDeleteDialog = (item) => {
-  roomClassToDelete.value = item
-  deleteDialogOpen.value = true
-}
-
-const closeDeleteDialog = () => {
-  deleteDialogOpen.value = false
-  roomClassToDelete.value = null
-}
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value
-  pagination.current_page = 1
-  fetchRoomClasses()
-}
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {}
-
-  const isEditing = Boolean(selectedRoomClass.value)
-  let result
-
-  if (isEditing) {
-    result = await updateRoomClass(selectedRoomClass.value.id, payload)
+  if (result.ok) {
+    toast.success('Data kelas berhasil dihapus.')
   } else {
-    result = await createRoomClass(payload)
-  }
-
-  if (result.success) {
-    closeFormModal()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing ? 'Data kelas berhasil diperbarui.' : 'Data kelas berhasil ditambahkan.',
-    })
-    fetchRoomClasses()
-  } else {
-    if (result.error?.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {}
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message:
-          result.error.response.data.message ||
-          'Data kelas tidak valid. Silakan periksa kembali form pengisian.',
-      })
-    } else {
-      const errorMsg =
-        result.error?.response?.data?.message ||
-        `Terjadi kesalahan saat ${isEditing ? 'memperbarui' : 'menambahkan'} data kelas.`
-      formErrors.value = { general: errorMsg }
-      showToast({
-        type: 'error',
-        title: 'Gagal',
-        message: errorMsg,
-      })
-    }
+    toast.error(getSafeRoomClassErrorMessage(result.error, 'Data kelas gagal dihapus.'))
   }
 }
 
-const handleDeleteConfirm = async () => {
-  if (!roomClassToDelete.value) return
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeRoomClassErrorMessage({ message: loadError.value }, 'Data kelas gagal dimuat.')
+    : '',
+)
 
-  const idToDelete = roomClassToDelete.value.id
-  const result = await deleteRoomClass(idToDelete)
-
-  if (result.success) {
-    closeDeleteDialog()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data kelas berhasil dihapus.',
-    })
-
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--
-    }
-
-    fetchRoomClasses()
-  } else {
-    const errorMsg =
-      result.error?.response?.data?.message || 'Data kelas gagal dihapus.'
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMsg,
-    })
-    closeDeleteDialog()
-  }
-}
-
-const getDeleteConfirmMessage = (roomClass) => {
-  if (!roomClass) return ''
-  return `Apakah Anda yakin ingin menghapus kelas “${roomClass.name}”?`
-}
-
-onMounted(() => {
-  fetchRoomClasses()
-})
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Data Kelas"
-      subtitle="Kelola kelas perawatan, harga, dan kode referensi untuk mendukung pengaturan kamar serta tempat tidur rumah sakit."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Bed', active: false },
-        { label: 'Data Kelas', active: true },
-      ]"
+      description="Kelola data kelas perawatan, tarif harian, serta kode integrasi BPJS Aplicare dan SIRS."
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Bed', 'Data Kelas']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Kelas
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <RoomClassFilters
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchRoomClasses"
-      />
-
-      <MasterDataErrorState v-if="error" :error="error" @retry="fetchRoomClasses" />
-
-      <template v-else>
-        <MasterDataEmptyState v-if="!loading && items.length === 0" :is-search="!!filters.search">
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Kelas</button>
-          </template>
-        </MasterDataEmptyState>
-
-        <template v-else>
-          <RoomClassTable
-            :items="items"
-            :pagination="pagination"
-            :loading="loading"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-
-          <MasterDataPagination
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <RoomClassFormModal
-      :is-open="formModalOpen"
-      :room-class="selectedRoomClass"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="closeFormModal"
-      @submit="handleFormSubmit"
+    <RoomClassFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog
-      :is-open="deleteDialogOpen"
-      :is-deleting="submitting"
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data kelas gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
+        </template>
+      </BaseEmptyState>
+    </div>
+
+    <template v-else>
+      <RoomClassTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingRoomClass = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Kelas tidak ditemukan"
+            :description="`Tidak ada kelas yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data kelas"
+            description="Tambahkan kelas pertama untuk mulai mengelola data kelas."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Kelas</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </RoomClassTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <RoomClassFormModal
+      :open="formOpen"
+      :room-class="editingRoomClass"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingRoomClass)"
       title="Hapus Kelas"
-      :confirm-message="getDeleteConfirmMessage(roomClassToDelete)"
+      :message="deleteMessage"
       confirm-text="Hapus"
+      :loading="saving"
       @close="closeDeleteDialog"
-      @confirm="handleDeleteConfirm"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  padding: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.page-content {
-  margin-top: 1.5rem;
-}
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--color-primary);
-  color: #ffffff;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.btn-primary:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-</style>

@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests\MasterData;
 
+use App\Models\Legacy\LegacyDoctor;
+use App\Models\Legacy\LegacyEmployee;
 use App\Support\LegacyAccess;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,9 +22,24 @@ class StoreDoctorRequest extends FormRequest
         $employeeTable = $isLegacy ? 'legacy.ref_pegawai' : 'employees';
         $specializationTable = $isLegacy ? 'legacy.ref_spesialisasi' : 'specializations';
 
+        $employeeRules = ['nullable', 'integer', "exists:{$employeeTable},id"];
+        if ($isLegacy) {
+            $employeeRules[] = function (string $attribute, mixed $value, Closure $fail): void {
+                if ($value === null || $value === '') {
+                    return;
+                }
+                $employee = LegacyEmployee::find($value);
+                if ($employee && $employee->id_mpi && LegacyDoctor::where('id_mpi', $employee->id_mpi)->exists()) {
+                    $fail('Pegawai ini sudah terdaftar sebagai dokter.');
+                }
+            };
+        } else {
+            $employeeRules[] = Rule::unique('doctors', 'employee_id')->whereNull('deleted_at');
+        }
+
         return [
             // If employee_id is null, it means creating a new Employee
-            'employee_id' => ['nullable', 'integer', "exists:{$employeeTable},id"],
+            'employee_id' => $employeeRules,
 
             // Person/Employee fields
             'person' => ['required', 'array'],
@@ -68,4 +86,3 @@ class StoreDoctorRequest extends FormRequest
         ];
     }
 }
-

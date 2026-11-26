@@ -165,4 +165,95 @@ class RegencyControllerTest extends TestCase
         $response->assertStatus(409);
         $this->assertNotSoftDeleted('regencies', ['id' => $regency->id]);
     }
+
+    public function test_create_and_update_regency_fails_422_when_province_id_does_not_exist()
+    {
+        $createRes = $this->actingAs($this->user)->postJson('/api/v1/master-data/regencies', [
+            'code' => '9999',
+            'name' => 'KABUPATEN TIDAK VALID',
+            'province_id' => 999999,
+            'is_active' => true,
+        ]);
+
+        $createRes->assertStatus(422)
+            ->assertJsonValidationErrors(['province_id']);
+
+        $regency = Regency::factory()->create([
+            'code' => '0015',
+            'name' => 'KABUPATEN ASLI',
+            'province_id' => $this->province->id,
+        ]);
+
+        $updateRes = $this->actingAs($this->user)->putJson("/api/v1/master-data/regencies/{$regency->id}", [
+            'code' => '0015',
+            'name' => 'KABUPATEN GAGAL',
+            'province_id' => 999999,
+        ]);
+
+        $updateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['province_id']);
+
+        $this->assertDatabaseHas('regencies', [
+            'id' => $regency->id,
+            'name' => 'KABUPATEN ASLI',
+            'province_id' => $this->province->id,
+        ]);
+    }
+
+    public function test_create_and_update_regency_fails_422_when_province_id_is_empty()
+    {
+        $createRes = $this->actingAs($this->user)->postJson('/api/v1/master-data/regencies', [
+            'code' => '0016',
+            'name' => 'KABUPATEN TANPA PROVINSI',
+            'province_id' => '',
+        ]);
+
+        $createRes->assertStatus(422)
+            ->assertJsonValidationErrors(['province_id']);
+
+        $regency = Regency::factory()->create([
+            'province_id' => $this->province->id,
+        ]);
+
+        $updateRes = $this->actingAs($this->user)->putJson("/api/v1/master-data/regencies/{$regency->id}", [
+            'code' => $regency->code,
+            'name' => 'KABUPATEN EDIT TANPA PROVINSI',
+            'province_id' => null,
+        ]);
+
+        $updateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['province_id']);
+    }
+
+    public function test_update_regency_moves_to_another_valid_province_and_preserves_province_data()
+    {
+        $originalName = $this->province->name;
+        $province2 = Province::factory()->create(['name' => 'PROVINSI TUJUAN']);
+        $regency = Regency::factory()->create([
+            'code' => '0017',
+            'name' => 'KABUPATEN PINDAH',
+            'province_id' => $this->province->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->putJson("/api/v1/master-data/regencies/{$regency->id}", [
+            'code' => '0017',
+            'name' => 'KABUPATEN PINDAH REVISI',
+            'province_id' => $province2->id,
+            'is_active' => true,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.province_id', $province2->id)
+            ->assertJsonPath('data.province_name', 'PROVINSI TUJUAN');
+
+        $this->assertDatabaseHas('regencies', [
+            'id' => $regency->id,
+            'name' => 'KABUPATEN PINDAH REVISI',
+            'province_id' => $province2->id,
+        ]);
+        $this->assertDatabaseHas('provinces', [
+            'id' => $this->province->id,
+            'name' => $originalName,
+        ]);
+    }
 }

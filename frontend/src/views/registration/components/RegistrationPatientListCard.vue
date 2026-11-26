@@ -53,8 +53,24 @@ const props = defineProps({
   loadingGuarantors: {
     type: Boolean,
     default: false
+  },
+  guarantors: {
+    type: Array,
+    default: () => []
+  },
+  guarantorsLoading: {
+    type: Boolean,
+    default: false
+  },
+  guarantorsError: {
+    type: String,
+    default: ''
   }
 });
+
+const effectiveGuarantors = computed(() =>
+  props.guarantors.length > 0 ? props.guarantors : props.guarantorOptions
+);
 
 const emit = defineEmits([
   'update:guarantorFilter',
@@ -65,7 +81,8 @@ const emit = defineEmits([
   'edit-admission',
   'delete-admission',
   'print-document',
-  'reset-filter'
+  'reset-filter',
+  'retry-guarantors'
 ]);
 
 const perPageOptions = [10, 25, 50];
@@ -137,12 +154,6 @@ const isConsentPrinted = (status) => {
 
 const getConsentContainerClass = (status) => {
   return isConsentPrinted(status) ? 'consent-container-green' : 'consent-container-red';
-};
-
-const getConsentBadgeClass = (status) => {
-  if (isConsentPrinted(status)) return 'consent-signed';
-  if (status === 'Dibatalkan') return 'consent-cancelled';
-  return 'consent-unsigned';
 };
 
 const pageNumbers = computed(() => {
@@ -288,21 +299,25 @@ onUnmounted(() => {
             :value="guarantorFilter"
             class="guarantor-filter-select"
             aria-label="Filter Jenis Asuransi"
-            :disabled="loadingGuarantors"
+            :disabled="guarantorsLoading || loadingGuarantors"
             @change="emit('update:guarantorFilter', $event.target.value)"
           >
             <option value="all">Semua Jenis Asuransi</option>
             <option
-              v-for="opt in guarantorOptions"
-              :key="opt.id"
-              :value="String(opt.id)"
+              v-for="g in effectiveGuarantors"
+              :key="g.id ?? g.name"
+              :value="String(g.id ?? g.name)"
             >
-              {{ opt.name || opt.jenis_asuransi }}
+              {{ g.label || g.name || g.jenis_asuransi }}
             </option>
           </select>
           <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
+        </div>
+        <div v-if="guarantorsError" class="guarantor-filter-status">
+          <span>{{ guarantorsError }}</span>
+          <button type="button" class="btn-retry-guarantor" @click="emit('retry-guarantors')">Muat Ulang</button>
         </div>
       </div>
     </div>
@@ -1380,6 +1395,26 @@ onUnmounted(() => {
   height: 1px;
   background: var(--color-border-soft);
   margin: 0.35rem 0;
+}
+
+.guarantor-filter-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--color-danger);
+}
+
+.btn-retry-guarantor {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.08rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 @media (max-width: 640px) {

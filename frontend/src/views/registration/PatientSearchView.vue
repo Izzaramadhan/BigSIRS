@@ -15,26 +15,17 @@ import AdmissionEditModal from '@/views/admission/components/AdmissionEditModal.
 import AdmissionPrintModal from '@/views/admission/components/AdmissionPrintModal.vue';
 import { useAdmissions } from '@/composables/useAdmissions';
 import patientService from '@/services/patient.service';
-import { guarantorsService } from '@/services/master-data/guarantors.service';
 
 const router = useRouter();
 
 const {
-  paginatedAdmissions,
-  paginationInfo,
-  pagination,
-  filters,
-  sort,
   nextQueueNumber,
-  loading,
   mockPolyclinics,
   mockDoctors,
-  setSort,
-  setPage,
-  setPerPage,
-  updateAdmission,
-  deleteAdmission,
-  addAdmission
+  masterGuarantors,
+  guarantorsLoading,
+  guarantorsError,
+  fetchGuarantors
 } = useAdmissions();
 
 // Search Form State (FORM PENCARIAN PASIEN)
@@ -337,8 +328,6 @@ const patientTablePagination = reactive({
   to: 0
 });
 const patientTableGuarantor = ref('all');
-const guarantorList = ref([]);
-const loadingGuarantors = ref(false);
 
 const getStoredPrintedConsents = () => {
   try {
@@ -358,20 +347,11 @@ const saveStoredPrintedConsent = (id) => {
       list.push(strId);
       localStorage.setItem('bigsirs_printed_general_consents', JSON.stringify(list));
     }
-  } catch {}
-};
-
-const loadGuarantors = async () => {
-  loadingGuarantors.value = true;
-  try {
-    const res = await guarantorsService.getGuarantors({ per_page: 100, is_active: true });
-    guarantorList.value = res.data || [];
   } catch {
-    guarantorList.value = [];
-  } finally {
-    loadingGuarantors.value = false;
+    // Abaikan kegagalan akses localStorage
   }
 };
+
 const patientTableSort = reactive({
   key: '',
   direction: 'asc'
@@ -485,18 +465,9 @@ const handlePatientSort = (key) => {
 };
 
 onMounted(() => {
-  loadGuarantors();
+  fetchGuarantors();
   loadPatientTable();
 });
-
-// Table Filter Handlers (DAFTAR PASIEN)
-const handleGuarantorChange = (val) => {
-  handlePatientGuarantorChange(val);
-};
-
-const handleResetListFilter = () => {
-  handlePatientResetFilter();
-};
 
 // Tools Dropdown Action Handlers
 const handleOpenEditAdmission = (item) => {
@@ -672,8 +643,9 @@ const handleSubmitNewAdmission = (newRecordData) => {
         :from="patientTablePagination.from"
         :to="patientTablePagination.to"
         :guarantor-filter="patientTableGuarantor"
-        :guarantor-options="guarantorList"
-        :loading-guarantors="loadingGuarantors"
+        :guarantors="masterGuarantors"
+        :guarantors-loading="guarantorsLoading"
+        :guarantors-error="guarantorsError"
         :sort-key="patientTableSort.key"
         :sort-direction="patientTableSort.direction"
         :loading="patientTableLoading"
@@ -686,6 +658,7 @@ const handleSubmitNewAdmission = (newRecordData) => {
         @delete-admission="handleOpenDeleteAdmission"
         @print-document="handleOpenPrintDocument"
         @reset-filter="handlePatientResetFilter"
+        @retry-guarantors="fetchGuarantors"
       />
     </div>
 
@@ -707,7 +680,7 @@ const handleSubmitNewAdmission = (newRecordData) => {
     <PatientEditModal
       :is-open="isEditPatientOpen"
       :patient="patientToEdit"
-      :guarantor-options="guarantorList"
+      :guarantor-options="masterGuarantors"
       @close="isEditPatientOpen = false"
       @saved="handleSaveEditPatient"
     />
@@ -727,6 +700,7 @@ const handleSubmitNewAdmission = (newRecordData) => {
       :is-open="isNewAdmissionOpen"
       :polyclinics="mockPolyclinics"
       :doctors="mockDoctors"
+      :guarantors="masterGuarantors"
       :next-queue-number="nextQueueNumber"
       :patient="selectedPatientForAdmission"
       @close="handleCloseNewAdmission"
@@ -738,6 +712,7 @@ const handleSubmitNewAdmission = (newRecordData) => {
       :admission="activeAdmission"
       :polyclinics="mockPolyclinics"
       :doctors="mockDoctors"
+      :guarantors="masterGuarantors"
       @close="isEditAdmissionOpen = false"
       @save="handleSaveEditAdmission"
     />

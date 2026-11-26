@@ -1,31 +1,15 @@
-import axios from '@/utils/axios';
+import { createResourceService } from '@/services/core/createResourceService'
 
-class PositionsService {
-  async getPositions(params) {
-    const response = await axios.get('/master-data/positions', { params });
-    return response.data;
-  }
+const resource = createResourceService('/master-data/positions')
 
-  async getPosition(id) {
-    const response = await axios.get(`/master-data/positions/${id}`);
-    return response.data;
-  }
-
-  async createPosition(data) {
-    const response = await axios.post('/master-data/positions', data);
-    return response.data;
-  }
-
-  async updatePosition(id, data) {
-    const response = await axios.put(`/master-data/positions/${id}`, data);
-    return response.data;
-  }
-
-
-  async deletePosition(id) {
-    const response = await axios.delete(`/master-data/positions/${id}`);
-    return response.data;
-  }
+export const positionsService = {
+  ...resource,
+  // Alias kompatibilitas untuk caller atau pengujian lama.
+  getPositions: (params) => resource.list(params),
+  getPosition: (id) => resource.get(id),
+  createPosition: (data) => resource.create(data),
+  updatePosition: (id, data) => resource.update(id, data),
+  deletePosition: (id) => resource.remove(id),
 }
 
-export const positionsService = new PositionsService();
+export default positionsService

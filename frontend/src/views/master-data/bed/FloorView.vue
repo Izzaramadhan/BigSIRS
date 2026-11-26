@@ -1,299 +1,200 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useFloors } from '@/composables/useFloors'
-import FloorTable from '@/components/master-data/floors/FloorTable.vue'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
 import FloorFilters from '@/components/master-data/floors/FloorFilters.vue'
 import FloorFormModal from '@/components/master-data/floors/FloorFormModal.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import AppToast from '@/components/common/AppToast.vue'
+import FloorTable from '@/components/master-data/floors/FloorTable.vue'
+import { getSafeFloorErrorMessage } from '@/components/master-data/floors/floor.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useFloors } from '@/composables/useFloors'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
   loading,
-  submitting,
-  error,
-  fetchFloors,
-  createFloor,
-  updateFloor,
-  deleteFloor,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useFloors()
+const toast = useToast()
 
-const formModalOpen = ref(false)
-const deleteDialogOpen = ref(false)
-const selectedFloor = ref(null)
-const floorToDelete = ref(null)
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingFloor = ref(null)
 const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: '',
-})
-
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
-}
-
-const closeToast = () => {
-  toast.value.show = false
-}
-
-const openAddModal = () => {
-  selectedFloor.value = null
+function openForm(floor = null) {
+  editingFloor.value = floor
   formErrors.value = {}
-  formModalOpen.value = true
+  formGeneralError.value = ''
+  formOpen.value = true
 }
 
-const openEditModal = (item) => {
-  selectedFloor.value = item
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingFloor.value = null
   formErrors.value = {}
-  formModalOpen.value = true
+  formGeneralError.value = ''
 }
 
-const closeFormModal = () => {
-  formModalOpen.value = false
-  selectedFloor.value = null
+async function handleSubmit(payload) {
+  if (saving.value) return
   formErrors.value = {}
-}
+  formGeneralError.value = ''
 
-const openDeleteDialog = (item) => {
-  floorToDelete.value = item
-  deleteDialogOpen.value = true
-}
+  const isEdit = Boolean(editingFloor.value)
+  const fallback = isEdit ? 'Data lantai gagal diperbarui.' : 'Data lantai gagal ditambahkan.'
+  const result = isEdit ? await update(editingFloor.value.id, payload) : await create(payload)
 
-const closeDeleteDialog = () => {
-  deleteDialogOpen.value = false
-  floorToDelete.value = null
-}
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value
-  pagination.current_page = 1
-  fetchFloors()
-}
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {}
-
-  const isEditing = Boolean(selectedFloor.value)
-  let result
-
-  if (isEditing) {
-    result = await updateFloor(selectedFloor.value.id, payload)
-  } else {
-    result = await createFloor(payload)
-  }
-
-  if (result.success) {
-    closeFormModal()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing ? 'Data lantai berhasil diperbarui.' : 'Data lantai berhasil ditambahkan.',
-    })
-    fetchFloors()
-  } else {
-    if (result.error?.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {}
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message:
-          result.error.response.data.message ||
-          'Data lantai tidak valid. Silakan periksa kembali form pengisian.',
-      })
-    } else {
-      const errorMsg =
-        result.error?.response?.data?.message ||
-        `Terjadi kesalahan saat ${isEditing ? 'memperbarui' : 'menambahkan'} data lantai.`
-      formErrors.value = { general: errorMsg }
-      showToast({
-        type: 'error',
-        title: 'Gagal',
-        message: errorMsg,
-      })
+  if (!result.ok) {
+    const safeMessage = getSafeFloorErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
     }
+    toast.error(safeMessage)
+    return
   }
+
+  closeForm()
+  toast.success(isEdit ? 'Data lantai berhasil diperbarui.' : 'Data lantai berhasil ditambahkan.')
 }
 
-const handleDeleteConfirm = async () => {
-  if (!floorToDelete.value) return
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingFloor = ref(null)
 
-  const idToDelete = floorToDelete.value.id
-  const result = await deleteFloor(idToDelete)
+const deleteMessage = computed(() =>
+  deletingFloor.value
+    ? `Apakah Anda yakin ingin menghapus lantai “${deletingFloor.value.name}” dari “${deletingFloor.value.building?.name?.trim() || 'Gedung'}”?`
+    : '',
+)
 
-  if (result.success) {
-    closeDeleteDialog()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data lantai berhasil dihapus.',
-    })
+async function handleDelete() {
+  if (saving.value || !deletingFloor.value) return
+  const result = await remove(deletingFloor.value.id)
+  deletingFloor.value = null
 
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--
-    }
-
-    fetchFloors()
+  if (result.ok) {
+    toast.success('Data lantai berhasil dihapus.')
   } else {
-    const errorMsg = result.error?.response?.data?.message || 'Data lantai gagal dihapus.'
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMsg,
-    })
-    closeDeleteDialog()
+    toast.error(getSafeFloorErrorMessage(result.error, 'Data lantai gagal dihapus.'))
   }
 }
 
-onMounted(() => {
-  fetchFloors()
-})
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeFloorErrorMessage({ message: loadError.value }, 'Data lantai gagal dimuat.')
+    : '',
+)
+
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Data Lantai"
-      subtitle="Kelola data lantai berdasarkan gedung untuk mendukung pengaturan ruangan dan tempat tidur rumah sakit."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Bed', active: false },
-        { label: 'Data Lantai', active: true },
-      ]"
+      description="Kelola data lantai berdasarkan gedung untuk mendukung pengaturan ruangan dan tempat tidur rumah sakit."
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Bed', 'Data Lantai']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Lantai
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <FloorFilters
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchFloors"
-      />
-
-      <MasterDataErrorState v-if="error" :error="error" @retry="fetchFloors" />
-
-      <template v-else>
-        <MasterDataEmptyState v-if="!loading && items.length === 0" :is-search="!!filters.search">
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Lantai</button>
-          </template>
-        </MasterDataEmptyState>
-
-        <template v-else>
-          <FloorTable
-            :items="items"
-            :pagination="pagination"
-            :loading="loading"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-
-          <MasterDataPagination
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <FloorFormModal
-      :is-open="formModalOpen"
-      :floor="selectedFloor"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="closeFormModal"
-      @submit="handleFormSubmit"
+    <FloorFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog
-      :is-open="deleteDialogOpen"
-      :is-deleting="submitting"
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data lantai gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
+        </template>
+      </BaseEmptyState>
+    </div>
+
+    <template v-else>
+      <FloorTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingFloor = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Lantai tidak ditemukan"
+            :description="`Tidak ada lantai yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data lantai"
+            description="Tambahkan lantai pertama untuk mulai mengelola data lantai."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Lantai</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </FloorTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <FloorFormModal
+      :open="formOpen"
+      :floor="editingFloor"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingFloor)"
       title="Hapus Lantai"
-      :confirm-message="
-        floorToDelete
-          ? `Apakah Anda yakin ingin menghapus lantai “${floorToDelete.name}” dari “${floorToDelete.building?.name || 'Gedung'}”?`
-          : ''
-      "
+      :message="deleteMessage"
       confirm-text="Hapus"
-      @close="closeDeleteDialog"
-      @confirm="handleDeleteConfirm"
+      :loading="saving"
+      @close="deletingFloor = null"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  padding: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.page-content {
-  margin-top: 1.5rem;
-}
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--color-primary);
-  color: #ffffff;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.btn-primary:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-</style>

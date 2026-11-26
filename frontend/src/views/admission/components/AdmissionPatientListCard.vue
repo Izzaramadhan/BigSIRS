@@ -45,6 +45,18 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  guarantors: {
+    type: Array,
+    default: () => []
+  },
+  guarantorsLoading: {
+    type: Boolean,
+    default: false
+  },
+  guarantorsError: {
+    type: String,
+    default: ''
   }
 });
 
@@ -56,7 +68,8 @@ const emit = defineEmits([
   'edit-admission',
   'delete-admission',
   'print-document',
-  'reset-filter'
+  'reset-filter',
+  'retry-guarantors'
 ]);
 
 const perPageOptions = [10, 25, 50, 100];
@@ -244,13 +257,21 @@ onUnmounted(() => {
             @change="emit('update:guarantorFilter', $event.target.value)"
           >
             <option value="all">Semua Jenis Asuransi</option>
-            <option value="UMUM">UMUM</option>
-            <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-            <option value="Asuransi Swasta">Asuransi Swasta</option>
+            <option
+              v-for="g in guarantors"
+              :key="g.id ?? g.name"
+              :value="g.name"
+            >
+              {{ g.label || g.name }}
+            </option>
           </select>
           <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
+        </div>
+        <div v-if="guarantorsError" class="guarantor-filter-status">
+          <span>{{ guarantorsError }}</span>
+          <button type="button" class="btn-retry-guarantor" @click="emit('retry-guarantors')">Muat Ulang</button>
         </div>
       </div>
     </div>
@@ -1269,10 +1290,30 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.dropdown-divider {
+  .dropdown-divider {
   height: 1px;
   background: var(--color-border-soft);
   margin: 0.35rem 0;
+}
+
+.guarantor-filter-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--color-danger);
+}
+
+.btn-retry-guarantor {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.08rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 @media (max-width: 640px) {

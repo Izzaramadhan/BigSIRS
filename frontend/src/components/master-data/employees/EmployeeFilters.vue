@@ -1,98 +1,55 @@
 <script setup>
-import { ref, watch } from 'vue';
-import MasterDataSearchInput from '@/components/master-data/shared/MasterDataSearchInput.vue';
+import { ref, watch } from 'vue'
+import { RefreshCw } from 'lucide-vue-next'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseSearchInput from '@/components/ui/BaseSearchInput.vue'
+import { useDebouncedRef } from '@/composables/core/useDebouncedRef'
 
 const props = defineProps({
-  filters: {
-    type: Object,
-    required: true
+  search: {
+    type: String,
+    default: '',
   },
   loading: {
     type: Boolean,
-    default: false
-  }
-});
+    default: false,
+  },
+})
 
-const emit = defineEmits(['filter', 'refresh']);
+const emit = defineEmits(['update:search', 'refresh'])
 
-const localSearch = ref(props.filters.search);
-let searchTimeout = null;
+const term = ref(props.search)
+const debouncedTerm = useDebouncedRef(term, 400)
 
-watch(localSearch, (newVal) => {
-  if (searchTimeout) clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    emit('filter', { key: 'search', value: newVal });
-  }, 400);
-});
+watch(debouncedTerm, (value) => {
+  const normalized = value.trim()
+  if (normalized !== props.search) emit('update:search', normalized)
+})
 
-watch(() => props.filters.search, (newVal) => {
-  if (localSearch.value !== newVal) {
-    localSearch.value = newVal;
-  }
-});
+watch(
+  () => props.search,
+  (value) => {
+    if (term.value.trim() !== value) term.value = value
+  },
+)
 </script>
 
 <template>
-  <div class="filters-container">
-    <MasterDataSearchInput 
-      v-model="localSearch" 
-      placeholder="Cari NIP / Nama..." 
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <BaseSearchInput
+      v-model="term"
+      label="Cari NIP atau nama pegawai"
+      placeholder="Cari NIP / Nama..."
     />
-    <div class="filter-controls">
-      <button 
-        type="button" 
-        class="btn-icon" 
-        @click="emit('refresh')" 
-        title="Refresh Data"
-        :disabled="loading"
-        aria-label="Refresh data"
-      >
-        <svg :class="{ 'spin': loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-      </button>
-    </div>
+    <BaseButton
+      variant="secondary"
+      size="icon"
+      aria-label="Muat ulang data"
+      title="Muat ulang data"
+      :disabled="loading"
+      @click="emit('refresh')"
+    >
+      <RefreshCw class="size-4" :class="{ 'animate-spin': loading }" aria-hidden="true" />
+    </BaseButton>
   </div>
 </template>
-
-<style scoped>
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft, #cbd5e1);
-  border-radius: 6px;
-  color: var(--color-text-secondary, #64748b);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover:not(:disabled) {
-  background: var(--color-page-bg, #f8fafc);
-  color: var(--color-text-navy, #1e293b);
-}
-
-.btn-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-</style>

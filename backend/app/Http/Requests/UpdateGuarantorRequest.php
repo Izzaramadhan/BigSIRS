@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\GuarantorType;
 use App\Support\LegacyAccess;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
@@ -21,28 +22,18 @@ class UpdateGuarantorRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $guarantor = $this->route('guarantor');
-        $code = $this->code;
-        if ($code === null || trim((string) $code) === '') {
-            $code = (is_object($guarantor) ? ($guarantor->code ?? null) : null) ?? ('ASR-' . strtoupper(substr(uniqid(), -6)));
+        if ($this->exists('code')) {
+            $code = $this->code !== null ? strtoupper(trim((string) $this->code)) : null;
+            $this->merge(['code' => $code]);
         }
 
-        $type = $this->type;
-        if ($type === null || trim((string) $type) === '') {
-            $existingType = is_object($guarantor) && isset($guarantor->type) ? ($guarantor->type instanceof GuarantorType ? $guarantor->type->value : (string) $guarantor->type) : null;
-            $type = $existingType ?? (filter_var($this->is_government, FILTER_VALIDATE_BOOLEAN)
-                ? GuarantorType::Bpjs->value
-                : GuarantorType::Other->value);
+        if ($this->exists('name')) {
+            $name = $this->name !== null ? preg_replace('/\s+/', ' ', trim((string) $this->name)) : null;
+            $this->merge(['name' => $name]);
         }
-
-        $this->merge([
-            'code' => strtoupper(trim((string) $code)),
-            'type' => $type,
-            'name' => $this->name !== null ? preg_replace('/\s+/', ' ', trim($this->name)) : null,
-        ]);
 
         foreach (['legacy_id', 'inacbg_id'] as $field) {
-            if ($this->has($field) && trim((string) $this->get($field)) === '') {
+            if ($this->exists($field) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
             }
         }
@@ -55,20 +46,21 @@ class UpdateGuarantorRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route('guarantor')?->id ?? $this->route('guarantor');
+        $routeParam = $this->route('guarantor');
+        $id = $routeParam instanceof Model ? $routeParam->getKey() : $routeParam;
 
         $uniqueCodeRule = LegacyAccess::isAvailable('ref_jenis_asuransi')
             ? Rule::unique('legacy.ref_jenis_asuransi', 'kode')->ignore($id)->whereNull('deleted_at')
             : Rule::unique('guarantors', 'code')->ignore($id)->whereNull('deleted_at');
 
         return [
-            'code' => ['required', 'string', 'max:50', $uniqueCodeRule],
-            'name' => ['required', 'string', 'max:150'],
-            'legacy_id' => ['nullable', 'integer'],
-            'type' => ['required', new Enum(GuarantorType::class)],
-            'is_active' => ['boolean'],
-            'is_government' => ['required', 'boolean'],
-            'inacbg_id' => ['nullable', 'string', 'max:10'],
+            'code' => ['sometimes', 'required', 'string', 'max:50', $uniqueCodeRule],
+            'name' => ['sometimes', 'required', 'string', 'max:150'],
+            'legacy_id' => ['sometimes', 'nullable', 'integer'],
+            'type' => ['sometimes', 'required', new Enum(GuarantorType::class)],
+            'is_active' => ['sometimes', 'boolean'],
+            'is_government' => ['sometimes', 'required', 'boolean'],
+            'inacbg_id' => ['sometimes', 'nullable', 'string', 'max:10'],
         ];
     }
 }

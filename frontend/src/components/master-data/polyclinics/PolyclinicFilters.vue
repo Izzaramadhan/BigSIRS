@@ -1,143 +1,84 @@
 <script setup>
-import { ref, watch } from 'vue';
-import MasterDataSearchInput from '@/components/master-data/shared/MasterDataSearchInput.vue';
+import { computed, ref, watch } from 'vue'
+import { RefreshCw } from 'lucide-vue-next'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseSearchInput from '@/components/ui/BaseSearchInput.vue'
+import { fieldControlClass } from '@/components/ui/fieldControlClass'
+import { useDebouncedRef } from '@/composables/core/useDebouncedRef'
 
 const props = defineProps({
-  filters: {
-    type: Object,
-    required: true
+  search: {
+    type: String,
+    default: '',
+  },
+  isActive: {
+    type: Boolean,
+    default: null,
   },
   loading: {
     type: Boolean,
-    default: false
-  }
-});
+    default: false,
+  },
+})
 
-const emit = defineEmits(['filter', 'refresh']);
+const emit = defineEmits(['update:search', 'update:isActive', 'refresh'])
 
-const localSearch = ref(props.filters.search);
-let searchTimeout = null;
+const term = ref(props.search)
+const debouncedTerm = useDebouncedRef(term, 400)
 
-watch(localSearch, (newVal) => {
-  if (searchTimeout) clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    emit('filter', { key: 'search', value: newVal });
-  }, 400);
-});
+watch(debouncedTerm, (value) => {
+  const normalized = value.trim()
+  if (normalized !== props.search) emit('update:search', normalized)
+})
 
-watch(() => props.filters.search, (newVal) => {
-  if (localSearch.value !== newVal) {
-    localSearch.value = newVal;
-  }
-});
+watch(
+  () => props.search,
+  (value) => {
+    if (term.value.trim() !== value) term.value = value
+  },
+)
+
+const statusValue = computed({
+  get: () => {
+    if (props.isActive === null || props.isActive === undefined) return ''
+    return String(props.isActive)
+  },
+  set: (value) => {
+    emit('update:isActive', value === '' ? null : value === 'true')
+  },
+})
 </script>
 
 <template>
-  <div class="filters-container">
-    <MasterDataSearchInput 
-      v-model="localSearch" 
-      placeholder="Cari kode atau nama poliklinik..." 
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <BaseSearchInput
+      v-model="term"
+      label="Cari kode atau nama poliklinik"
+      placeholder="Cari kode atau nama poliklinik..."
     />
-    <div class="filter-controls">
-      <select 
-        :value="filters.is_active === null ? '' : String(filters.is_active)" 
-        @change="emit('filter', { 
-          key: 'is_active', 
-          value: $event.target.value === '' ? null : $event.target.value === 'true' 
-        })"
-        class="filter-select"
-        :disabled="loading"
+
+    <div class="flex flex-wrap items-center gap-2">
+      <select
+        v-model="statusValue"
         aria-label="Filter status aktif"
+        :disabled="loading"
+        :class="[fieldControlClass(), 'w-44']"
       >
         <option value="">Semua Status</option>
         <option value="true">Aktif</option>
         <option value="false">Nonaktif</option>
       </select>
-      
-      <button 
-        type="button" 
-        class="btn-icon" 
-        @click="emit('refresh')" 
-        title="Refresh Data"
+
+      <BaseButton
+        variant="secondary"
+        size="icon"
+        aria-label="Muat ulang data"
+        title="Muat ulang data"
         :disabled="loading"
-        aria-label="Refresh data"
+        @click="emit('refresh')"
       >
-        <svg :class="{ 'spin': loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-      </button>
+        <RefreshCw class="size-4" :class="{ 'animate-spin': loading }" aria-hidden="true" />
+      </BaseButton>
     </div>
   </div>
 </template>
-
-<style scoped>
-.filter-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.filter-select {
-  padding: 0.5rem 2rem 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
-  background-color: #fff;
-  cursor: pointer;
-  appearance: none;
-  min-width: 180px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.5rem center;
-}
-
-.filter-select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: #ffffff;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover:not(:disabled) {
-  background: var(--color-page-bg);
-  color: var(--color-text-navy);
-}
-
-.btn-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-button:disabled, input:disabled, select:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-
-</style>

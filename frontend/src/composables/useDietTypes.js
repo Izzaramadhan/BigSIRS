@@ -1,99 +1,36 @@
-import { ref } from 'vue'
-import DietTypeService from '@/services/dietType.service'
+import { reactive } from 'vue'
+import { useCrudResource } from '@/composables/core/useCrudResource'
+import { dietTypeService } from '@/services/dietType.service'
 
+/**
+ * Composable modul Asuhan Gizi berbasis useCrudResource.
+ * Default sorting diselaraskan dengan DietTypeService::getPaginated (`name` ascending).
+ */
 export function useDietTypes() {
-  const dietTypes = ref([])
-  const meta = ref(null)
-  const loading = ref(false)
-  const error = ref(null)
+  const sort = reactive({
+    column: 'name',
+    direction: 'asc',
+  })
 
-  const fetchDietTypes = async (params = {}) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await DietTypeService.getAll(params)
-      dietTypes.value = response.data
-      meta.value = response.meta || {
-        current_page: 1,
-        last_page: 1,
-        total: response.data.length,
-        per_page: 10
-      }
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memuat data asuhan gizi'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
+  const crud = useCrudResource(dietTypeService, {
+    label: 'asuhan gizi',
+    sort,
+  })
 
-  const createDietType = async (data) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await DietTypeService.create(data)
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menambahkan data asuhan gizi'
-      throw err
-    } finally {
-      loading.value = false
+  function setSort(column) {
+    if (sort.column === column) {
+      sort.direction = sort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      sort.column = column
+      sort.direction = 'asc'
     }
-  }
-
-  const updateDietType = async (id, data) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await DietTypeService.update(id, data)
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui data asuhan gizi'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const updateStatus = async (id, isActive) => {
-    error.value = null
-    try {
-      const response = await DietTypeService.updateStatus(id, isActive)
-      // Update local state if needed
-      const index = dietTypes.value.findIndex(item => item.id === id)
-      if (index !== -1) {
-        dietTypes.value[index].is_active = isActive
-      }
-      return response
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal memperbarui status'
-      throw err
-    }
-  }
-
-  const deleteDietType = async (id) => {
-    loading.value = true
-    error.value = null
-    try {
-      await DietTypeService.delete(id)
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Gagal menghapus data asuhan gizi'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    crud.meta.page = 1
+    return crud.fetchItems()
   }
 
   return {
-    dietTypes,
-    meta,
-    loading,
-    error,
-    fetchDietTypes,
-    createDietType,
-    updateDietType,
-    updateStatus,
-    deleteDietType
+    ...crud,
+    sort,
+    setSort,
   }
 }

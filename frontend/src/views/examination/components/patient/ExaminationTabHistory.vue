@@ -38,7 +38,7 @@ const selectVisit = (id) => {
       >
         <span class="history-datetime font-mono">{{ item.visit_datetime }}</span>
         <span class="history-units">
-          {{ item.units.map((u) => `( ${u} )`).join(' ') }}
+          {{ (item.units || [item.polyclinic || 'Poli Umum']).map((u) => `( ${u} )`).join(' ') }}
         </span>
       </button>
     </div>
@@ -49,7 +49,7 @@ const selectVisit = (id) => {
         <div class="detail-top-bar">
           <div>
             <span class="detail-time-label font-mono">{{ selectedVisit.visit_datetime }}</span>
-            <h3 class="detail-unit-heading">{{ selectedVisit.units.join(' / ') }}</h3>
+            <h3 class="detail-unit-heading">{{ (selectedVisit.units || [selectedVisit.polyclinic || 'Poli Umum']).join(' / ') }}</h3>
           </div>
           <span class="detail-doctor-chip">{{ selectedVisit.doctor }}</span>
         </div>
@@ -74,10 +74,10 @@ const selectVisit = (id) => {
             <span class="detail-label">P • Tindakan & Terapi</span>
             <p class="detail-text">
               <span v-if="selectedVisit.procedures?.length">
-                Tindakan: {{ selectedVisit.procedures.join(', ') }}.<br />
+                Tindakan: {{ selectedVisit.procedures.map((p) => typeof p === 'object' ? (p.name || p.tindakan || '-') : p).join(', ') }}.<br />
               </span>
               <span v-if="selectedVisit.prescriptions?.length">
-                Resep: {{ selectedVisit.prescriptions.join(', ') }}.<br />
+                Resep: {{ selectedVisit.prescriptions.map((p) => typeof p === 'object' ? (p.name || p.medicine_name || '-') : p).join(', ') }}.<br />
               </span>
               {{ selectedVisit.notes }}
             </p>

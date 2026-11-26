@@ -2,10 +2,22 @@
 
 namespace Tests;
 
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Tests\Support\EloquentGuardableColumnsReset;
 
 abstract class TestCase extends BaseTestCase
 {
+    protected function tearDown(): void
+    {
+        try {
+            parent::tearDown();
+        } finally {
+            LegacyAccess::clearCache();
+            EloquentGuardableColumnsReset::reset();
+        }
+    }
+
     protected function setUpTraits()
     {
         $this->ensureSafeTestingEnvironment();

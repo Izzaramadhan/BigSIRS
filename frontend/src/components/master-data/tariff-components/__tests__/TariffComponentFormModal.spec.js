@@ -56,7 +56,7 @@ describe('TariffComponentFormModal.vue', () => {
     expect(wrapper.find('#description').element.value).toBe('Test Description');
   });
 
-  it('emits save event with correct data when form is submitted', async () => {
+  it('emits submit event with correct data when form is submitted', async () => {
     const wrapper = mount(TariffComponentFormModal, {
       props: {
         isOpen: true,
@@ -75,11 +75,10 @@ describe('TariffComponentFormModal.vue', () => {
     // trigger submit
     await wrapper.find('form').trigger('submit.prevent');
 
-    expect(wrapper.emitted('save')).toBeTruthy();
-    expect(wrapper.emitted('save')[0][0]).toEqual({
+    expect(wrapper.emitted('submit')).toBeTruthy();
+    expect(wrapper.emitted('submit')[0][0]).toEqual({
       name: 'New Component',
-      description: 'Description',
-      is_active: true
+      description: 'Description'
     });
   });
 

@@ -15,14 +15,15 @@ class StoreProvinceRequest extends FormRequest
 
     public function rules(): array
     {
-        $uniqueRule = LegacyAccess::isAvailable('ref_provinsi')
+        $isLegacy = LegacyAccess::isAvailable('ref_provinsi');
+        $uniqueRule = $isLegacy
             ? Rule::unique('legacy.ref_provinsi', 'nama')->whereNull('deleted_at')
-            : Rule::unique('provinces', 'name')->whereNull('deleted_at');
+            : Rule::unique('provinces', 'name');
 
         return [
             'name' => ['required', 'string', 'max:255', $uniqueRule],
-            'code' => ['nullable', 'string', 'max:50'],
-            'is_active' => ['nullable', 'boolean'],
+            'code' => $isLegacy ? ['nullable', 'string', 'max:50'] : ['prohibited'],
+            'is_active' => $isLegacy ? ['nullable', 'boolean'] : ['prohibited'],
         ];
     }
 

@@ -566,10 +566,137 @@ class MedicalProcedureTest extends TestCase
         $zip = new \ZipArchive();
         $this->assertTrue($zip->open($temp));
         $sharedStrings = $zip->getFromName('xl/sharedStrings.xml');
-        $this->assertStringContainsString($this->tariffType->name, $sharedStrings);
-        $this->assertStringNotContainsString('Tariff Type Two', $sharedStrings);
+        $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
         $zip->close();
         unlink($temp);
+
+        $rows = $this->parseXlsxRows($sheetXml, $sharedStrings);
+        $this->assertCount(2, $rows); // 1 header + 1 matching tariff row
+        $this->assertSame('P-MULTI-TAR', $rows[1]['C']);
+        $this->assertSame($this->tariffType->name, $rows[1]['F']);
+        $this->assertSame('15000', $rows[1]['G']);
+        $this->assertStringContainsString($this->tariffType->name, $sharedStrings);
+        $this->assertStringNotContainsString('Tariff Type Two', $sharedStrings);
+    }
+
+    public function test_export_multi_tariff_matrix_filters_only_matching_tariffs_in_worksheet_cells()
+    {
+        $tariffType2 = TariffType::factory()->create(['name' => 'Tariff Type B']);
+        $unusedTariffType = TariffType::factory()->create(['name' => 'Tariff Type Unused']);
+
+        $procOnlyA = MedicalProcedure::create([
+            'code' => 'P-ONLY-A',
+            'name' => 'Only Tariff A',
+            'procedure_category_id' => $this->category->id,
+            'is_visible' => true,
+        ]);
+        $procOnlyA->tariffs()->create(['tariff_type_id' => $this->tariffType->id, 'total_amount' => 10000]);
+
+        $procOnlyB = MedicalProcedure::create([
+            'code' => 'P-ONLY-B',
+            'name' => 'Only Tariff B',
+            'procedure_category_id' => $this->category->id,
+            'is_visible' => true,
+        ]);
+        $procOnlyB->tariffs()->create(['tariff_type_id' => $tariffType2->id, 'total_amount' => 20000]);
+
+        $procBothAB = MedicalProcedure::create([
+            'code' => 'P-BOTH-AB',
+            'name' => 'Both Tariff A and B',
+            'procedure_category_id' => $this->category->id,
+            'is_visible' => true,
+        ]);
+        $procBothAB->tariffs()->create(['tariff_type_id' => $this->tariffType->id, 'total_amount' => 15000]);
+        $procBothAB->tariffs()->create(['tariff_type_id' => $tariffType2->id, 'total_amount' => 30000]);
+
+        MedicalProcedure::create([
+            'code' => 'P-NO-TARIFF',
+            'name' => 'Procedure Without Tariff',
+            'procedure_category_id' => $this->category->id,
+            'is_visible' => true,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(
+            "/api/v1/master-data/procedures/export?tariff_type_id={$this->tariffType->id}"
+        );
+        $response->assertOk();
+
+        $temp = tempnam(sys_get_temp_dir(), 'test_xlsx');
+        file_put_contents($temp, $response->streamedContent());
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($temp));
+        $sharedStrings = $zip->getFromName('xl/sharedStrings.xml');
+        $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        unlink($temp);
+
+        $rows = $this->parseXlsxRows($sheetXml, $sharedStrings);
+        $this->assertSame(['No', 'Kategori', 'Kode', 'ICD-9-CM', 'Tindakan', 'Jenis Tarif', 'Harga', 'Unit Layanan', 'Status'], array_values($rows[0]));
+        $this->assertCount(3, $rows); // header + P-ONLY-A + P-BOTH-AB
+
+        $dataRows = array_slice($rows, 1);
+        $byCode = [];
+        foreach ($dataRows as $r) {
+            $byCode[$r['C']] = $r;
+        }
+
+        $this->assertCount(2, $byCode);
+        $this->assertArrayHasKey('P-ONLY-A', $byCode);
+        $this->assertArrayHasKey('P-BOTH-AB', $byCode);
+        $this->assertArrayNotHasKey('P-ONLY-B', $byCode);
+        $this->assertArrayNotHasKey('P-NO-TARIFF', $byCode);
+
+        $this->assertSame($this->tariffType->name, $byCode['P-ONLY-A']['F']);
+        $this->assertSame('10000', $byCode['P-ONLY-A']['G']);
+        $this->assertSame($this->tariffType->name, $byCode['P-BOTH-AB']['F']);
+        $this->assertSame('15000', $byCode['P-BOTH-AB']['G']);
+        $this->assertStringNotContainsString('Tariff Type B', $sharedStrings);
+
+        // Verify database tariffs were not modified or deleted by filtering
+        $this->assertDatabaseCount('medical_procedure_tariffs', 4);
+
+        // Empty filter match returns JSON message cleanly
+        $emptyRes = $this->actingAs($this->user)->getJson(
+            "/api/v1/master-data/procedures/export?tariff_type_id={$unusedTariffType->id}"
+        );
+        $emptyRes->assertOk()
+            ->assertJson(['message' => 'Tidak ada data tindakan yang dapat diunduh.']);
+    }
+
+    /**
+     * Resolve actual worksheet cell values from xl/worksheets/sheet1.xml + xl/sharedStrings.xml.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private function parseXlsxRows(string $sheetXml, string $sharedStringsXml): array
+    {
+        $strings = [];
+        $sst = new \SimpleXMLElement($sharedStringsXml);
+        foreach ($sst->si as $si) {
+            $strings[] = (string) ($si->t ?? '');
+        }
+
+        $sheet = new \SimpleXMLElement($sheetXml);
+        $rows = [];
+        foreach ($sheet->sheetData->row as $rowNode) {
+            $rowData = [];
+            foreach ($rowNode->c as $cell) {
+                $ref = (string) $cell['r'];
+                $col = preg_replace('/\d+/', '', $ref);
+                $type = (string) $cell['t'];
+                $val = (string) $cell->v;
+                if ($type === 's') {
+                    $rowData[$col] = $strings[(int) $val] ?? '';
+                } elseif ($type === 'inlineStr') {
+                    $rowData[$col] = (string) ($cell->is->t ?? '');
+                } else {
+                    $rowData[$col] = $val;
+                }
+            }
+            $rows[] = $rowData;
+        }
+
+        return $rows;
     }
 
     public function test_export_with_combined_filters()

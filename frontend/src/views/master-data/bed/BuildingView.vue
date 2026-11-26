@@ -1,302 +1,202 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useBuildings } from '@/composables/useBuildings'
-import BuildingTable from '@/components/master-data/buildings/BuildingTable.vue'
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
 import BuildingFilters from '@/components/master-data/buildings/BuildingFilters.vue'
 import BuildingFormModal from '@/components/master-data/buildings/BuildingFormModal.vue'
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue'
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue'
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue'
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue'
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue'
-import AppToast from '@/components/common/AppToast.vue'
+import BuildingTable from '@/components/master-data/buildings/BuildingTable.vue'
+import { getSafeBuildingErrorMessage } from '@/components/master-data/buildings/building.helpers'
+import { useBuildings } from '@/composables/useBuildings'
+import { useToast } from '@/composables/core/useToast'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
   loading,
-  submitting,
-  error,
-  fetchBuildings,
-  createBuilding,
-  updateBuilding,
-  deleteBuilding,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
+  setFilters,
+  create,
+  update,
+  remove,
 } = useBuildings()
+const toast = useToast()
 
-const formModalOpen = ref(false)
-const deleteDialogOpen = ref(false)
-const selectedBuilding = ref(null)
-const buildingToDelete = ref(null)
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingBuilding = ref(null)
 const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: '',
-})
-
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message }
-}
-
-const closeToast = () => {
-  toast.value.show = false
-}
-
-const openAddModal = () => {
-  selectedBuilding.value = null
+function openForm(building = null) {
+  editingBuilding.value = building
   formErrors.value = {}
-  formModalOpen.value = true
+  formGeneralError.value = ''
+  formOpen.value = true
 }
 
-const openEditModal = (item) => {
-  selectedBuilding.value = item
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingBuilding.value = null
   formErrors.value = {}
-  formModalOpen.value = true
+  formGeneralError.value = ''
 }
 
-const closeFormModal = () => {
-  formModalOpen.value = false
-  selectedBuilding.value = null
+async function handleSubmit(payload) {
+  if (saving.value) return
   formErrors.value = {}
-}
+  formGeneralError.value = ''
 
-const openDeleteDialog = (item) => {
-  buildingToDelete.value = item
-  deleteDialogOpen.value = true
-}
+  const isEdit = Boolean(editingBuilding.value)
+  const fallback = isEdit
+    ? 'Data gedung gagal diperbarui.'
+    : 'Data gedung gagal ditambahkan.'
+  const result = isEdit ? await update(editingBuilding.value.id, payload) : await create(payload)
 
-const closeDeleteDialog = () => {
-  deleteDialogOpen.value = false
-  buildingToDelete.value = null
-}
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value
-  pagination.current_page = 1
-  fetchBuildings()
-}
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {}
-
-  const isEditing = Boolean(selectedBuilding.value)
-  let result
-
-  if (isEditing) {
-    result = await updateBuilding(selectedBuilding.value.id, payload)
-  } else {
-    result = await createBuilding(payload)
-  }
-
-  if (result.success) {
-    closeFormModal()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing ? 'Data gedung berhasil diperbarui.' : 'Data gedung berhasil ditambahkan.',
-    })
-    fetchBuildings()
-  } else {
-    if (result.error?.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {}
-      showToast({
-        type: 'error',
-        title: isEditing ? 'Gagal Memperbarui' : 'Gagal Menambahkan',
-        message:
-          result.error.response.data.message ||
-          'Data gedung tidak valid. Silakan periksa kembali form pengisian.',
-      })
-    } else {
-      const errorMsg =
-        result.error?.response?.data?.message ||
-        `Terjadi kesalahan saat ${isEditing ? 'memperbarui' : 'menambahkan'} data gedung.`
-      formErrors.value = { general: errorMsg }
-      showToast({
-        type: 'error',
-        title: 'Gagal',
-        message: errorMsg,
-      })
+  if (!result.ok) {
+    const safeMessage = getSafeBuildingErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
     }
+    toast.error(safeMessage)
+    return
   }
+
+  closeForm()
+  toast.success(isEdit ? 'Data gedung berhasil diperbarui.' : 'Data gedung berhasil ditambahkan.')
 }
 
-const handleDeleteConfirm = async () => {
-  if (!buildingToDelete.value) return
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingBuilding = ref(null)
 
-  const idToDelete = buildingToDelete.value.id
-  const result = await deleteBuilding(idToDelete)
+const deleteMessage = computed(() =>
+  deletingBuilding.value
+    ? `Apakah Anda yakin ingin menghapus gedung “${deletingBuilding.value.name}”?`
+    : '',
+)
 
-  if (result.success) {
-    closeDeleteDialog()
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data gedung berhasil dihapus.',
-    })
+async function handleDelete() {
+  if (saving.value || !deletingBuilding.value) return
+  const result = await remove(deletingBuilding.value.id)
+  deletingBuilding.value = null
 
-    // Adjust pagination if deleting the last item on current page
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--
-    }
-
-    fetchBuildings()
+  if (result.ok) {
+    toast.success('Data gedung berhasil dihapus.')
   } else {
-    const errorMsg = result.error?.response?.data?.message || 'Data gedung gagal dihapus.'
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMsg,
-    })
-    closeDeleteDialog()
+    toast.error(getSafeBuildingErrorMessage(result.error, 'Data gedung gagal dihapus.'))
   }
 }
 
-onMounted(() => {
-  fetchBuildings()
-})
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafeBuildingErrorMessage({ message: loadError.value }, 'Data gedung gagal dimuat.')
+    : '',
+)
+
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Data Gedung"
-      subtitle="Kelola data gedung yang digunakan dalam pengaturan ruangan dan tempat tidur rumah sakit."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Bed', active: false },
-        { label: 'Data Gedung', active: true },
-      ]"
+      description="Kelola data gedung yang digunakan dalam pengaturan ruangan dan tempat tidur rumah sakit."
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Bed', 'Data Gedung']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Gedung
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <BuildingFilters
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchBuildings"
-      />
-
-      <MasterDataErrorState v-if="error" :error="error" @retry="fetchBuildings" />
-
-      <template v-else>
-        <MasterDataEmptyState v-if="!loading && items.length === 0" :is-search="!!filters.search">
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Gedung</button>
-          </template>
-        </MasterDataEmptyState>
-
-        <template v-else>
-          <BuildingTable
-            :items="items"
-            :pagination="pagination"
-            :loading="loading"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-
-          <MasterDataPagination
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <BuildingFormModal
-      :is-open="formModalOpen"
-      :building="selectedBuilding"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="closeFormModal"
-      @submit="handleFormSubmit"
+    <BuildingFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
 
-    <MasterDataDeleteDialog
-      :is-open="deleteDialogOpen"
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data gedung gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
+        </template>
+      </BaseEmptyState>
+    </div>
+
+    <template v-else>
+      <BuildingTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingBuilding = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Gedung tidak ditemukan"
+            :description="`Tidak ada gedung yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data gedung"
+            description="Tambahkan gedung pertama untuk mulai mengelola data gedung."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Gedung</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </BuildingTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <BuildingFormModal
+      :open="formOpen"
+      :building="editingBuilding"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingBuilding)"
       title="Hapus Gedung"
-      :confirm-message="
-        buildingToDelete
-          ? `Apakah Anda yakin ingin menghapus gedung “${buildingToDelete.name}”?`
-          : ''
-      "
+      :message="deleteMessage"
       confirm-text="Hapus"
-      warning-message="Tindakan ini tidak dapat dibatalkan."
-      :is-submitting="submitting"
-      @close="closeDeleteDialog"
-      @confirm="handleDeleteConfirm"
+      :loading="saving"
+      @close="deletingBuilding = null"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.page-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  background-color: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary:hover {
-  background-color: var(--color-primary-dark, #0284c7);
-}
-
-.btn-primary svg {
-  width: 18px;
-  height: 18px;
-}
-</style>

@@ -12,6 +12,7 @@ use App\Models\Regency;
 use App\Support\LegacyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ProvinceController extends Controller
 {
@@ -42,21 +43,21 @@ class ProvinceController extends Controller
             return ProvinceResource::collection($query->orderBy($dbSort, $order)->paginate($perPage));
         }
 
+        $validatedQuery = $request->validate([
+            'code' => ['prohibited'],
+            'is_active' => ['prohibited'],
+            'sort' => ['nullable', Rule::in(['id', 'name', 'legacy_id', 'created_at', 'updated_at'])],
+            'order' => ['nullable', Rule::in(['asc', 'desc', 'ASC', 'DESC'])],
+        ]);
+
         $query = Province::query();
 
         if ($search = $request->get('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('code', 'like', "%{$search}%")
-                    ->orWhere('name', 'like', "%{$search}%");
-            });
+            $query->where('name', 'like', "%{$search}%");
         }
 
-        if ($request->has('is_active')) {
-            $query->where('is_active', $request->boolean('is_active'));
-        }
-
-        $sort = $request->get('sort', 'name');
-        $order = strtolower($request->get('order', 'asc')) === 'desc' ? 'desc' : 'asc';
+        $sort = $validatedQuery['sort'] ?? 'name';
+        $order = strtolower($validatedQuery['order'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
 
         return ProvinceResource::collection($query->orderBy($sort, $order)->paginate($perPage));
     }
@@ -77,7 +78,9 @@ class ProvinceController extends Controller
             return (new ProvinceResource($province))->response()->setStatusCode(201);
         }
 
-        $province = Province::create($data);
+        $province = Province::create([
+            'name' => $data['name'],
+        ]);
 
         return (new ProvinceResource($province))->response()->setStatusCode(201);
     }
@@ -123,7 +126,9 @@ class ProvinceController extends Controller
             $province = Province::findOrFail($id);
         }
 
-        $province->update($data);
+        $province->update([
+            'name' => $data['name'],
+        ]);
 
         return new ProvinceResource($province);
     }

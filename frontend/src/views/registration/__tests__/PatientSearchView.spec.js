@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
 import PatientSearchView from '../PatientSearchView.vue';
 import RegistrationPatientSearchCard from '../components/RegistrationPatientSearchCard.vue';
 import RegistrationQueueCard from '../components/RegistrationQueueCard.vue';
@@ -7,7 +7,7 @@ import RegistrationPatientListCard from '../components/RegistrationPatientListCa
 import PatientSearchTable from '../components/PatientSearchTable.vue';
 import PatientSearchFilters from '../components/PatientSearchFilters.vue';
 import { mockPatients } from '@/mocks/patients';
-import patientService from '@/services/patient.service';
+import lookupService from '@/services/lookup.service';
 
 const mockPush = vi.fn();
 vi.mock('vue-router', async (importOriginal) => {
@@ -78,7 +78,25 @@ vi.mock('@/services/patient.service', () => ({
   }
 }));
 
+vi.mock('@/services/lookup.service', () => ({
+  default: {
+    getGuarantors: vi.fn()
+  }
+}));
+
+const mockMasterGuarantors = [
+  { id: 2, code: 'UMM', name: 'UMUM', type: 'self_pay', is_active: true },
+  { id: 3, code: 'JKN', name: 'JKN', type: 'bpjs', is_active: true },
+  { id: 4, code: 'BPJS-M', name: 'BPJS MANDIRI', type: 'bpjs', is_active: true },
+  { id: 9, code: 'CORP', name: 'Jaminan Perusahaan Dinamis', type: 'private_insurance', is_active: true }
+];
+
 describe('PatientSearchView (Halaman Awal Pendaftaran Terbaru)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lookupService.getGuarantors.mockResolvedValue(mockMasterGuarantors);
+  });
+
   it('renders FORM PENCARIAN PASIEN, NO. ANTRIAN, and DAFTAR PASIEN with 10 columns', async () => {
     const wrapper = mount(PatientSearchView, {
       global: {
@@ -209,7 +227,7 @@ describe('PatientSearchView (Halaman Awal Pendaftaran Terbaru)', () => {
     expect(queueCard.find('.btn-next-queue').exists()).toBe(true);
   });
 
-  it('filters DAFTAR PASIEN by Jenis Asuransi dropdown and table Search input', async () => {
+  it('filters DAFTAR PASIEN by Jenis Asuransi dropdown loaded from Master Data and handles API error retry', async () => {
     const wrapper = mount(PatientSearchView, {
       global: {
         stubs: {
@@ -218,7 +236,6 @@ describe('PatientSearchView (Halaman Awal Pendaftaran Terbaru)', () => {
         }
       }
     });
-
     await flushPromises();
 
     // Options loaded dynamically from master data
@@ -227,13 +244,15 @@ describe('PatientSearchView (Halaman Awal Pendaftaran Terbaru)', () => {
       'Semua Jenis Asuransi',
       'UMUM',
       'JKN',
-      'BPJS MANDIRI'
+      'BPJS MANDIRI',
+      'Jaminan Perusahaan Dinamis'
     ]);
     expect(options.map((o) => o.attributes('value'))).toEqual([
       'all',
       '2',
       '3',
-      '4'
+      '4',
+      '9'
     ]);
 
     await wrapper.find('select#reg-guarantor-filter').setValue('2');

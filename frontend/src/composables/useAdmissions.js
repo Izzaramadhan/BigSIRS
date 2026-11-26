@@ -1,16 +1,25 @@
 import { ref, reactive, computed } from 'vue';
-import { 
-  mockAdmissions, 
-  mockPolyclinics, 
-  mockDoctors, 
-  mockGuarantors, 
-  mockLoketInfo 
+import {
+  mockAdmissions,
+  mockPolyclinics,
+  mockDoctors,
+  mockGuarantors,
+  mockLoketInfo
 } from '@/mocks/admissions';
+import { isSelfPayGuarantor, useGuarantorOptions } from '@/composables/useGuarantorOptions';
 
 // Session-level edits shared between AdmissionView and AdmissionEditView without leaking into unrelated unit tests
 const sessionAdmissionEdits = reactive({});
 
 export function useAdmissions() {
+  const {
+    guarantors: masterGuarantors,
+    loading: guarantorsLoading,
+    error: guarantorsError,
+    isEmpty: guarantorsEmpty,
+    fetchGuarantors
+  } = useGuarantorOptions();
+
   // Master admissions reactive state (local in-memory store)
   const admissionsList = ref(
     mockAdmissions.map((item) =>
@@ -136,13 +145,19 @@ export function useAdmissions() {
         if (adm.doctor !== filters.doctor) return false;
       }
 
-      // 5. Guarantor Filter
+      // 5. Guarantor Filter (Master Data ID or name, keeping legacy UMUM alias compatibility)
       if (filters.guarantor !== 'all') {
-        if (filters.guarantor === 'UMUM') {
-          if (adm.guarantor_type !== 'UMUM' && adm.guarantor_type !== 'Pasien Umum / Mandiri') {
+        const selectedFilter = String(filters.guarantor).trim();
+        const admId = adm.guarantor_id !== undefined && adm.guarantor_id !== null ? String(adm.guarantor_id) : null;
+        const admName = String(adm.guarantor_type || '').trim();
+
+        if (admId && admId === selectedFilter) {
+          // matched by guarantor_id
+        } else if (isSelfPayGuarantor(selectedFilter)) {
+          if (!isSelfPayGuarantor(admName)) {
             return false;
           }
-        } else if (adm.guarantor_type !== filters.guarantor) {
+        } else if (admName.toLowerCase() !== selectedFilter.toLowerCase()) {
           return false;
         }
       }
@@ -418,8 +433,10 @@ export function useAdmissions() {
       address: newAdmissionData.address || 'Alamat belum tercatat',
       polyclinic: newAdmissionData.polyclinic || 'Poli Umum',
       doctor: newAdmissionData.doctor || 'dr. Budi Santoso, Sp.PD',
+      guarantor_id: newAdmissionData.guarantor_id ?? null,
       guarantor_type: newAdmissionData.guarantor_type || 'BPJS Kesehatan',
       guarantor_detail: newAdmissionData.guarantor_detail || 'JKN-Non PBI',
+      insurance_number: newAdmissionData.insurance_number || '',
       general_consent: 'Sudah TTD',
       status: 'Menunggu',
       notes: newAdmissionData.notes || 'Pendaftaran admisi baru'
@@ -480,6 +497,11 @@ export function useAdmissions() {
     mockPolyclinics,
     mockDoctors,
     mockGuarantors,
+    masterGuarantors,
+    guarantorsLoading,
+    guarantorsError,
+    guarantorsEmpty,
+    fetchGuarantors,
     applyFilters,
     resetFilters,
     setSort,

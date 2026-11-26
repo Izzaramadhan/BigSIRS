@@ -1,4 +1,5 @@
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
+import { filterSirsRows } from '@/components/master-data/sirs-bed-availability/sirs-bed-availability.helpers'
 
 /**
  * Composable untuk mengelola state tampilan halaman Ketersediaan Bed SIRS.
@@ -31,17 +32,7 @@ export function useSirsBedAvailability(initialRows = []) {
   const currentPage = ref(1)
 
   // Filter pencarian berdasarkan nama kelas atau nama ruang (frontend-only)
-  const filteredRows = computed(() => {
-    const q = (filters.value.search || '').trim().toLowerCase()
-    if (!q) {
-      return rows.value
-    }
-    return rows.value.filter((item) => {
-      const className = String(item.className || '').toLowerCase()
-      const roomName = String(item.roomName || '').toLowerCase()
-      return className.includes(q) || roomName.includes(q)
-    })
-  })
+  const filteredRows = computed(() => filterSirsRows(rows.value, filters.value.search))
 
   const total = computed(() => filteredRows.value.length)
 

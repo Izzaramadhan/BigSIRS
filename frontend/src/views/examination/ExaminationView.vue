@@ -14,21 +14,24 @@ const {
   pagination,
   sort,
   loading,
+  error,
   paginatedExaminations,
   paginationInfo,
   mockPolyclinics,
+  fetchExaminations,
+  loadPolyclinics,
   applyFilters,
   resetFilters,
   setSort,
   setPage,
   setPerPage,
   startExamination,
-  replayQueueAudio,
-  fetchExaminations
+  replayQueueAudio
 } = useExaminations();
 
-onMounted(async () => {
-  await fetchExaminations();
+onMounted(() => {
+  loadPolyclinics();
+  fetchExaminations();
 });
 
 // Toast notification state
@@ -53,17 +56,25 @@ const closeToast = () => {
 };
 
 // Filter actions
-const handleApplySearch = () => {
-  applyFilters();
-  showToast({
-    type: 'success',
-    title: 'Data Kunjungan Ditampilkan',
-    message: `Ditemukan ${paginationInfo.value.total} kunjungan pasien sesuai kriteria filter.`
-  });
+const handleApplySearch = async () => {
+  await applyFilters();
+  if (error.value) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Data',
+      message: error.value
+    });
+  } else {
+    showToast({
+      type: 'success',
+      title: 'Data Kunjungan Ditampilkan',
+      message: `Ditemukan ${paginationInfo.value.total} kunjungan pasien sesuai kriteria filter.`
+    });
+  }
 };
 
-const handleResetFilter = () => {
-  resetFilters();
+const handleResetFilter = async () => {
+  await resetFilters();
   showToast({
     type: 'info',
     title: 'Filter Direset',
@@ -72,9 +83,9 @@ const handleResetFilter = () => {
 };
 
 // Table Row Action 1 (+): Mulai Pemeriksaan & Buka Halaman Pemeriksaan Pasien
-const handleStartRme = (patient) => {
+const handleStartRme = async (patient) => {
   if (patient.status === 'Menunggu' || patient.status === 'Dipanggil') {
-    startExamination(patient.id);
+    await startExamination(patient.id);
   }
   router.push({
     name: 'clinical.examination-patient',
@@ -141,6 +152,7 @@ const handleCallPatient = (patient) => {
         :sort-key="sort.key"
         :sort-direction="sort.direction"
         :loading="loading"
+        :error="error"
         @update:perPage="setPerPage"
         @page-change="setPage"
         @sort="setSort"

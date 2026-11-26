@@ -222,6 +222,65 @@ class LegacyPatientServiceAndFlowCrudTest extends TestCase
         $this->assertSoftDeleted('ref_jenis_asuransi', ['id' => $id], 'legacy');
     }
 
+    public function test_guarantor_legacy_partial_update_preserves_existing_code_type_and_null_code(): void
+    {
+        DB::connection('legacy')->table('ref_jenis_asuransi')->insert([
+            [
+                'id' => 91,
+                'kode' => 'LEGACY-PRIV',
+                'jenis_asuransi' => 'Asuransi Rekanan Lama',
+                'type' => 'PRIVATE',
+                'pemerintah' => 1,
+                'id_inacbg' => '88',
+                'status' => 1,
+            ],
+            [
+                'id' => 92,
+                'kode' => null,
+                'jenis_asuransi' => 'Penjamin Tanpa Kode',
+                'type' => 'UMUM',
+                'pemerintah' => 0,
+                'id_inacbg' => null,
+                'status' => 1,
+            ],
+        ]);
+
+        // 1. Update hanya name pada record ber-kode -> kode, type, pemerintah, id_inacbg tetap terjaga
+        $this->putJson('/api/v1/master-data/guarantors/91', [
+            'name' => 'Asuransi Rekanan Baru',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.code', 'LEGACY-PRIV')
+            ->assertJsonPath('data.type', 'private_insurance')
+            ->assertJsonPath('data.name', 'Asuransi Rekanan Baru')
+            ->assertJsonPath('data.is_government', true)
+            ->assertJsonPath('data.inacbg_id', '88');
+
+        $this->assertDatabaseHas('ref_jenis_asuransi', [
+            'id' => 91,
+            'kode' => 'LEGACY-PRIV',
+            'jenis_asuransi' => 'Asuransi Rekanan Baru',
+            'type' => 'PRIVATE',
+            'pemerintah' => 1,
+            'id_inacbg' => '88',
+        ], 'legacy');
+
+        // 2. Update record legacy yang memiliki kode null tidak men-generate ASR-... baru
+        $this->putJson('/api/v1/master-data/guarantors/92', [
+            'name' => 'Penjamin Tanpa Kode Diedit',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.code', null)
+            ->assertJsonPath('data.name', 'Penjamin Tanpa Kode Diedit');
+
+        $this->assertDatabaseHas('ref_jenis_asuransi', [
+            'id' => 92,
+            'kode' => null,
+            'jenis_asuransi' => 'Penjamin Tanpa Kode Diedit',
+            'type' => 'UMUM',
+        ], 'legacy');
+    }
+
     /* -------------------------------------------------------------
      * 2. FOLLOW UP HANDLING (ref_penanganan_lanjutan)
      * ------------------------------------------------------------- */
@@ -480,6 +539,15 @@ class LegacyPatientServiceAndFlowCrudTest extends TestCase
         $delRes->assertOk();
 
         $this->assertSoftDeleted('ref_jenis_surat', ['id' => $id], 'legacy');
+    }
+
+    public function test_letter_type_legacy_update_returns_404_when_not_found(): void
+    {
+        $response = $this->putJson('/api/v1/master-data/letter-types/999999', [
+            'name' => 'Surat Tidak Ada',
+        ]);
+
+        $response->assertStatus(404);
     }
 
     /* -------------------------------------------------------------

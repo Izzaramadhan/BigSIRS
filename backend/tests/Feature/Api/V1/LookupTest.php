@@ -2,12 +2,16 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Enums\GuarantorType;
+use App\Models\Guarantor;
 use App\Models\MasterData\Specialization;
 use App\Models\User;
 use App\Support\LegacyAccess;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class LookupTest extends TestCase
@@ -100,5 +104,86 @@ class LookupTest extends TestCase
         $names = collect($response->json())->pluck('name')->toArray();
         $this->assertContains('Amoxicillin 500mg', $names);
         $this->assertContains('Paracetamol 250mg', $names);
+    }
+
+    public function test_guarantors_lookup_requires_authentication(): void
+    {
+        $this->getJson('/api/v1/lookups/guarantors')->assertUnauthorized();
+    }
+
+    public function test_guarantors_lookup_returns_active_and_preserved_historical_options_in_internal_and_legacy_modes(): void
+    {
+        $user = User::factory()->create();
+
+        $activeUmum = Guarantor::factory()->create([
+            'code' => 'UMM',
+            'name' => 'UMUM',
+            'type' => GuarantorType::SelfPay,
+            'is_active' => true,
+        ]);
+        $activePrivate = Guarantor::factory()->create([
+            'code' => 'PRV-1',
+            'name' => 'Asuransi Mandiri Inhealth',
+            'type' => GuarantorType::PrivateInsurance,
+            'is_active' => true,
+        ]);
+        $inactiveOld = Guarantor::factory()->create([
+            'code' => 'OLD-1',
+            'name' => 'Asuransi Lama Nonaktif',
+            'type' => GuarantorType::PrivateInsurance,
+            'is_active' => false,
+        ]);
+
+        // Default internal mode: active only
+        $resDefault = $this->actingAs($user)->getJson('/api/v1/lookups/guarantors');
+        $resDefault->assertOk();
+        $defaultIds = collect($resDefault->json())->pluck('id')->all();
+        $this->assertContains($activeUmum->id, $defaultIds);
+        $this->assertContains($activePrivate->id, $defaultIds);
+        $this->assertNotContains($inactiveOld->id, $defaultIds);
+
+        // Search filter
+        $resSearch = $this->actingAs($user)->getJson('/api/v1/lookups/guarantors?search=Inhealth');
+        $resSearch->assertOk()->assertJsonCount(1);
+        $this->assertSame('self_pay', $resDefault->json(
+            collect($resDefault->json())->search(fn ($i) => $i['id'] === $activeUmum->id) . '.type'
+        ));
+
+        // Preserve historical inactive guarantor via ids parameter
+        $resHistorical = $this->actingAs($user)->getJson("/api/v1/lookups/guarantors?ids={$inactiveOld->id}");
+        $resHistorical->assertOk();
+        $histIds = collect($resHistorical->json())->pluck('id')->all();
+        $this->assertContains($inactiveOld->id, $histIds);
+
+        // Legacy ref_jenis_asuransi mode
+        Schema::connection('legacy')->create('ref_jenis_asuransi', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('kode', 30)->nullable();
+            $table->string('jenis_asuransi', 100);
+            $table->string('type', 20)->default('UMUM');
+            $table->integer('pemerintah')->default(0);
+            $table->string('id_inacbg', 10)->nullable();
+            $table->integer('status')->default(1);
+            $table->dateTime('created_at')->nullable();
+            $table->dateTime('updated_at')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->integer('id_user')->nullable();
+        });
+        LegacyAccess::clearCache();
+
+        DB::connection('legacy')->table('ref_jenis_asuransi')->insert([
+            ['id' => 10, 'kode' => 'BPJS', 'jenis_asuransi' => 'BPJS Kesehatan', 'type' => 'BPJS', 'status' => 1, 'deleted_at' => null],
+            ['id' => 11, 'kode' => 'UMM', 'jenis_asuransi' => 'Bayar Tunai RS', 'type' => 'UMUM', 'status' => 1, 'deleted_at' => null],
+            ['id' => 12, 'kode' => 'ARC', 'jenis_asuransi' => 'Asuransi Arsip', 'type' => 'PRIVATE', 'status' => 0, 'deleted_at' => null],
+        ]);
+
+        $resLegacy = $this->actingAs($user)->getJson('/api/v1/lookups/guarantors?ids=12');
+        $resLegacy->assertOk();
+        $legacyMap = collect($resLegacy->json())->keyBy('id');
+        $this->assertTrue($legacyMap->has(10));
+        $this->assertTrue($legacyMap->has(11));
+        $this->assertTrue($legacyMap->has(12));
+        $this->assertSame('self_pay', $legacyMap->get(11)['type']);
+        $this->assertFalse($legacyMap->get(12)['is_active']);
     }
 }

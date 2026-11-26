@@ -1,120 +1,112 @@
 <script setup>
-import { defineProps, defineEmits } from 'vue';
-import MasterDataActionButtons from '@/components/master-data/shared/MasterDataActionButtons.vue';
-import MasterDataSkeletonRow from '@/components/master-data/shared/MasterDataSkeletonRow.vue';
+import { Pencil, Trash2 } from 'lucide-vue-next'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseDataTable from '@/components/ui/BaseDataTable.vue'
+import {
+  EMPTY,
+  formatDayName,
+  formatScheduleSummary,
+  formatScheduleTime,
+} from './doctor-schedule.helpers'
 
-const props = defineProps({
+defineProps({
   items: {
     type: Array,
-    required: true
-  },
-  pagination: {
-    type: Object,
-    required: true
-  },
-  sort: {
-    type: Object,
-    required: true
+    required: true,
   },
   loading: {
     type: Boolean,
-    default: false
-  }
-});
+    default: false,
+  },
+  /** Nomor urut baris pertama dikurangi 1, untuk kolom "No" lintas halaman. */
+  offset: {
+    type: Number,
+    default: 0,
+  },
+})
 
-const emit = defineEmits(['sort', 'edit', 'delete']);
+const emit = defineEmits(['edit', 'delete'])
 
-const getRowNumber = (index, pagination) => {
-  return (pagination.current_page - 1) * pagination.per_page + index + 1;
-};
-
-const handleSort = (column) => {
-  emit('sort', {
-    column,
-    direction: props.sort.column === column && props.sort.direction === 'asc' ? 'desc' : 'asc'
-  });
-};
-
-const getDayName = (day) => {
-  const map = { 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu', 7: 'Minggu' };
-  return map[day] || '-';
-};
+const columns = [
+  { key: 'no', label: 'No', align: 'center', class: 'w-16' },
+  { key: 'doctor', label: 'Nama Dokter', class: 'min-w-44' },
+  { key: 'polyclinic', label: 'Poliklinik', class: 'min-w-40' },
+  { key: 'day_of_week', label: 'Hari Praktik', class: 'w-28' },
+  { key: 'start_time', label: 'Jam Mulai', align: 'center', class: 'w-28' },
+  { key: 'end_time', label: 'Jam Selesai', align: 'center', class: 'w-28' },
+  { key: 'is_holiday', label: 'Status', align: 'center', class: 'w-28' },
+  { key: 'actions', label: 'Aksi', align: 'center', class: 'w-28' },
+]
 </script>
 
 <template>
-  <div class="table-wrapper">
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="col-no">No</th>
-            <th class="sortable col-name" style="width: 25%;" @click="handleSort('doctor_id')">
-              <div class="th-content">
-                Nama Dokter
-                <span class="sort-icon" v-if="sort.column === 'doctor_id'">
-                  <svg v-if="sort.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </span>
-              </div>
-            </th>
-            <th class="sortable" style="width: 25%;" @click="handleSort('polyclinic_id')">
-              <div class="th-content">
-                Poliklinik
-                <span class="sort-icon" v-if="sort.column === 'polyclinic_id'">
-                  <svg v-if="sort.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </span>
-              </div>
-            </th>
-            <th>Hari Praktik</th>
-            <th>Jam Mulai</th>
-            <th>Jam Selesai</th>
-            <th>Libur</th>
-            <th class="col-actions text-center">Aksi</th>
-          </tr>
-        </thead>
+  <BaseDataTable :columns="columns" :rows="items" :loading="loading" caption="Daftar jadwal dokter">
+    <template #cell-no="{ index }">
+      <span class="text-fg-muted">{{ offset + index + 1 }}</span>
+    </template>
 
-        <tbody>
-          <template v-if="loading">
-            <MasterDataSkeletonRow :columns="8" :rows="5" />
-          </template>
+    <template #cell-doctor="{ row }">
+      <span class="font-medium text-fg">{{ row.doctor?.name || EMPTY }}</span>
+    </template>
 
-          <template v-else>
-            <tr v-for="(item, index) in items" :key="item.id">
-              <td class="col-no text-muted">{{ getRowNumber(index, pagination) }}</td>
-              <td class="col-name font-medium text-navy">{{ item.doctor?.name || '-' }}</td>
-              <td class="font-medium">{{ item.polyclinic?.name || '-' }}</td>
-              <td>{{ getDayName(item.day_of_week) }}</td>
-              <td>{{ item.start_time }}</td>
-              <td>{{ item.end_time }}</td>
-              <td>
-                <span class="badge" :class="item.is_holiday ? 'badge-danger' : 'badge-success'">
-                  {{ item.is_holiday ? 'Libur' : 'Praktik' }}
-                </span>
-              </td>
-              <td class="actions-cell">
-                <MasterDataActionButtons 
-                  :is-active="true"
-                  :show-toggle="false"
-                  @edit="emit('edit', item)"
-                  @delete="emit('delete', item)"
-                />
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
-  </div>
+    <template #cell-polyclinic="{ row }">
+      <span class="font-medium text-fg">{{ row.polyclinic?.name || EMPTY }}</span>
+    </template>
+
+    <template #cell-day_of_week="{ row }">
+      <span class="text-fg">{{ formatDayName(row.day_of_week) }}</span>
+    </template>
+
+    <template #cell-start_time="{ row }">
+      <span class="font-mono text-xs text-fg">
+        {{ formatScheduleTime(row.start_time) || EMPTY }}
+      </span>
+    </template>
+
+    <template #cell-end_time="{ row }">
+      <span class="font-mono text-xs text-fg">
+        {{ formatScheduleTime(row.end_time) || EMPTY }}
+      </span>
+    </template>
+
+    <template #cell-is_holiday="{ row }">
+      <span
+        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+        :class="
+          row.is_holiday
+            ? 'bg-danger-subtle text-danger-strong'
+            : 'bg-success-subtle text-success-strong'
+        "
+      >
+        {{ row.is_holiday ? 'Libur' : 'Praktik' }}
+      </span>
+    </template>
+
+    <template #cell-actions="{ row }">
+      <div class="flex justify-center gap-1">
+        <BaseButton
+          variant="ghost"
+          size="icon"
+          :aria-label="`Edit ${formatScheduleSummary(row)}`"
+          title="Edit"
+          @click="emit('edit', row)"
+        >
+          <Pencil class="size-4" aria-hidden="true" />
+        </BaseButton>
+        <BaseButton
+          variant="ghost-danger"
+          size="icon"
+          :aria-label="`Hapus ${formatScheduleSummary(row)}`"
+          title="Hapus"
+          @click="emit('delete', row)"
+        >
+          <Trash2 class="size-4" aria-hidden="true" />
+        </BaseButton>
+      </div>
+    </template>
+
+    <template #empty>
+      <slot name="empty" />
+    </template>
+  </BaseDataTable>
 </template>
-
-<style scoped>
-@media (max-width: 1200px) {
-  .hide-md { display: none; }
-}
-
-@media (max-width: 768px) {
-  .hide-sm { display: none; }
-  .data-table { min-width: 800px; }
-}
-</style>

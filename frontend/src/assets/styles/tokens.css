@@ -1,0 +1,48 @@
+/*
+ * Design token BigSIRS — SATU-SATUNYA sumber warna & font aplikasi.
+ *
+ * Ubah nilai di sini, maka kode baru (utility Tailwind) DAN kode lama
+ * (var(--color-*) lewat legacy-aliases.css) ikut berubah.
+ *
+ * `--color-*: initial` sengaja menghapus palet bawaan Tailwind
+ * (slate, red, sky, ...). Akibatnya `bg-slate-100` atau `text-red-500`
+ * tidak menghasilkan CSS apa pun — hanya warna di bawah ini yang bisa dipakai.
+ * Inilah yang mencegah "162 warna hex" terulang lagi.
+ *
+ * `static` = semua variabel selalu dikeluarkan, karena kode lama
+ * membacanya lewat var() di file yang tidak dipindai Tailwind.
+ */
+@theme static {
+  --color-*: initial;
+
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Brand */
+  --color-primary: #087f78;
+  --color-primary-strong: #06655f;
+  --color-primary-subtle: #dff7f4;
+
+  /* Status — `*-strong` untuk teks di atas `*-subtle` (kontras AA) */
+  --color-danger: #d64545;
+  --color-danger-strong: #b83a3a;
+  --color-danger-subtle: #fff0f0;
+
+  --color-warning: #d97706;
+  --color-warning-strong: #92400e;
+  --color-warning-subtle: #fffbeb;
+
+  --color-success: #16a34a;
+  --color-success-strong: #166534;
+  --color-success-subtle: #f0fdf4;
+
+  /* Netral */
+  --color-fg: #17243d;
+  --color-fg-muted: #667085;
+  --color-canvas: #f7f7fb;
+  --color-surface: #ffffff;
+  --color-line: #e8edf3;
+  --color-line-strong: #cbd5e1;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}

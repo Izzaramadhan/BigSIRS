@@ -1,248 +1,204 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { usePositions } from '@/composables/usePositions';
-import PositionTable from '@/components/master-data/positions/PositionTable.vue';
-import PositionFilters from '@/components/master-data/positions/PositionFilters.vue';
-import PositionFormModal from '@/components/master-data/positions/PositionFormModal.vue';
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
-import AppToast from '@/components/common/AppToast.vue';
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import PositionFilters from '@/components/master-data/positions/PositionFilters.vue'
+import PositionFormModal from '@/components/master-data/positions/PositionFormModal.vue'
+import PositionTable from '@/components/master-data/positions/PositionTable.vue'
+import { getSafePositionErrorMessage } from '@/components/master-data/positions/position.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { usePositions } from '@/composables/usePositions'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
   loading,
-  submitting,
-  error,
-  fetchPositions,
-  createPosition,
-  updatePosition,
-  deletePosition,
-  setPage
-} = usePositions();
+  loadError,
+  saving,
+  fetchItems,
+  setPage,
+  setFilters,
+  create,
+  update,
+  remove,
+} = usePositions()
+const toast = useToast()
 
-const formModalOpen = ref(false);
-const deleteDialogOpen = ref(false);
-const selectedPosition = ref(null);
-const formErrors = ref({});
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
-});
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingPosition = ref(null)
+const formErrors = ref({})
+const formGeneralError = ref('')
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message };
-};
+function openForm(position = null) {
+  editingPosition.value = position
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
 
-const closeToast = () => {
-  toast.value.show = false;
-};
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingPosition.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
 
-const openAddModal = () => {
-  selectedPosition.value = null;
-  formErrors.value = {};
-  formModalOpen.value = true;
-};
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
 
-const openEditModal = (item) => {
-  selectedPosition.value = item;
-  formErrors.value = {};
-  formModalOpen.value = true;
-};
+  const isEdit = Boolean(editingPosition.value)
+  const fallback = isEdit ? 'Data jabatan gagal diperbarui.' : 'Data jabatan gagal ditambahkan.'
+  const result = isEdit ? await update(editingPosition.value.id, payload) : await create(payload)
 
-const openDeleteDialog = (item) => {
-  selectedPosition.value = item;
-  deleteDialogOpen.value = true;
-};
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value;
-  pagination.current_page = 1;
-  fetchPositions();
-};
-
-const handleFormSubmit = async (payload) => {
-  formErrors.value = {};
-  
-  const isEditing = Boolean(selectedPosition.value);
-  let result;
-  
-  if (isEditing) {
-    result = await updatePosition(selectedPosition.value.id, payload);
-  } else {
-    result = await createPosition(payload);
-  }
-  
-  if (result.success) {
-    formModalOpen.value = false;
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: isEditing 
-        ? 'Data jabatan berhasil diperbarui.' 
-        : 'Data jabatan berhasil ditambahkan.'
-    });
-    fetchPositions();
-  } else {
-    if (result.error.response?.status === 422) {
-      formErrors.value = result.error.response.data.errors || {};
-      showToast({
-        type: 'error',
-        title: 'Validasi Gagal',
-        message: 'Mohon periksa kembali form pengisian.'
-      });
-    } else {
-      showToast({
-        type: 'error',
-        title: 'Gagal',
-        message: result.error.response?.data?.message || `Gagal ${isEditing ? 'memperbarui' : 'menambahkan'} jabatan.`
-      });
+  if (!result.ok) {
+    const safeMessage = getSafePositionErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
     }
+    toast.error(safeMessage)
+    return
   }
-};
 
-const handleDeleteConfirm = async () => {
-  const result = await deletePosition(selectedPosition.value.id);
-  
-  if (result.success) {
-    deleteDialogOpen.value = false;
-    
-    // Pagination adjustment
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--;
-    }
-    
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data jabatan berhasil dihapus.'
-    });
-    fetchPositions();
+  closeForm()
+  toast.success(isEdit ? 'Data jabatan berhasil diperbarui.' : 'Data jabatan berhasil ditambahkan.')
+}
+
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingPosition = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingPosition.value) return ''
+  return `Apakah Anda yakin ingin menghapus jabatan “${deletingPosition.value.name}”?`
+})
+
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingPosition.value = null
+}
+
+async function handleDelete() {
+  if (saving.value || !deletingPosition.value) return
+  const result = await remove(deletingPosition.value.id)
+  deletingPosition.value = null
+
+  if (result.ok) {
+    toast.success('Data jabatan berhasil dihapus.')
   } else {
-    let errorMessage = 'Gagal menghapus jabatan.';
-    
-    if (result.error.response?.status === 422 || result.error.response?.status === 409) {
-      errorMessage = result.error.response.data.message || 'Jabatan tidak dapat dihapus karena masih digunakan oleh data pegawai.';
-    } else if (result.error.response?.data?.message) {
-      errorMessage = result.error.response.data.message;
-    }
-    
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: errorMessage
-    });
-    deleteDialogOpen.value = false;
+    toast.error(getSafePositionErrorMessage(result.error, 'Data jabatan gagal dihapus.'))
   }
-};
+}
 
-onMounted(() => {
-  fetchPositions();
-});
+const safeLoadError = computed(() =>
+  loadError.value
+    ? getSafePositionErrorMessage({ message: loadError.value }, 'Data jabatan gagal dimuat.')
+    : '',
+)
+
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast 
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader 
+  <div class="flex flex-col gap-6">
+    <BasePageHeader
       title="Data Jabatan"
-      subtitle="Kelola data dasar tingkat jabatan pegawai."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Data Pegawai', active: false },
-        { label: 'Jabatan', active: true }
-      ]"
+      description="Kelola data dasar tingkat jabatan pegawai."
+      :breadcrumbs="['Dashboard', 'Data Pegawai', 'Jabatan']"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openAddModal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <template #icon><Plus class="size-4" aria-hidden="true" /></template>
           Tambah Jabatan
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <PositionFilters 
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchPositions"
-      />
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error" 
-        @retry="fetchPositions" 
-      />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && items.length === 0" 
-          :is-search="!!filters.search"
-        >
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openAddModal">Tambah Jabatan</button>
-          </template>
-        </MasterDataEmptyState>
-        
-        <template v-else>
-          <PositionTable 
-            :items="items"
-            :pagination="pagination"
-            :loading="loading"
-            @edit="openEditModal"
-            @delete="openDeleteDialog"
-          />
-          
-          <MasterDataPagination 
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
+    <PositionFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
+    />
+
+    <div v-if="safeLoadError" class="rounded-xl border border-line bg-surface">
+      <BaseEmptyState
+        :icon="CircleAlert"
+        tone="danger"
+        title="Data jabatan gagal dimuat"
+        :description="safeLoadError"
+      >
+        <template #action>
+          <BaseButton variant="secondary" @click="fetchItems">Coba lagi</BaseButton>
         </template>
-      </template>
+      </BaseEmptyState>
     </div>
 
-    <!-- Modals -->
-    <PositionFormModal 
-      :is-open="formModalOpen"
-      :position="selectedPosition"
-      :is-submitting="submitting"
-      :errors="formErrors"
-      @close="formModalOpen = false"
-      @submit="handleFormSubmit"
+    <template v-else>
+      <PositionTable
+        :items="items"
+        :loading="loading"
+        :offset="(meta.page - 1) * meta.perPage"
+        @edit="openForm"
+        @delete="deletingPosition = $event"
+      >
+        <template #empty>
+          <BaseEmptyState
+            v-if="filters.search"
+            :icon="SearchX"
+            title="Jabatan tidak ditemukan"
+            :description="`Tidak ada jabatan yang cocok dengan “${filters.search}”.`"
+          />
+          <BaseEmptyState
+            v-else
+            :icon="Inbox"
+            title="Belum ada data jabatan"
+            description="Tambahkan jabatan pertama untuk mulai mengelola data."
+          >
+            <template #action>
+              <BaseButton @click="openForm()">Tambah Jabatan</BaseButton>
+            </template>
+          </BaseEmptyState>
+        </template>
+      </PositionTable>
+
+      <BasePagination
+        :page="meta.page"
+        :last-page="meta.lastPage"
+        :total="meta.total"
+        :from="meta.from"
+        :to="meta.to"
+        :disabled="loading"
+        @change="setPage"
+      />
+    </template>
+
+    <PositionFormModal
+      :open="formOpen"
+      :position="editingPosition"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
     />
-    
-    <MasterDataDeleteDialog 
-      :is-open="deleteDialogOpen"
-      title="Hapus Jabatan?"
-      :item-name="selectedPosition ? selectedPosition.name : ''"
-      warning-message="Tindakan ini tidak dapat dibatalkan."
-      :is-submitting="submitting"
-      @close="deleteDialogOpen = false"
-      @confirm="handleDeleteConfirm"
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingPosition)"
+      title="Hapus Jabatan"
+      :message="deleteMessage"
+      confirm-text="Hapus"
+      :loading="saving"
+      @close="closeDeleteDialog"
+      @confirm="handleDelete"
     />
   </div>
 </template>
-
-<style scoped>
-</style>

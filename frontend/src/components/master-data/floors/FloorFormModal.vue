@@ -1,286 +1,182 @@
 <script setup>
-import { ref, reactive, watch } from 'vue'
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue'
+import { computed, reactive, ref, useId, watch } from 'vue'
+import { LoaderCircle } from 'lucide-vue-next'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import { buildingsService } from '@/services/master-data/buildings.service'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import { useBuildingOptions } from '@/composables/useBuildingOptions'
+import {
+  createFloorForm,
+  FLOOR_NAME_MAX_LENGTH,
+  toFloorPayload,
+  validateFloorForm,
+} from './floor.helpers'
 
 const props = defineProps({
-  isOpen: {
+  open: {
     type: Boolean,
-    default: false,
+    required: true,
   },
+  /** null = mode tambah, object = mode edit. */
   floor: {
     type: Object,
     default: null,
   },
-  isSubmitting: {
+  saving: {
     type: Boolean,
     default: false,
   },
-  errors: {
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
     type: Object,
     default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal. */
+  generalError: {
+    type: String,
+    default: '',
   },
 })
 
 const emit = defineEmits(['close', 'submit'])
 
-const form = reactive({
-  building_id: '',
-  name: '',
-  description: '',
-})
+const formId = useId()
+const form = reactive(createFloorForm())
+const clientErrors = ref({})
+const {
+  options: buildingOptions,
+  loading: loadingBuildings,
+  error: buildingError,
+  load: loadBuildings,
+} = useBuildingOptions()
 
-const buildingOptions = ref([])
-const loadingBuildings = ref(false)
-const buildingLoadError = ref(null)
-
-const loadBuildings = async () => {
-  loadingBuildings.value = true
-  buildingLoadError.value = null
-  try {
-    const response = await buildingsService.getBuildings({
-      per_page: -1,
-      sort: 'name',
-      direction: 'asc',
-    })
-    const dataList = response.data || []
-    const items = Array.isArray(dataList) ? dataList : dataList.data || []
-    buildingOptions.value = items.map((b) => ({
-      id: b.id,
-      name: b.name,
-      label: b.name,
-      value: b.id,
-    }))
-  } catch (err) {
-    buildingLoadError.value = 'Gagal memuat data gedung. Silakan coba kembali.'
-    buildingOptions.value = []
-  } finally {
-    loadingBuildings.value = false
-  }
-}
-
-const populateForm = (data) => {
-  form.building_id = data.building_id || data.building?.id || ''
-  form.name = data.name || ''
-  form.description = data.description || ''
-}
-
-const resetForm = () => {
-  form.building_id = ''
-  form.name = ''
-  form.description = ''
-}
+const isEdit = computed(() => Boolean(props.floor))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
+const canSubmit = computed(
+  () => !loadingBuildings.value && !buildingError.value && buildingOptions.value.length > 0,
+)
 
 watch(
-  () => props.isOpen,
-  async (isOpen) => {
-    if (!isOpen) {
-      resetForm()
-      return
-    }
-
-    await loadBuildings()
-
-    if (props.floor) {
-      populateForm(props.floor)
-    } else {
-      resetForm()
-    }
+  [() => props.open, () => props.floor],
+  ([isOpen]) => {
+    if (!isOpen) return
+    Object.assign(form, createFloorForm(props.floor))
+    clientErrors.value = {}
+    loadBuildings()
   },
   { immediate: true },
 )
 
-const handleSubmit = () => {
-  const payload = {
-    building_id: form.building_id ? Number(form.building_id) : '',
-    name: form.name.trim(),
-    description: form.description ? form.description.trim() : null,
-  }
-  emit('submit', payload)
-}
+watch(
+  () => form.building_id,
+  () => {
+    if (clientErrors.value.building_id) {
+      const next = { ...clientErrors.value }
+      delete next.building_id
+      clientErrors.value = next
+    }
+  },
+)
 
-const fieldError = (field) => props.errors?.[field]?.[0] || null
+watch(
+  () => form.name,
+  () => {
+    if (clientErrors.value.name) {
+      const next = { ...clientErrors.value }
+      delete next.name
+      clientErrors.value = next
+    }
+  },
+)
+
+function handleSubmit() {
+  if (props.saving || !canSubmit.value) return
+  clientErrors.value = validateFloorForm(form)
+  if (Object.keys(clientErrors.value).length > 0) return
+  emit('submit', toFloorPayload(form))
+}
 </script>
 
 <template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="floor ? 'Edit Lantai' : 'Tambah Lantai'"
-    :submit-text="floor ? 'Simpan Perubahan' : 'Simpan'"
-    :is-submitting="isSubmitting"
-    size="md"
-    @close="$emit('close')"
-    @submit="handleSubmit"
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Lantai' : 'Tambah Lantai'"
+    :persistent="saving"
+    @close="emit('close')"
   >
-    <div class="modal-form">
-      <!-- General error alert -->
-      <div v-if="errors.general" class="alert-error">
-        {{ errors.general }}
-      </div>
+    <form :id="formId" class="flex flex-col gap-5" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
 
-      <!-- Notice when no buildings available -->
-      <div v-if="!loadingBuildings && buildingOptions.length === 0" class="alert-warning">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="alert-icon">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-        <div>
-          <strong>Data Gedung belum tersedia.</strong>
-          <p class="alert-desc">
-            Silakan tambahkan data pada menu <em>Data Gedung</em> terlebih dahulu sebelum menambahkan data lantai.
-          </p>
+      <BaseField v-slot="field" label="Nama Gedung" required :error="errors.building_id">
+        <div
+          v-if="loadingBuildings"
+          class="flex h-10 items-center gap-2 rounded-lg border border-line bg-canvas px-3.5 text-sm text-fg-muted"
+        >
+          <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
+          Memuat data gedung…
         </div>
-      </div>
 
-      <!-- Field 1: Nama Gedung -->
-      <div class="form-group">
-        <label for="floor-building-id" class="form-label required">Nama Gedung</label>
+        <BaseAlert v-else-if="buildingError" tone="danger">
+          {{ buildingError }}
+          <template #action>
+            <BaseButton variant="ghost" size="sm" @click="loadBuildings">Coba lagi</BaseButton>
+          </template>
+        </BaseAlert>
+
+        <BaseAlert v-else-if="buildingOptions.length === 0" tone="warning">
+          Data Gedung belum tersedia. Silakan tambahkan data pada menu Data Gedung terlebih dahulu.
+        </BaseAlert>
+
         <SearchableSelect
-          id="floor-building-id"
+          v-else
+          :id="field.id"
           v-model="form.building_id"
           :options="buildingOptions"
-          :loading="loadingBuildings"
-          :disabled="loadingBuildings || buildingOptions.length === 0"
           placeholder="Pilih gedung"
-          search-placeholder="Cari nama gedung..."
+          search-placeholder="Cari nama gedung…"
           empty-text="Tidak ada data gedung ditemukan."
-          :is-invalid="!!fieldError('building_id')"
+          :is-invalid="field.invalid"
+          :disabled="saving"
         />
-        <div v-if="fieldError('building_id')" class="invalid-feedback">
-          {{ fieldError('building_id') }}
-        </div>
-      </div>
+      </BaseField>
 
-      <!-- Field 2: Nama Lantai -->
-      <div class="form-group">
-        <label for="floor-name" class="form-label required">Nama Lantai</label>
-        <input autocomplete="off"
-          id="floor-name"
+      <BaseField
+        v-slot="field"
+        label="Nama Lantai"
+        required
+        :error="errors.name"
+        :hint="`Maksimal ${FLOOR_NAME_MAX_LENGTH} karakter.`"
+      >
+        <BaseInput
+          v-bind="field"
           v-model="form.name"
-          type="text"
-          class="form-control"
-          :class="{ 'is-invalid': fieldError('name') }"
-          placeholder="Masukkan nama lantai"
-          required
+          placeholder="Contoh: Lantai 1"
+          :maxlength="FLOOR_NAME_MAX_LENGTH"
+          :disabled="saving"
         />
-        <div v-if="fieldError('name')" class="invalid-feedback">
-          {{ fieldError('name') }}
-        </div>
-      </div>
+      </BaseField>
 
-      <!-- Field 3: Deskripsi Lantai -->
-      <div class="form-group">
-        <label for="floor-description" class="form-label">Deskripsi Lantai</label>
-        <textarea
-          id="floor-description"
+      <BaseField v-slot="field" label="Deskripsi" :error="errors.description">
+        <BaseTextarea
+          v-bind="field"
           v-model="form.description"
-          class="form-control form-textarea"
-          :class="{ 'is-invalid': fieldError('description') }"
-          placeholder="Masukkan deskripsi lantai"
-          rows="3"
-        ></textarea>
-        <div v-if="fieldError('description')" class="invalid-feedback">
-          {{ fieldError('description') }}
-        </div>
-      </div>
-    </div>
-  </MasterDataFormModal>
+          placeholder="Opsional, mis. lantai poliklinik rawat jalan"
+          :disabled="saving"
+        />
+      </BaseField>
+    </form>
+
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="emit('close')">Batal</BaseButton>
+      <BaseButton type="submit" :form="formId" :loading="saving" :disabled="!canSubmit">
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
-
-<style scoped>
-.modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.alert-error {
-  background-color: #fee2e2;
-  border-left: 4px solid #ef4444;
-  color: #b91c1c;
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.alert-warning {
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-  background-color: #fffbeb;
-  border: 1px solid #fef3c7;
-  border-left: 4px solid #f59e0b;
-  color: #92400e;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  font-size: 0.875rem;
-}
-
-.alert-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.alert-desc {
-  margin: 0.25rem 0 0 0;
-  font-size: 0.825rem;
-  color: #78350f;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-label {
-  font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--color-text-navy);
-}
-
-.required::after {
-  content: ' *';
-  color: #ef4444;
-}
-
-.form-control {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 6px;
-  font-size: 0.95rem;
-  transition: all 0.2s;
-  background-color: #fff;
-  width: 100%;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.is-invalid {
-  border-color: #ef4444;
-}
-
-.is-invalid:focus {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-.invalid-feedback {
-  font-size: 0.8rem;
-  color: #ef4444;
-  margin-top: 0.25rem;
-}
-</style>

@@ -70,6 +70,11 @@ class LookupService {
     return extractCollection(response)
   }
 
+  async getGuarantors(params = {}) {
+    const response = await axios.get('/lookups/guarantors', { params })
+    return extractCollection(response)
+  }
+
   async getWarehouses(params = {}) {
     const response = await axios.get('/lookups/warehouses', { params })
     return extractCollection(response)

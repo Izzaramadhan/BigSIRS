@@ -1,39 +1,19 @@
-import axios from '@/utils/axios'
+import http from '@/utils/axios'
+import { createResourceService } from '@/services/core/createResourceService'
 
 const API_URL = '/master-data/diet-types'
+const resource = createResourceService(API_URL)
 
-class DietTypeService {
-  async getAll(params) {
-    const response = await axios.get(API_URL, { params })
-    return response.data
-  }
-
-  async getById(id) {
-    const response = await axios.get(`${API_URL}/${id}`)
-    return response.data
-  }
-
-  async create(data) {
-    const response = await axios.post(API_URL, data)
-    return response.data
-  }
-
-  async update(id, data) {
-    const response = await axios.put(`${API_URL}/${id}`, data)
-    return response.data
-  }
-
-  async updateStatus(id, isActive) {
-    const response = await axios.patch(`${API_URL}/${id}/status`, {
-      is_active: isActive
-    })
-    return response.data
-  }
-
-  async delete(id) {
-    const response = await axios.delete(`${API_URL}/${id}`)
-    return response.data
-  }
+export const dietTypeService = {
+  ...resource,
+  // Alias kompatibilitas untuk caller atau pengujian lama.
+  getAll: (params) => resource.list(params),
+  getById: (id) => resource.get(id),
+  create: (data) => resource.create(data),
+  update: (id, data) => resource.update(id, data),
+  updateStatus: (id, isActive) =>
+    http.patch(`${API_URL}/${id}/status`, { is_active: isActive }).then((res) => res.data),
+  delete: (id) => resource.remove(id),
 }
 
-export default new DietTypeService()
+export default dietTypeService

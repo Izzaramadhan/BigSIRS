@@ -5,7 +5,10 @@ namespace Tests\Feature\Api\V1\MasterData;
 use App\Models\MasterData\Room;
 use App\Models\MasterData\RoomClass;
 use App\Models\User;
+use App\Support\LegacyAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class RoomClassControllerTest extends TestCase
@@ -304,24 +307,105 @@ class RoomClassControllerTest extends TestCase
 
     public function test_can_get_room_class_options(): void
     {
-        RoomClass::factory()->create(['name' => 'VIP', 'code' => 'VIP', 'price' => 500000]);
-        RoomClass::factory()->create(['name' => 'Kelas 1', 'code' => 'KL1', 'price' => 100000]);
-        $deleted = RoomClass::factory()->create(['name' => 'Kelas Lama']);
+        RoomClass::factory()->create(['name' => 'VIP', 'code' => 'KLS-VIP', 'price' => 500000]);
+        RoomClass::factory()->create(['name' => 'ICU', 'code' => 'KLS-ICU', 'price' => 750000]);
+        $kelas1 = RoomClass::factory()->create(['name' => 'Kelas 1', 'code' => 'KL1', 'price' => 150000]);
+        $deleted = RoomClass::factory()->create(['name' => 'Kelas Lama', 'code' => 'KL-OLD']);
         $deleted->delete();
 
-        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/room-classes/options');
+        // Search kosong mengembalikan semua data aktif terurut ascending berdasarkan nama
+        $response = $this->actingAs($this->user)->getJson('/api/v1/master-data/room-classes/options?search=');
 
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
                     '*' => ['id', 'code', 'name', 'price', 'formatted_price'],
                 ],
-            ]);
+            ])
+            ->assertJsonCount(3, 'data');
 
         $names = collect($response->json('data'))->pluck('name')->toArray();
-        $this->assertContains('Kelas 1', $names);
-        $this->assertContains('VIP', $names);
+        $this->assertSame(['ICU', 'Kelas 1', 'VIP'], $names);
         $this->assertNotContains('Kelas Lama', $names);
+
+        $kelas1Option = collect($response->json('data'))->firstWhere('id', $kelas1->id);
+        $this->assertSame('KL1', $kelas1Option['code']);
+        $this->assertSame(150000, $kelas1Option['price']);
+        $this->assertSame('Rp150.000', $kelas1Option['formatted_price']);
+
+        // Search sebagian nama
+        $resByName = $this->actingAs($this->user)->getJson('/api/v1/master-data/room-classes/options?search=kelas');
+        $resByName->assertOk()->assertJsonCount(1, 'data');
+        $this->assertSame($kelas1->id, $resByName->json('data.0.id'));
+
+        // Search berdasarkan kode
+        $resByCode = $this->actingAs($this->user)->getJson('/api/v1/master-data/room-classes/options?search=KLS-VIP');
+        $resByCode->assertOk()->assertJsonCount(1, 'data');
+        $this->assertSame('VIP', $resByCode->json('data.0.name'));
+
+        // Search tanpa hasil dan karakter khusus aman
+        $this->actingAs($this->user)
+            ->getJson('/api/v1/master-data/room-classes/options?search=TidakAda')
+            ->assertOk()
+            ->assertExactJson(['data' => []]);
+
+        $this->actingAs($this->user)
+            ->getJson('/api/v1/master-data/room-classes/options?search=' . urlencode("%' OR 1=1 --"))
+            ->assertOk()
+            ->assertExactJson(['data' => []]);
+    }
+
+    public function test_room_class_options_supports_legacy_mode(): void
+    {
+        Config::set('database.connections.legacy', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+        ]);
+        LegacyAccess::clearCache();
+
+        DB::connection('legacy')->statement('
+            CREATE TABLE ref_kelas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama VARCHAR(50) NULL,
+                kode VARCHAR(10) NULL,
+                harga REAL DEFAULT 0,
+                deskripsi VARCHAR(50) NULL,
+                kode_aplicares VARCHAR(5) NULL,
+                kode_sirs VARCHAR(100) NULL,
+                status CHAR(1) DEFAULT "1",
+                id_user INTEGER NULL,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                deleted_at DATETIME NULL
+            )
+        ');
+
+        DB::connection('legacy')->table('ref_kelas')->insert([
+            ['nama' => 'VIP', 'kode' => 'K-VIP', 'harga' => 450000, 'deleted_at' => null],
+            ['nama' => 'Kelas 1', 'kode' => 'K-01', 'harga' => 150000, 'deleted_at' => null],
+            ['nama' => 'Arsip', 'kode' => 'K-OLD', 'harga' => 50000, 'deleted_at' => '2026-01-01 00:00:00'],
+        ]);
+
+        try {
+            $res = $this->actingAs($this->user)->getJson('/api/v1/master-data/room-classes/options');
+            $res->assertOk()
+                ->assertJsonCount(2, 'data')
+                ->assertJsonStructure([
+                    'data' => [
+                        '*' => ['id', 'code', 'name', 'price', 'formatted_price'],
+                    ],
+                ]);
+
+            $this->assertSame(['Kelas 1', 'VIP'], collect($res->json('data'))->pluck('name')->toArray());
+
+            $resCode = $this->actingAs($this->user)->getJson('/api/v1/master-data/room-classes/options?search=K-01');
+            $resCode->assertOk()->assertJsonCount(1, 'data');
+            $this->assertSame('Rp150.000', $resCode->json('data.0.formatted_price'));
+        } finally {
+            DB::connection('legacy')->statement('DROP TABLE IF EXISTS ref_kelas');
+            LegacyAccess::clearCache();
+        }
     }
 
     public function test_search_can_find_room_class_by_name_code_or_external_codes(): void

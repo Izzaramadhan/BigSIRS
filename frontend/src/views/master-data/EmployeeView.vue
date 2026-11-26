@@ -1,213 +1,208 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useEmployees } from '@/composables/useEmployees';
-import EmployeeTable from '@/components/master-data/employees/EmployeeTable.vue';
-import EmployeeFilters from '@/components/master-data/employees/EmployeeFilters.vue';
-import EmployeeFormModal from '@/components/master-data/EmployeeFormModal.vue';
-import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
-import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
-import MasterDataErrorState from '@/components/master-data/shared/MasterDataErrorState.vue';
-import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
-import MasterDataDeleteDialog from '@/components/master-data/shared/MasterDataDeleteDialog.vue';
-import AppToast from '@/components/common/AppToast.vue';
+import { computed, onMounted, ref } from 'vue'
+import { CircleAlert, Inbox, Plus, SearchX } from 'lucide-vue-next'
+import EmployeeFormModal from '@/components/master-data/EmployeeFormModal.vue'
+import EmployeeFilters from '@/components/master-data/employees/EmployeeFilters.vue'
+import EmployeeTable from '@/components/master-data/employees/EmployeeTable.vue'
+import {
+  getSafeEmployeeErrorMessage,
+  resolveEmployeeDisplayName,
+} from '@/components/master-data/employees/employee.helpers'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseConfirmDialog from '@/components/ui/BaseConfirmDialog.vue'
+import BaseEmptyState from '@/components/ui/BaseEmptyState.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
+import { useToast } from '@/composables/core/useToast'
+import { useEmployees } from '@/composables/useEmployees'
 
 const {
   items,
-  pagination,
+  meta,
   filters,
-  sort,
   loading,
-  error,
-  fetchEmployees,
-  deleteEmployee,
+  loadError,
+  saving,
+  fetchItems,
   setPage,
-  setSort
-} = useEmployees();
+  setFilters,
+  create,
+  update,
+  remove,
+} = useEmployees()
+const toast = useToast()
 
-const isEditOpen = ref(false);
-const deleteDialogOpen = ref(false);
-const formMode = ref('create');
-const selectedEmployee = ref(null);
-const detailLoading = ref(false);
+// ── Form tambah / edit ────────────────────────────────────────────────
+const formOpen = ref(false)
+const editingEmployee = ref(null)
+const formErrors = ref({})
+const formGeneralError = ref('')
 
-const toast = ref({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
-});
+function openForm(employee = null) {
+  editingEmployee.value = employee
+  formErrors.value = {}
+  formGeneralError.value = ''
+  formOpen.value = true
+}
 
-const showToast = ({ type = 'success', title, message }) => {
-  toast.value = { show: true, type, title, message };
-};
+function closeForm() {
+  if (saving.value) return
+  formOpen.value = false
+  editingEmployee.value = null
+  formErrors.value = {}
+  formGeneralError.value = ''
+}
 
-const closeToast = () => {
-  toast.value.show = false;
-};
+async function handleSubmit(payload) {
+  if (saving.value) return
+  formErrors.value = {}
+  formGeneralError.value = ''
 
-const openCreateEmployee = () => {
-  formMode.value = 'create';
-  selectedEmployee.value = null;
-  isEditOpen.value = true;
-};
+  const isEdit = Boolean(editingEmployee.value)
+  const fallback = isEdit ? 'Data pegawai gagal diperbarui.' : 'Data pegawai gagal ditambahkan.'
+  const result = isEdit ? await update(editingEmployee.value.id, payload) : await create(payload)
 
-const openEditEmployee = (row) => {
-  selectedEmployee.value = row;
-  formMode.value = 'edit';
-  isEditOpen.value = true;
-};
-
-const closeEmployeeForm = () => {
-  isEditOpen.value = false;
-};
-
-const handleFilter = ({ key, value }) => {
-  filters[key] = value;
-  pagination.current_page = 1;
-  fetchEmployees();
-};
-
-const handleEmployeeSaved = () => {
-  isEditOpen.value = false;
-  showToast({
-    type: 'success',
-    title: 'Berhasil',
-    message: formMode.value === 'edit' ? 'Data pegawai berhasil diperbarui.' : 'Data pegawai berhasil ditambahkan.'
-  });
-  fetchEmployees();
-};
-
-const openDeleteDialog = (item) => {
-  selectedEmployee.value = item;
-  deleteDialogOpen.value = true;
-};
-
-const handleDeleteConfirm = async () => {
-  detailLoading.value = true;
-  const result = await deleteEmployee(selectedEmployee.value.id);
-  detailLoading.value = false;
-
-  if (result.success) {
-    deleteDialogOpen.value = false;
-    showToast({
-      type: 'success',
-      title: 'Berhasil',
-      message: 'Data pegawai berhasil dihapus.'
-    });
-    // Adjust pagination if needed
-    if (items.value.length === 1 && pagination.current_page > 1) {
-      pagination.current_page--;
+  if (!result.ok) {
+    const safeMessage = getSafeEmployeeErrorMessage(result.error, fallback)
+    formErrors.value = result.error.fieldErrors
+    if (!result.error.isValidation && Object.keys(result.error.fieldErrors).length === 0) {
+      formGeneralError.value = safeMessage
     }
-    fetchEmployees();
-  } else {
-    showToast({
-      type: 'error',
-      title: 'Gagal Menghapus',
-      message: result.error?.response?.data?.message || 'Terjadi kesalahan saat menghapus data pegawai.'
-    });
-    deleteDialogOpen.value = false;
+    toast.error(safeMessage)
+    return
   }
-};
 
-onMounted(() => {
-  fetchEmployees();
-});
+  closeForm()
+  toast.success(isEdit ? 'Data pegawai berhasil diperbarui.' : 'Data pegawai berhasil ditambahkan.')
+}
+
+// ── Hapus ─────────────────────────────────────────────────────────────
+const deletingEmployee = ref(null)
+
+const deleteMessage = computed(() => {
+  if (!deletingEmployee.value) return ''
+  return `Apakah Anda yakin ingin menghapus data pegawai “${resolveEmployeeDisplayName(deletingEmployee.value)}”?`
+})
+
+function closeDeleteDialog() {
+  if (saving.value) return
+  deletingEmployee.value = null
+}
+
+async function handleDelete() {
+  if (saving.value || !deletingEmployee.value) return
+  const result = await remove(deletingEmployee.value.id)
+  deletingEmployee.value = null
+
+  if (result.ok) {
+    toast.success('Data pegawai berhasil dihapus.')
+  } else {
+    toast.error(getSafeEmployeeErrorMessage(result.error, 'Data pegawai gagal dihapus.'))
+  }
+}
+
+onMounted(fetchItems)
 </script>
 
 <template>
-  <div class="page-container">
-    <AppToast 
-      :show="toast.show"
-      :type="toast.type"
-      :title="toast.title"
-      :message="toast.message"
-      @close="closeToast"
-    />
-
-    <!-- Header -->
-    <MasterDataPageHeader 
+  <div class="space-y-6">
+    <BasePageHeader
+      :breadcrumbs="['Dashboard', 'Master Data', 'Data Pegawai', 'Pegawai']"
       title="Pegawai"
-      subtitle="Kelola data pegawai, unit kerja, jabatan, dan informasi profil lainnya."
-      :breadcrumbs="[
-        { label: 'Dashboard', active: false },
-        { label: 'Master Data', active: false },
-        { label: 'Data Pegawai', active: false },
-        { label: 'Pegawai', active: true }
-      ]"
+      description="Kelola data pegawai, unit kerja, jabatan, dan informasi profil lainnya."
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openCreateEmployee">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+        <BaseButton @click="openForm()">
+          <Plus class="size-4" aria-hidden="true" />
           Tambah Pegawai
-        </button>
+        </BaseButton>
       </template>
-    </MasterDataPageHeader>
+    </BasePageHeader>
 
-    <!-- Content -->
-    <div class="page-content">
-      <EmployeeFilters 
-        :filters="filters"
-        :loading="loading"
-        @filter="handleFilter"
-        @refresh="fetchEmployees"
-      />
-      
-      <MasterDataErrorState 
-        v-if="error" 
-        :error="error" 
-        @retry="fetchEmployees" 
-      />
-      
-      <template v-else>
-        <MasterDataEmptyState 
-          v-if="!loading && items.length === 0" 
-          :is-search="!!filters.search"
-        >
-          <template #action v-if="!filters.search">
-            <button class="btn-primary" @click="openCreateEmployee">Tambah Pegawai</button>
-          </template>
-        </MasterDataEmptyState>
-        
-        <template v-else>
-          <EmployeeTable 
-            :items="items"
-            :pagination="pagination"
-            :sort="sort"
-            :loading="loading"
-            @sort="setSort"
-            @edit="openEditEmployee"
-            @delete="openDeleteDialog"
-          />
-          
-          <MasterDataPagination 
-            :pagination="pagination"
-            :loading="loading"
-            :item-count="items.length"
-            @page-change="setPage"
-          />
-        </template>
-      </template>
-    </div>
-
-    <!-- Modals -->
-    <EmployeeFormModal 
-      :is-open="isEditOpen"
-      :employee="selectedEmployee"
-      @close="closeEmployeeForm"
-      @saved="handleEmployeeSaved"
+    <EmployeeFilters
+      :search="filters.search"
+      :loading="loading"
+      @update:search="setFilters({ search: $event })"
+      @refresh="fetchItems"
     />
-    
-    <MasterDataDeleteDialog 
-      :is-open="deleteDialogOpen"
-      title="Hapus Pegawai?"
-      :item-name="selectedEmployee ? selectedEmployee.name : ''"
-      warning-message="Data pegawai yang dihapus mungkin tidak dapat dikembalikan. Lanjutkan?"
-      :is-submitting="detailLoading"
-      @close="deleteDialogOpen = false"
-      @confirm="handleDeleteConfirm"
+
+    <EmployeeTable
+      :items="items"
+      :loading="loading"
+      :offset="(meta.page - 1) * meta.perPage"
+      @edit="openForm($event)"
+      @delete="deletingEmployee = $event"
+    >
+      <template #empty>
+        <BaseEmptyState
+          v-if="loadError"
+          :icon="CircleAlert"
+          tone="danger"
+          title="Gagal memuat data pegawai"
+          :description="loadError"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="fetchItems">Muat Ulang</BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else-if="filters.search"
+          :icon="SearchX"
+          title="Pegawai tidak ditemukan"
+          :description="`Tidak ada pegawai yang cocok dengan pencarian “${filters.search}”.`"
+        >
+          <template #action>
+            <BaseButton variant="secondary" @click="setFilters({ search: '' })">
+              Reset Pencarian
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+
+        <BaseEmptyState
+          v-else
+          :icon="Inbox"
+          title="Belum ada data pegawai"
+          description="Tambahkan data pegawai pertama untuk mulai mengelola profil kepegawaian."
+        >
+          <template #action>
+            <BaseButton @click="openForm()">
+              <Plus class="size-4" aria-hidden="true" />
+              Tambah Pegawai
+            </BaseButton>
+          </template>
+        </BaseEmptyState>
+      </template>
+    </EmployeeTable>
+
+    <BasePagination
+      :page="meta.page"
+      :last-page="meta.lastPage"
+      :total="meta.total"
+      :from="meta.from"
+      :to="meta.to"
+      :disabled="loading"
+      @change="setPage"
+    />
+
+    <EmployeeFormModal
+      :open="formOpen"
+      :employee="editingEmployee"
+      :saving="saving"
+      :server-errors="formErrors"
+      :general-error="formGeneralError"
+      @close="closeForm"
+      @submit="handleSubmit"
+    />
+
+    <BaseConfirmDialog
+      :open="Boolean(deletingEmployee)"
+      title="Hapus Data Pegawai"
+      :message="deleteMessage"
+      confirm-text="Ya, Hapus"
+      :loading="saving"
+      @close="closeDeleteDialog"
+      @confirm="handleDelete"
     />
   </div>
 </template>

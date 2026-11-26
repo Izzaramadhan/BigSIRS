@@ -1,0 +1,16 @@
+/*
+ * Nama variabel LAMA → token baru. Nilainya identik dengan sebelumnya,
+ * jadi tampilan modul lama tidak berubah, tetapi sumbernya kini satu.
+ *
+ * HAPUS file ini setelah semua modul selesai dimigrasi.
+ */
+:root {
+  --color-primary-dark: var(--color-primary-strong);
+  --color-primary-light: var(--color-primary-subtle);
+  --color-text-navy: var(--color-fg);
+  --color-text-secondary: var(--color-fg-muted);
+  --color-page-bg: var(--color-canvas);
+  --color-card-bg: var(--color-surface);
+  --color-border-soft: var(--color-line);
+  --color-danger-bg: var(--color-danger-subtle);
+}

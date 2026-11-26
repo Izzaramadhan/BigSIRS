@@ -1,894 +1,776 @@
 <script setup>
-import { ref, reactive, watch, nextTick } from 'vue';
-import { useEmployees } from '@/composables/useEmployees';
-import employeeService from '@/services/employee.service';
-import lookupService from '@/services/lookup.service';
-import MasterDataFormModal from '@/components/master-data/shared/MasterDataFormModal.vue';
-import BaseSelect from '@/components/common/BaseSelect.vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
+import { LoaderCircle, Trash2, Upload, X } from 'lucide-vue-next'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseField from '@/components/ui/BaseField.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import { fieldControlClass } from '@/components/ui/fieldControlClass'
+import employeeService from '@/services/employee.service'
+import lookupService from '@/services/lookup.service'
+import { normalizeApiError } from '@/utils/http-error'
+import {
+  BLOOD_TYPE_OPTIONS,
+  createEmployeeForm,
+  EMPLOYEE_CODE_MAX_LENGTH,
+  EMPLOYEE_NAME_MAX_LENGTH,
+  EMPLOYEE_NATIONAL_ID_MAX_LENGTH,
+  EMPLOYEE_PHONE_MAX_LENGTH,
+  EMPLOYEE_POSTAL_CODE_MAX_LENGTH,
+  getSafeEmployeeErrorMessage,
+  MARITAL_STATUS_OPTIONS,
+  NATIONALITY_OPTIONS,
+  RELIGION_OPTIONS,
+  toEmployeePayload,
+  validateEmployeeForm,
+  validateSignatureFile,
+} from './employees/employee.helpers'
 
 const props = defineProps({
-  isOpen: {
+  open: {
     type: Boolean,
-    required: true
+    required: true,
   },
+  /** null = mode tambah, object = mode edit. */
   employee: {
     type: Object,
-    default: null
+    default: null,
+  },
+  saving: {
+    type: Boolean,
+    default: false,
+  },
+  /** Error per field dari server (422), sudah dinormalisasi: { field: 'pesan' }. */
+  serverErrors: {
+    type: Object,
+    default: () => ({}),
+  },
+  /** Error umum non-field saat submit gagal. */
+  generalError: {
+    type: String,
+    default: '',
+  },
+})
+
+const emit = defineEmits(['close', 'submit'])
+
+const formId = useId()
+const form = reactive(createEmployeeForm())
+const clientErrors = ref({})
+
+const loadingDetail = ref(false)
+const detailError = ref('')
+const loadingLookups = ref(false)
+const lookupError = ref('')
+
+const positionOptions = ref([])
+const educationOptions = ref([])
+const occupationOptions = ref([])
+const provinceOptions = ref([])
+const regencyOptions = ref([])
+const districtOptions = ref([])
+const villageOptions = ref([])
+
+const loadingRegencies = ref(false)
+const loadingDistricts = ref(false)
+const loadingVillages = ref(false)
+
+const fileInputRef = ref(null)
+const newPreviewUrl = ref('')
+const objectPreviewUrl = ref('')
+let isHydrating = false
+let hydrationToken = 0
+
+const isEdit = computed(() => Boolean(props.employee))
+const errors = computed(() => ({ ...props.serverErrors, ...clientErrors.value }))
+
+const activePreviewUrl = computed(() => {
+  if (newPreviewUrl.value) return newPreviewUrl.value
+  if (!form.remove_signature && form.signature_url) return form.signature_url
+  return ''
+})
+
+function revokeObjectPreview() {
+  if (objectPreviewUrl.value && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(objectPreviewUrl.value)
   }
-});
+  objectPreviewUrl.value = ''
+}
 
-const emit = defineEmits(['close', 'saved']);
-const { createEmployee, updateEmployee } = useEmployees();
+function resetPreviewState() {
+  revokeObjectPreview()
+  newPreviewUrl.value = ''
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
 
-const isEditing = ref(false);
-const isSubmitting = ref(false);
-const isLoadingData = ref(false);
-const isHydrating = ref(false);
-const errors = ref({});
-const submitError = ref(null);
+function toArray(payload) {
+  if (Array.isArray(payload)) return payload
+  return Array.isArray(payload?.data) ? payload.data : []
+}
 
-const lookupPositions = ref([]);
-const isPositionsLoading = ref(false);
-const positionsError = ref('');
+async function ensureStaticLookups() {
+  if (
+    positionOptions.value.length > 0 &&
+    educationOptions.value.length > 0 &&
+    occupationOptions.value.length > 0 &&
+    provinceOptions.value.length > 0
+  ) {
+    return
+  }
 
-const lookups = reactive({
-  occupations: [],
-  educations: [],
-  provinces: [],
-  regencies: [],
-  districts: [],
-  villages: []
-});
-
-const lookupLoading = reactive({
-  occupations: false,
-  educations: false,
-  provinces: false,
-  regencies: false,
-  districts: false,
-  villages: false
-});
-
-const lookupError = reactive({
-  occupations: false,
-  educations: false,
-  provinces: false,
-  regencies: false,
-  districts: false,
-  villages: false
-});
-
-const defaultForm = {
-  national_id: '',
-  code: '',
-  name: '',
-  birth_place: '',
-  birth_date: '',
-  blood_type: '',
-  religion: '',
-  marital_status: '',
-  nationality: 'WNI',
-  address: '',
-  allergies: '',
-  position_id: '',
-  occupation_id: '',
-  education_id: '',
-  province_id: '',
-  regency_id: '',
-  district_id: '',
-  village_id: '',
-  postal_code: '',
-  phone: '',
-  signature: null,
-  remove_signature: false
-};
-
-const form = reactive({ ...defaultForm });
-
-const fileInput = ref(null);
-const previewImage = ref(null);
-const existingSignatureUrl = ref(null);
-
-const loadInitialLookups = async () => {
-  isPositionsLoading.value = true;
-  positionsError.value = '';
+  loadingLookups.value = true
+  lookupError.value = ''
   try {
-    const posRes = await employeeService.getPositions({ is_active: 1 });
-    lookupPositions.value = Array.isArray(posRes.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
-  } catch (err) {
-    console.error("Failed to load positions", err);
-    positionsError.value = "Gagal memuat data jabatan.";
+    const [positions, educations, occupations, provinces] = await Promise.all([
+      employeeService.getPositions({ is_active: 1 }),
+      lookupService.getEducations(),
+      lookupService.getOccupations(),
+      lookupService.getProvinces(),
+    ])
+    positionOptions.value = toArray(positions)
+    educationOptions.value = toArray(educations)
+    occupationOptions.value = toArray(occupations)
+    provinceOptions.value = toArray(provinces)
+  } catch (error) {
+    lookupError.value = getSafeEmployeeErrorMessage(
+      normalizeApiError(error, 'Sebagian data referensi gagal dimuat.'),
+      'Sebagian data referensi gagal dimuat.',
+    )
   } finally {
-    isPositionsLoading.value = false;
+    loadingLookups.value = false
   }
+}
 
-  const fetchWithState = async (key, fetchFn) => {
-    lookupLoading[key] = true;
-    lookupError[key] = false;
-    try {
-      lookups[key] = await fetchFn();
-    } catch (err) {
-      console.error(`Gagal memuat ${key}:`, err);
-      lookupError[key] = true;
-    } finally {
-      lookupLoading[key] = false;
-    }
-  };
+async function loadRegencies(provinceId) {
+  if (!provinceId) {
+    regencyOptions.value = []
+    return
+  }
+  loadingRegencies.value = true
+  try {
+    regencyOptions.value = toArray(await lookupService.getRegencies({ province_id: provinceId }))
+  } catch {
+    regencyOptions.value = []
+  } finally {
+    loadingRegencies.value = false
+  }
+}
 
-  await Promise.all([
-    fetchWithState('occupations', () => lookupService.getOccupations()),
-    fetchWithState('educations', () => lookupService.getEducations()),
-    fetchWithState('provinces', () => lookupService.getProvinces())
-  ]);
-};
+async function loadDistricts(regencyId) {
+  if (!regencyId) {
+    districtOptions.value = []
+    return
+  }
+  loadingDistricts.value = true
+  try {
+    districtOptions.value = toArray(await lookupService.getDistricts({ regency_id: regencyId }))
+  } catch {
+    districtOptions.value = []
+  } finally {
+    loadingDistricts.value = false
+  }
+}
 
-const onProvinceChange = async () => {
-  if (!isHydrating.value) {
-    form.regency_id = '';
-    form.district_id = '';
-    form.village_id = '';
+async function loadVillages(districtId) {
+  if (!districtId) {
+    villageOptions.value = []
+    return
   }
-  lookups.regencies = [];
-  lookups.districts = [];
-  lookups.villages = [];
-  if (form.province_id) {
-    lookupLoading.regencies = true;
-    lookupError.regencies = false;
-    try {
-      const res = await lookupService.getRegencies({ province_id: form.province_id });
-      lookups.regencies = res.data || res;
-    } catch (err) {
-      console.error(err);
-      lookupError.regencies = true;
-    } finally {
-      lookupLoading.regencies = false;
-    }
+  loadingVillages.value = true
+  try {
+    villageOptions.value = toArray(await lookupService.getVillages({ district_id: districtId }))
+  } catch {
+    villageOptions.value = []
+  } finally {
+    loadingVillages.value = false
   }
-};
-
-const onRegencyChange = async () => {
-  if (!isHydrating.value) {
-    form.district_id = '';
-    form.village_id = '';
-  }
-  lookups.districts = [];
-  lookups.villages = [];
-  if (form.regency_id) {
-    lookupLoading.districts = true;
-    lookupError.districts = false;
-    try {
-      const res = await lookupService.getDistricts({ regency_id: form.regency_id });
-      lookups.districts = res.data || res;
-    } catch (err) {
-      console.error(err);
-      lookupError.districts = true;
-    } finally {
-      lookupLoading.districts = false;
-    }
-  }
-};
-
-const onDistrictChange = async () => {
-  if (!isHydrating.value) {
-    form.village_id = '';
-  }
-  lookups.villages = [];
-  if (form.district_id) {
-    lookupLoading.villages = true;
-    lookupError.villages = false;
-    try {
-      const res = await lookupService.getVillages({ district_id: form.district_id });
-      lookups.villages = res.data || res;
-    } catch (err) {
-      console.error(err);
-      lookupError.villages = true;
-    } finally {
-      lookupLoading.villages = false;
-    }
-  }
-};
+}
 
 watch(
-  () => [props.isOpen, props.employee],
-  async ([isOpen, employee]) => {
-    if (!isOpen) return;
-    
-    errors.value = {};
-    submitError.value = null;
-    isLoadingData.value = true;
-    isHydrating.value = true;
-    
-    try {
-      if (lookupPositions.value.length === 0 || lookups.provinces.length === 0) {
-        await loadInitialLookups();
-      }
-      
-      if (employee) {
-        isEditing.value = true;
-        const detail = await employeeService.getEmployee(employee.id);
-        const data = detail.data || detail;
-        
-        Object.assign(form, {
-          national_id: data.national_id || '',
-          code: data.code || '',
-          name: data.name || '',
-          birth_place: data.birth_place || '',
-          birth_date: data.birth_date ? String(data.birth_date).substring(0, 10) : '',
-          blood_type: data.blood_type || '',
-          religion: data.religion || '',
-          marital_status: data.marital_status || '',
-          nationality: data.nationality || 'WNI',
-          address: data.address || '',
-          allergies: data.allergies || '',
-          position_id: data.position_id ? Number(data.position_id) : '',
-          occupation_id: data.occupation_id ? Number(data.occupation_id) : '',
-          education_id: data.education_id ? Number(data.education_id) : '',
-          postal_code: data.postal_code || '',
-          phone: data.phone || ''
-        });
-
-        form.province_id = data.province_id ? String(data.province_id) : '';
-        if (form.province_id) {
-          const res = await lookupService.getRegencies({ province_id: form.province_id });
-          lookups.regencies = res.data || res;
-        }
-        
-        form.regency_id = data.regency_id ? String(data.regency_id) : '';
-        if (form.regency_id) {
-          const res = await lookupService.getDistricts({ regency_id: form.regency_id });
-          lookups.districts = res.data || res;
-        }
-        
-        form.district_id = data.district_id ? String(data.district_id) : '';
-        if (form.district_id) {
-          const res = await lookupService.getVillages({ district_id: form.district_id });
-          lookups.villages = res.data || res;
-        }
-        
-        form.village_id = data.village_id ? String(data.village_id) : '';
-
-        existingSignatureUrl.value = data.signature_url || null;
-        previewImage.value = data.signature_url || null;
-        form.signature = null;
-        form.remove_signature = false;
-        if (fileInput.value) {
-          fileInput.value.value = '';
-        }
-
-      } else {
-        isEditing.value = false;
-        Object.assign(form, { ...defaultForm });
-        existingSignatureUrl.value = null;
-        previewImage.value = null;
-        form.signature = null;
-        form.remove_signature = false;
-        if (fileInput.value) {
-          fileInput.value.value = '';
-        }
-        lookups.regencies = [];
-        lookups.districts = [];
-        lookups.villages = [];
-      }
-    } catch (err) {
-      console.error('Failed to load employee details', err);
-      submitError.value = 'Gagal memuat detail pegawai.';
-    } finally {
-      isLoadingData.value = false;
-      isHydrating.value = false;
-    }
+  () => form.province_id,
+  async (newVal) => {
+    if (isHydrating) return
+    form.regency_id = ''
+    form.district_id = ''
+    form.village_id = ''
+    regencyOptions.value = []
+    districtOptions.value = []
+    villageOptions.value = []
+    await loadRegencies(newVal)
   },
-  { immediate: true }
-);
+)
 
-const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-const maxSize = 2 * 1024 * 1024; // 2MB
+watch(
+  () => form.regency_id,
+  async (newVal) => {
+    if (isHydrating) return
+    form.district_id = ''
+    form.village_id = ''
+    districtOptions.value = []
+    villageOptions.value = []
+    await loadDistricts(newVal)
+  },
+)
 
-const handleFileChange = (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+watch(
+  () => form.district_id,
+  async (newVal) => {
+    if (isHydrating) return
+    form.village_id = ''
+    villageOptions.value = []
+    await loadVillages(newVal)
+  },
+)
 
-  if (errors.value) {
-    delete errors.value.signature;
+async function initializeModal(isOpen, employee) {
+  const token = ++hydrationToken
+  if (!isOpen) {
+    resetPreviewState()
+    return
   }
 
-  if (!allowedTypes.includes(file.type)) {
-    errors.value = {
-      ...errors.value,
-      signature: ['Format tanda tangan harus berupa jpeg, png, atau jpg.']
-    };
-    if (fileInput.value) fileInput.value.value = '';
-    return;
+  clientErrors.value = {}
+  detailError.value = ''
+  resetPreviewState()
+  regencyOptions.value = []
+  districtOptions.value = []
+  villageOptions.value = []
+
+  if (!employee?.id) {
+    isHydrating = true
+    Object.assign(form, createEmployeeForm())
+    await ensureStaticLookups()
+    await nextTick()
+    if (token === hydrationToken) isHydrating = false
+    return
   }
 
-  if (file.size > maxSize) {
-    errors.value = {
-      ...errors.value,
-      signature: ['Ukuran tanda tangan maksimal 2MB.']
-    };
-    if (fileInput.value) fileInput.value.value = '';
-    return;
-  }
-
-  form.signature = file;
-  form.remove_signature = false;
-
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    previewImage.value = event.target.result;
-  };
-  reader.readAsDataURL(file);
-};
-
-const cancelNewFile = () => {
-  form.signature = null;
-  form.remove_signature = false;
-  if (fileInput.value) {
-    fileInput.value.value = '';
-  }
-  previewImage.value = existingSignatureUrl.value || null;
-  if (errors.value) {
-    delete errors.value.signature;
-  }
-};
-
-const removeSignature = () => {
-  form.signature = null;
-  form.remove_signature = true;
-  previewImage.value = null;
-  if (fileInput.value) {
-    fileInput.value.value = '';
-  }
-  if (errors.value) {
-    delete errors.value.signature;
-  }
-};
-
-const focusFirstInvalidField = () => {
-  nextTick(() => {
-    const errorEl = document.querySelector('.has-error');
-    if (errorEl) {
-      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      if (typeof errorEl.focus === 'function') {
-        errorEl.focus();
-      }
-    }
-  });
-};
-
-const fieldError = (...keys) => {
-  for (const key of keys) {
-    const messages = errors.value?.[key];
-    if (Array.isArray(messages) && messages.length) {
-      return messages[0];
-    }
-  }
-  return '';
-};
-
-const toNullableNumber = (val) => {
-  if (val === '' || val === null || val === undefined) return null;
-  const num = Number(val);
-  return isNaN(num) ? null : num;
-};
-
-const toNullableString = (val) => {
-  return (val === '' || val === null || val === undefined) ? null : String(val);
-};
-
-const handleSubmit = async () => {
-  if (isSubmitting.value) return;
-
-  errors.value = {};
-  submitError.value = '';
-  isSubmitting.value = true;
-  
-  const submitData = { 
-    ...form,
-    position_id: toNullableNumber(form.position_id),
-    occupation_id: toNullableNumber(form.occupation_id),
-    education_id: toNullableNumber(form.education_id),
-    province_id: toNullableString(form.province_id),
-    regency_id: toNullableString(form.regency_id),
-    district_id: toNullableString(form.district_id),
-    village_id: toNullableString(form.village_id),
-    phone: toNullableString(form.phone)
-  };
-
+  loadingDetail.value = true
+  isHydrating = true
   try {
-    let result;
-    if (isEditing.value) {
-      result = await updateEmployee(props.employee.id, submitData);
-    } else {
-      result = await createEmployee(submitData);
-    }
+    const [, detail] = await Promise.all([
+      ensureStaticLookups(),
+      employeeService.getEmployee(employee.id),
+    ])
+    if (token !== hydrationToken || !props.open) return
 
-    if (result.success) {
-      emit('saved');
-    } else {
-      if (result.error?.response?.status === 422) {
-        errors.value = result.error.response.data.errors ?? {};
-        focusFirstInvalidField();
-      } else {
-        submitError.value = result.error?.response?.data?.message ?? 'Data Pegawai gagal disimpan.';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    }
-  } catch (err) {
-    submitError.value = 'Terjadi kesalahan sistem.';
+    const hydrated = createEmployeeForm(detail, positionOptions.value)
+    Object.assign(form, hydrated)
+
+    await Promise.all([
+      loadRegencies(hydrated.province_id),
+      loadDistricts(hydrated.regency_id),
+      loadVillages(hydrated.district_id),
+    ])
+  } catch (error) {
+    if (token !== hydrationToken) return
+    detailError.value = getSafeEmployeeErrorMessage(
+      normalizeApiError(error, 'Detail data pegawai gagal dimuat.'),
+      'Detail data pegawai gagal dimuat.',
+    )
   } finally {
-    isSubmitting.value = false;
+    if (token === hydrationToken) {
+      loadingDetail.value = false
+      await nextTick()
+      isHydrating = false
+    }
   }
-};
+}
+
+watch(
+  [() => props.open, () => props.employee],
+  ([isOpen, employee]) => {
+    initializeModal(isOpen, employee)
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  revokeObjectPreview()
+})
+
+function setPreviewFromFile(file) {
+  revokeObjectPreview()
+  if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+    const url = URL.createObjectURL(file)
+    objectPreviewUrl.value = url
+    newPreviewUrl.value = url
+    return
+  }
+
+  if (typeof FileReader !== 'undefined') {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      newPreviewUrl.value = String(event.target?.result ?? '')
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+function handleFileChange(event) {
+  const file = event.target?.files?.[0]
+  if (!file) return
+
+  const fileError = validateSignatureFile(file)
+  if (fileError) {
+    clientErrors.value = { ...clientErrors.value, signature: fileError }
+    if (event.target) event.target.value = ''
+    return
+  }
+
+  const nextErrors = { ...clientErrors.value }
+  delete nextErrors.signature
+  clientErrors.value = nextErrors
+
+  form.signature = file
+  form.remove_signature = false
+  setPreviewFromFile(file)
+}
+
+function cancelNewFile() {
+  form.signature = null
+  const nextErrors = { ...clientErrors.value }
+  delete nextErrors.signature
+  clientErrors.value = nextErrors
+  resetPreviewState()
+}
+
+function removeSignature() {
+  form.signature = null
+  form.remove_signature = true
+  resetPreviewState()
+}
+
+function undoRemoveSignature() {
+  form.remove_signature = false
+}
+
+function clearFieldError(field) {
+  if (!clientErrors.value[field]) return
+  const next = { ...clientErrors.value }
+  delete next[field]
+  clientErrors.value = next
+}
+
+function handleSubmit() {
+  if (props.saving || loadingDetail.value || detailError.value) return
+  const validation = validateEmployeeForm(form)
+  clientErrors.value = validation
+  if (Object.keys(validation).length > 0) return
+
+  emit('submit', toEmployeePayload(form))
+}
+
+function requestClose() {
+  if (!props.saving) emit('close')
+}
 </script>
 
 <template>
-  <MasterDataFormModal
-    :is-open="isOpen"
-    :title="isEditing ? 'Edit Pegawai' : 'Tambah Pegawai'"
-    :is-submitting="isSubmitting || isLoadingData"
-    :submit-text="isEditing ? 'Simpan Perubahan' : 'Simpan'"
-    size="xl"
-    @close="emit('close')"
-    @submit="handleSubmit"
+  <BaseModal
+    :open="open"
+    :title="isEdit ? 'Edit Data Pegawai' : 'Tambah Data Pegawai'"
+    description="Lengkapi identitas pribadi, alamat dan kontak, serta informasi kepegawaian."
+    size="lg"
+    :persistent="saving"
+    @close="requestClose"
   >
-    <div v-if="isLoadingData" class="loading-state">
-      <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="23 4 23 10 17 10"></polyline>
-        <polyline points="1 20 1 14 7 14"></polyline>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-      </svg>
-      <p>Memuat data Pegawai...</p>
+    <div v-if="loadingDetail" class="flex items-center justify-center gap-2 py-12 text-sm text-fg-muted">
+      <LoaderCircle class="size-4 animate-spin text-primary" aria-hidden="true" />
+      <span>Memuat detail data pegawai...</span>
     </div>
 
-    <div v-else class="form-content">
-      <div v-if="submitError" class="alert alert-danger" style="background: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
-        {{ submitError }}
-      </div>
-      <div v-if="errors.general" class="alert alert-danger" style="background: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
-        {{ errors.general }}
-      </div>
+    <form v-else :id="formId" class="space-y-6" novalidate @submit.prevent="handleSubmit">
+      <BaseAlert v-if="detailError" tone="danger">
+        {{ detailError }}
+      </BaseAlert>
 
-      <!-- Identitas Person Section -->
-      <div class="section-card">
-        <h3 class="section-title">1. Identitas Pribadi</h3>
-        
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label required">Nomor KTP (NIK)</label>
-            <input autocomplete="off" type="text" v-model="form.national_id" class="form-input" :class="{ 'has-error': fieldError('national_id') }" required maxlength="20">
-            <div v-if="fieldError('national_id')" class="error-message">{{ fieldError('national_id') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label required">Nama Lengkap</label>
-            <input autocomplete="off" type="text" v-model="form.name" class="form-input" :class="{ 'has-error': fieldError('name') }" required>
-            <div v-if="fieldError('name')" class="error-message">{{ fieldError('name') }}</div>
-          </div>
-        </div>
+      <BaseAlert v-else-if="generalError" tone="danger">
+        {{ generalError }}
+      </BaseAlert>
 
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Tempat Lahir</label>
-            <input autocomplete="off" type="text" v-model="form.birth_place" class="form-input" :class="{ 'has-error': fieldError('birth_place') }">
-            <div v-if="fieldError('birth_place')" class="error-message">{{ fieldError('birth_place') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Tanggal Lahir</label>
-            <input autocomplete="off" type="date" v-model="form.birth_date" class="form-input" :class="{ 'has-error': fieldError('birth_date') }">
-            <div v-if="fieldError('birth_date')" class="error-message">{{ fieldError('birth_date') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Golongan Darah</label>
-            <select v-model="form.blood_type" class="form-select" :class="{ 'has-error': fieldError('blood_type') }">
-              <option value="">Pilih Golongan Darah</option>
-              <option value="Unknown">Tidak Diketahui</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="AB">AB</option>
-              <option value="O">O</option>
-            </select>
-            <div v-if="fieldError('blood_type')" class="error-message">{{ fieldError('blood_type') }}</div>
-          </div>
-        </div>
+      <BaseAlert v-if="lookupError" tone="warning">
+        {{ lookupError }}
+      </BaseAlert>
 
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Agama</label>
-            <select v-model="form.religion" class="form-select" :class="{ 'has-error': fieldError('religion') }">
-              <option value="">Pilih Agama</option>
-              <option value="Islam">Islam</option>
-              <option value="Kristen">Kristen</option>
-              <option value="Katolik">Katolik</option>
-              <option value="Hindu">Hindu</option>
-              <option value="Buddha">Buddha</option>
-              <option value="Khonghucu">Khonghucu</option>
-            </select>
-            <div v-if="fieldError('religion')" class="error-message">{{ fieldError('religion') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Status Perkawinan</label>
-            <select v-model="form.marital_status" class="form-select" :class="{ 'has-error': fieldError('marital_status') }">
-              <option value="">Pilih Status</option>
-              <option value="Belum Kawin">Belum Kawin</option>
-              <option value="Kawin">Kawin</option>
-              <option value="Cerai Hidup">Cerai Hidup</option>
-              <option value="Cerai Mati">Cerai Mati</option>
-            </select>
-            <div v-if="fieldError('marital_status')" class="error-message">{{ fieldError('marital_status') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Kebangsaan</label>
-            <select v-model="form.nationality" class="form-select" :class="{ 'has-error': fieldError('nationality') }">
-              <option value="WNI">WNI</option>
-              <option value="WNA">WNA</option>
-            </select>
-            <div v-if="fieldError('nationality')" class="error-message">{{ fieldError('nationality') }}</div>
-          </div>
-        </div>
+      <section class="space-y-4">
+        <h3 class="border-b border-line pb-2 text-sm font-semibold text-fg">
+          1. Identitas Pribadi
+        </h3>
 
-        <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label class="form-label">Alergi</label>
-          <textarea v-model="form.allergies" class="form-textarea" rows="2" placeholder="Tuliskan alergi obat, makanan, atau lainnya jika diketahui" :class="{ 'has-error': fieldError('allergies') }"></textarea>
-          <div v-if="fieldError('allergies')" class="error-message">{{ fieldError('allergies') }}</div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Pendidikan</label>
-            <BaseSelect 
-              id="education" 
-              v-model="form.education_id" 
-              :options="lookups.educations" 
-              :loading="lookupLoading.educations" 
-              :hasError="lookupError.educations || !!fieldError('education_id')"
-              placeholder="Pilih Pendidikan"
-              emptyMessage="Data Pendidikan belum tersedia"
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <BaseField v-slot="field" label="Nomor KTP (NIK)" required :error="errors.national_id">
+            <BaseInput
+              v-bind="field"
+              v-model="form.national_id"
+              placeholder="16 digit NIK"
+              :maxlength="EMPLOYEE_NATIONAL_ID_MAX_LENGTH"
+              @update:model-value="clearFieldError('national_id')"
             />
-            <div v-if="fieldError('education_id')" class="error-message">{{ fieldError('education_id') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Pekerjaan</label>
-            <BaseSelect 
-              id="occupation" 
-              v-model="form.occupation_id" 
-              :options="lookups.occupations" 
-              :loading="lookupLoading.occupations" 
-              :hasError="lookupError.occupations || !!fieldError('occupation_id')"
-              placeholder="Pilih Pekerjaan"
-              emptyMessage="Data Pekerjaan belum tersedia"
-            />
-            <div v-if="fieldError('occupation_id')" class="error-message">{{ fieldError('occupation_id') }}</div>
-          </div>
-        </div>
-      </div>
+          </BaseField>
 
-      <!-- Alamat dan Kontak Section -->
-      <div class="section-card">
-        <h3 class="section-title">2. Alamat & Kontak</h3>
-        
-        <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label class="form-label">Alamat Lengkap (Jalan/Blok/RT/RW)</label>
-          <textarea v-model="form.address" class="form-textarea" rows="2" :class="{ 'has-error': fieldError('address') }"></textarea>
-          <div v-if="fieldError('address')" class="error-message">{{ fieldError('address') }}</div>
-        </div>
+          <BaseField v-slot="field" label="Nama Lengkap" required :error="errors.name">
+            <BaseInput
+              v-bind="field"
+              v-model="form.name"
+              placeholder="Nama lengkap dengan gelar"
+              :maxlength="EMPLOYEE_NAME_MAX_LENGTH"
+              @update:model-value="clearFieldError('name')"
+            />
+          </BaseField>
 
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Provinsi</label>
-            <BaseSelect 
-              id="province" 
-              v-model="form.province_id" 
-              @change="onProvinceChange"
-              :options="lookups.provinces" 
-              :loading="lookupLoading.provinces" 
-              :hasError="lookupError.provinces || !!fieldError('province_id')"
-              placeholder="Pilih Provinsi"
-              emptyMessage="Data Provinsi belum tersedia"
+          <BaseField v-slot="field" label="Tempat Lahir" :error="errors.birth_place">
+            <BaseInput
+              v-bind="field"
+              v-model="form.birth_place"
+              placeholder="Contoh: Surabaya"
             />
-            <div v-if="fieldError('province_id')" class="error-message">{{ fieldError('province_id') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Kabupaten / Kota</label>
-            <BaseSelect 
-              id="city" 
-              v-model="form.regency_id" 
-              @change="onRegencyChange"
-              :disabled="!form.province_id"
-              :options="lookups.regencies" 
-              :loading="lookupLoading.regencies" 
-              :hasError="lookupError.regencies || !!fieldError('regency_id')"
-              placeholder="Pilih Kota/Kab"
-              emptyMessage="Data Kota/Kab belum tersedia"
-            />
-            <div v-if="fieldError('regency_id')" class="error-message">{{ fieldError('regency_id') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Kecamatan</label>
-            <BaseSelect 
-              id="district" 
-              v-model="form.district_id" 
-              @change="onDistrictChange"
-              :disabled="!form.regency_id"
-              :options="lookups.districts" 
-              :loading="lookupLoading.districts" 
-              :hasError="lookupError.districts || !!fieldError('district_id')"
-              placeholder="Pilih Kecamatan"
-              emptyMessage="Data Kecamatan belum tersedia"
-            />
-            <div v-if="fieldError('district_id')" class="error-message">{{ fieldError('district_id') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Kelurahan / Desa</label>
-            <BaseSelect 
-              id="village" 
-              v-model="form.village_id" 
-              :disabled="!form.district_id"
-              :options="lookups.villages" 
-              :loading="lookupLoading.villages" 
-              :hasError="lookupError.villages || !!fieldError('village_id')"
-              placeholder="Pilih Kelurahan"
-              emptyMessage="Data Kelurahan belum tersedia"
-            />
-            <div v-if="fieldError('village_id')" class="error-message">{{ fieldError('village_id') }}</div>
-          </div>
-        </div>
+          </BaseField>
 
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Kode Pos</label>
-            <input autocomplete="off" type="text" v-model="form.postal_code" class="form-input" :class="{ 'has-error': fieldError('postal_code') }" maxlength="10">
-            <div v-if="fieldError('postal_code')" class="error-message">{{ fieldError('postal_code') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Nomor HP</label>
-            <input autocomplete="off" type="tel" v-model="form.phone" class="form-input" :class="{ 'has-error': fieldError('phone') }" maxlength="20" placeholder="Contoh: 081234567890">
-            <div v-if="fieldError('phone')" class="error-message">{{ fieldError('phone') }}</div>
-          </div>
-        </div>
-      </div>
+          <BaseField v-slot="field" label="Tanggal Lahir" :error="errors.birth_date">
+            <BaseInput v-bind="field" v-model="form.birth_date" type="date" />
+          </BaseField>
 
-      <!-- Informasi Kepegawaian Section -->
-      <div class="section-card">
-        <h3 class="section-title">3. Informasi Kepegawaian</h3>
-        
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label required">NIP</label>
-            <input autocomplete="off" type="text" v-model="form.code" class="form-input" :class="{ 'has-error': fieldError('code') }" placeholder="Masukkan NIP" required>
-            <div v-if="fieldError('code')" class="error-message">{{ fieldError('code') }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label required">Jabatan</label>
-            <BaseSelect 
-              id="position" 
-              v-model="form.position_id" 
-              :options="lookupPositions" 
-              :loading="isPositionsLoading" 
-              :hasError="!!positionsError || !!fieldError('position_id')"
-              placeholder="Pilih jabatan"
-              emptyMessage="Data Jabatan belum tersedia"
-              required
-            />
-            <div v-if="fieldError('position_id')" class="error-message">{{ fieldError('position_id') }}</div>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label" for="signature">Tanda Tangan</label>
-            <input 
-              type="file" 
-              ref="fileInput"
-              id="signature"
-              @change="handleFileChange" 
-              class="form-input"
-              accept="image/png, image/jpeg, image/jpg"
-              :class="{ 'has-error': fieldError('signature') }"
+          <BaseField v-slot="field" label="Golongan Darah" :error="errors.blood_type">
+            <select
+              :id="field.id"
+              v-model="form.blood_type"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
             >
-            <div class="file-hint">Format yang diperbolehkan: PNG, JPG, JPEG (Maksimal 2MB)</div>
-            <div v-if="fieldError('signature')" class="error-message">{{ fieldError('signature') }}</div>
-            
-            <div v-if="previewImage" class="signature-preview">
-              <img :src="previewImage" alt="Preview Tanda Tangan" />
-              <div class="signature-actions">
-                <button 
-                  v-if="form.signature && existingSignatureUrl" 
-                  type="button" 
-                  class="btn-cancel-sig" 
-                  @click="cancelNewFile"
+              <option value="">-- Pilih --</option>
+              <option v-for="item in BLOOD_TYPE_OPTIONS" :key="item" :value="item">
+                {{ item === 'Unknown' ? 'Tidak Diketahui' : item }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Agama" :error="errors.religion">
+            <select
+              :id="field.id"
+              v-model="form.religion"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">-- Pilih Agama --</option>
+              <option v-for="item in RELIGION_OPTIONS" :key="item" :value="item">
+                {{ item }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Status Pernikahan" :error="errors.marital_status">
+            <select
+              :id="field.id"
+              v-model="form.marital_status"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">-- Pilih Status --</option>
+              <option v-for="item in MARITAL_STATUS_OPTIONS" :key="item" :value="item">
+                {{ item }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Kewarganegaraan" :error="errors.nationality">
+            <select
+              :id="field.id"
+              v-model="form.nationality"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option v-for="item in NATIONALITY_OPTIONS" :key="item" :value="item">
+                {{ item }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Alergi" :error="errors.allergies" class="sm:col-span-2">
+            <BaseInput
+              v-bind="field"
+              v-model="form.allergies"
+              placeholder="Riwayat alergi (opsional)"
+            />
+          </BaseField>
+
+          <BaseField v-slot="field" label="Pendidikan Terakhir" :error="errors.education_id">
+            <select
+              :id="field.id"
+              v-model="form.education_id"
+              :disabled="loadingLookups"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">-- Pilih Pendidikan --</option>
+              <option v-for="edu in educationOptions" :key="edu.id" :value="edu.id">
+                {{ edu.name }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Pekerjaan" :error="errors.occupation_id">
+            <select
+              :id="field.id"
+              v-model="form.occupation_id"
+              :disabled="loadingLookups"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">-- Pilih Pekerjaan --</option>
+              <option v-for="occ in occupationOptions" :key="occ.id" :value="occ.id">
+                {{ occ.name }}
+              </option>
+            </select>
+          </BaseField>
+        </div>
+      </section>
+
+      <section class="space-y-4">
+        <h3 class="border-b border-line pb-2 text-sm font-semibold text-fg">
+          2. Alamat &amp; Kontak
+        </h3>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <BaseField
+            v-slot="field"
+            label="Alamat Lengkap"
+            :error="errors.address"
+            class="sm:col-span-2"
+          >
+            <BaseTextarea
+              v-bind="field"
+              v-model="form.address"
+              :rows="2"
+              placeholder="Jalan, RT/RW, Nomor Rumah"
+            />
+          </BaseField>
+
+          <BaseField v-slot="field" label="Provinsi" :error="errors.province_id">
+            <select
+              :id="field.id"
+              v-model="form.province_id"
+              :disabled="loadingLookups"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">-- Pilih Provinsi --</option>
+              <option v-for="prov in provinceOptions" :key="prov.id" :value="prov.id">
+                {{ prov.name }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Kabupaten / Kota" :error="errors.regency_id">
+            <select
+              :id="field.id"
+              v-model="form.regency_id"
+              :disabled="!form.province_id || loadingRegencies"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">
+                {{ loadingRegencies ? 'Memuat kabupaten/kota...' : '-- Pilih Kab/Kota --' }}
+              </option>
+              <option v-for="reg in regencyOptions" :key="reg.id" :value="reg.id">
+                {{ reg.name }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Kecamatan" :error="errors.district_id">
+            <select
+              :id="field.id"
+              v-model="form.district_id"
+              :disabled="!form.regency_id || loadingDistricts"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">
+                {{ loadingDistricts ? 'Memuat kecamatan...' : '-- Pilih Kecamatan --' }}
+              </option>
+              <option v-for="dist in districtOptions" :key="dist.id" :value="dist.id">
+                {{ dist.name }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Kelurahan / Desa" :error="errors.village_id">
+            <select
+              :id="field.id"
+              v-model="form.village_id"
+              :disabled="!form.district_id || loadingVillages"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+            >
+              <option value="">
+                {{ loadingVillages ? 'Memuat kelurahan/desa...' : '-- Pilih Kel/Desa --' }}
+              </option>
+              <option v-for="vil in villageOptions" :key="vil.id" :value="vil.id">
+                {{ vil.name }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField v-slot="field" label="Kode Pos" :error="errors.postal_code">
+            <BaseInput
+              v-bind="field"
+              v-model="form.postal_code"
+              placeholder="Contoh: 60111"
+              :maxlength="EMPLOYEE_POSTAL_CODE_MAX_LENGTH"
+              @update:model-value="clearFieldError('postal_code')"
+            />
+          </BaseField>
+
+          <BaseField v-slot="field" label="No. Telepon / HP" :error="errors.phone">
+            <BaseInput
+              v-bind="field"
+              v-model="form.phone"
+              type="tel"
+              placeholder="Contoh: 08123456789"
+              :maxlength="EMPLOYEE_PHONE_MAX_LENGTH"
+              @update:model-value="clearFieldError('phone')"
+            />
+          </BaseField>
+        </div>
+      </section>
+
+      <section class="space-y-4">
+        <h3 class="border-b border-line pb-2 text-sm font-semibold text-fg">
+          3. Informasi Kepegawaian
+        </h3>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <BaseField
+            v-slot="field"
+            label="NIP (Nomor Induk Pegawai)"
+            required
+            :error="errors.code"
+          >
+            <BaseInput
+              v-bind="field"
+              v-model="form.code"
+              placeholder="Nomor Induk Pegawai"
+              :maxlength="EMPLOYEE_CODE_MAX_LENGTH"
+              @update:model-value="clearFieldError('code')"
+            />
+          </BaseField>
+
+          <BaseField v-slot="field" label="Jabatan" required :error="errors.position_id">
+            <select
+              :id="field.id"
+              v-model="form.position_id"
+              :disabled="loadingLookups"
+              :aria-invalid="field.invalid || undefined"
+              :aria-describedby="field['aria-describedby']"
+              :class="fieldControlClass({ invalid: field.invalid })"
+              @change="clearFieldError('position_id')"
+            >
+              <option value="">
+                {{ loadingLookups ? 'Memuat jabatan...' : '-- Pilih Jabatan --' }}
+              </option>
+              <option v-for="pos in positionOptions" :key="pos.id" :value="pos.id">
+                {{ pos.name }}
+              </option>
+            </select>
+          </BaseField>
+
+          <BaseField
+            v-slot="field"
+            label="Tanda Tangan Digital"
+            hint="Format PNG atau JPG/JPEG, maksimal 2MB."
+            :error="errors.signature"
+            class="sm:col-span-2"
+          >
+            <div class="space-y-3">
+              <div
+                v-if="activePreviewUrl"
+                class="flex flex-col items-start gap-3 rounded-lg border border-line bg-canvas p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <img
+                  :src="activePreviewUrl"
+                  alt="Preview tanda tangan"
+                  class="max-h-24 max-w-full rounded border border-line bg-surface object-contain p-1"
+                />
+
+                <div class="flex flex-wrap gap-2">
+                  <BaseButton
+                    v-if="form.signature"
+                    variant="secondary"
+                    size="sm"
+                    @click="cancelNewFile"
+                  >
+                    <X class="size-4" aria-hidden="true" />
+                    Batalkan Pilihan
+                  </BaseButton>
+                  <BaseButton
+                    v-else-if="form.signature_url"
+                    variant="ghost-danger"
+                    size="sm"
+                    @click="removeSignature"
+                  >
+                    <Trash2 class="size-4" aria-hidden="true" />
+                    Hapus Tanda Tangan
+                  </BaseButton>
+                </div>
+              </div>
+
+              <div
+                v-else-if="form.remove_signature && form.signature_url"
+                class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-canvas px-3.5 py-2.5 text-xs text-fg-muted"
+              >
+                <span>Tanda tangan tersimpan akan dihapus saat data disimpan.</span>
+                <BaseButton variant="secondary" size="sm" @click="undoRemoveSignature">
+                  Batal Hapus
+                </BaseButton>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3">
+                <input
+                  :id="field.id"
+                  ref="fileInputRef"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  class="block w-full text-sm text-fg-muted file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong file:bg-surface file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-fg hover:file:bg-canvas"
+                  :aria-describedby="field['aria-describedby']"
+                  @change="handleFileChange"
+                />
+                <span
+                  v-if="form.signature"
+                  class="inline-flex items-center gap-1.5 text-xs text-fg-muted"
                 >
-                  Batalkan Pilihan
-                </button>
-                <button 
-                  type="button" 
-                  class="btn-remove-sig" 
-                  @click="removeSignature"
-                >
-                  {{ form.signature && !existingSignatureUrl ? 'Batalkan Pilihan' : 'Hapus Tanda Tangan' }}
-                </button>
+                  <Upload class="size-3.5" aria-hidden="true" />
+                  {{ form.signature.name }}
+                </span>
               </div>
             </div>
-          </div>
+          </BaseField>
         </div>
-      </div>
+      </section>
+    </form>
 
-    </div>
-  </MasterDataFormModal>
+    <template #footer>
+      <BaseButton variant="secondary" :disabled="saving" @click="requestClose">Batal</BaseButton>
+      <BaseButton
+        type="submit"
+        :form="formId"
+        :loading="saving"
+        :disabled="saving || loadingDetail || Boolean(detailError)"
+      >
+        {{ isEdit ? 'Simpan Perubahan' : 'Simpan Data' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
-
-<style scoped>
-.form-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.section-card {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 1.25rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid var(--color-border-soft);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-}
-.section-card:last-child {
-  margin-bottom: 0;
-}
-.section-title {
-  margin-top: 0;
-  margin-bottom: 1.25rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--color-primary);
-  border-bottom: 1px solid var(--color-border-soft);
-  padding-bottom: 0.5rem;
-}
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.25rem;
-  margin-bottom: 1.25rem;
-}
-@media (min-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-.form-group {
-  margin-bottom: 0;
-}
-.form-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-navy);
-  margin-bottom: 0.5rem;
-}
-.form-label.required::after {
-  content: " *";
-  color: #ef4444;
-}
-.form-input,
-.form-select,
-.form-textarea {
-  width: 100%;
-  padding: 0.625rem 0.875rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  color: var(--color-text-navy);
-  background-color: #ffffff;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-.form-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-right: 2.5rem;
-}
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-.form-input.has-error,
-.form-select.has-error,
-.form-textarea.has-error {
-  border-color: #ef4444;
-}
-.form-input.has-error:focus,
-.form-select.has-error:focus,
-.form-textarea.has-error:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-.error-message {
-  font-size: 0.75rem;
-  color: #ef4444;
-  margin-top: 0.25rem;
-}
-.file-hint {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #64748b);
-  margin-top: 0.375rem;
-}
-.signature-preview {
-  margin-top: 12px;
-  border: 2px dashed #cbd5e1;
-  padding: 12px;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-.signature-preview img {
-  max-width: 200px;
-  max-height: 100px;
-  display: block;
-  border-radius: 4px;
-}
-.signature-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 8px;
-}
-.btn-remove-sig {
-  margin-top: 8px;
-  background: #fee2e2;
-  color: #ef4444;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 500;
-  transition: background-color 0.2s, color 0.2s;
-}
-.btn-remove-sig:hover {
-  background: #fca5a5;
-  color: #991b1b;
-}
-.btn-cancel-sig {
-  margin-top: 8px;
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 500;
-  transition: background-color 0.2s, color 0.2s;
-}
-.btn-cancel-sig:hover {
-  background: #e2e8f0;
-  color: #1e293b;
-}
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 4rem 0;
-  color: var(--color-text-secondary);
-}
-.loading-state svg {
-  width: 28px;
-  height: 28px;
-  margin-bottom: 1rem;
-  color: var(--color-primary);
-}
-.spin {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-</style>

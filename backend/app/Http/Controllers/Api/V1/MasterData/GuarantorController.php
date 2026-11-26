@@ -12,6 +12,7 @@ use App\Models\Legacy\LegacyGuarantor;
 use App\Support\LegacyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class GuarantorController extends Controller
 {
@@ -156,17 +157,41 @@ class GuarantorController extends Controller
         $id = $guarantor instanceof Guarantor || $guarantor instanceof LegacyGuarantor ? $guarantor->id : $guarantor;
         if (LegacyAccess::isAvailable('ref_jenis_asuransi')) {
             $legacy = LegacyGuarantor::findOrFail($id);
+            $legacySchema = DB::connection('legacy')->getSchemaBuilder();
 
-            $isUsed = false;
-            if (DB::connection('legacy')->getSchemaBuilder()->hasTable('trx_admisi')) {
-                $isUsed = DB::connection('legacy')->table('trx_admisi')
-                    ->where('id_jenis_asuransi', $id)
-                    ->exists();
+            $usedInAdmission = false;
+            if ($legacySchema->hasTable('trx_admisi')) {
+                $admissionQuery = DB::connection('legacy')->table('trx_admisi')
+                    ->where('id_jenis_asuransi', $id);
+                if ($legacySchema->hasColumn('trx_admisi', 'deleted_at')) {
+                    $admissionQuery->where(function ($q) {
+                        $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
+                    });
+                }
+                $usedInAdmission = $admissionQuery->exists();
             }
 
-            if ($isUsed) {
+            if ($usedInAdmission) {
                 return response()->json([
                     'message' => 'Penjamin tidak dapat dihapus karena sudah digunakan pada data admisi pasien.'
+                ], 422);
+            }
+
+            $usedInPatient = false;
+            if ($legacySchema->hasTable('ref_pasien')) {
+                $patientQuery = DB::connection('legacy')->table('ref_pasien')
+                    ->where('id_jenis_asuransi', $id);
+                if ($legacySchema->hasColumn('ref_pasien', 'deleted_at')) {
+                    $patientQuery->where(function ($q) {
+                        $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
+                    });
+                }
+                $usedInPatient = $patientQuery->exists();
+            }
+
+            if ($usedInPatient) {
+                return response()->json([
+                    'message' => 'Penjamin tidak dapat dihapus karena sudah digunakan pada data pasien.'
                 ], 422);
             }
 
@@ -179,6 +204,20 @@ class GuarantorController extends Controller
 
         if (! ($guarantor instanceof Guarantor)) {
             $guarantor = Guarantor::findOrFail($id);
+        }
+
+        foreach (['outpatient_admissions', 'admissions', 'patients'] as $table) {
+            if (Schema::hasTable($table) && Schema::hasColumn($table, 'guarantor_id')) {
+                $refQuery = DB::table($table)->where('guarantor_id', $guarantor->id);
+                if (Schema::hasColumn($table, 'deleted_at')) {
+                    $refQuery->whereNull('deleted_at');
+                }
+                if ($refQuery->exists()) {
+                    return response()->json([
+                        'message' => 'Penjamin tidak dapat dihapus karena sudah digunakan pada data pasien atau admisi.'
+                    ], 422);
+                }
+            }
         }
 
         DB::transaction(function () use ($guarantor) {

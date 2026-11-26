@@ -26,7 +26,7 @@ class UpdateRegencyRequest extends FormRequest
 
         $provinceExistsRule = LegacyAccess::isAvailable('ref_provinsi')
             ? Rule::exists('legacy.ref_provinsi', 'id')->whereNull('deleted_at')
-            : Rule::exists('provinces', 'id')->whereNull('deleted_at');
+            : Rule::exists('provinces', 'id');
 
         return [
             'code' => ['nullable', 'string', 'max:50', $uniqueCodeRule],

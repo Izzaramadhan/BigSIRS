@@ -1,105 +1,84 @@
 <script setup>
-import { defineProps, defineEmits } from 'vue';
-import MasterDataActionButtons from '@/components/master-data/shared/MasterDataActionButtons.vue';
-import MasterDataSkeletonRow from '@/components/master-data/shared/MasterDataSkeletonRow.vue';
+import { Pencil, Trash2 } from 'lucide-vue-next'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseDataTable from '@/components/ui/BaseDataTable.vue'
+import {
+  formatEmployeeCode,
+  formatEmployeeName,
+  formatEmployeePosition,
+  resolveEmployeeDisplayName,
+} from './employee.helpers'
 
-const props = defineProps({
+defineProps({
   items: {
     type: Array,
-    required: true
-  },
-  pagination: {
-    type: Object,
-    required: true
-  },
-  sort: {
-    type: Object,
-    required: true
+    required: true,
   },
   loading: {
     type: Boolean,
-    default: false
-  }
-});
+    default: false,
+  },
+  /** Nomor urut baris pertama dikurangi 1, untuk kolom "No" lintas halaman. */
+  offset: {
+    type: Number,
+    default: 0,
+  },
+})
 
-const emit = defineEmits(['sort', 'edit', 'delete']);
+const emit = defineEmits(['edit', 'delete'])
 
-const getRowNumber = (index, pagination) => {
-  return (pagination.current_page - 1) * pagination.per_page + index + 1;
-};
-
-const handleSort = (column) => {
-  emit('sort', {
-    column,
-    direction: props.sort.column === column && props.sort.direction === 'asc' ? 'desc' : 'asc'
-  });
-};
+const columns = [
+  { key: 'no', label: 'No', align: 'center', class: 'w-16' },
+  { key: 'code', label: 'NIP / ID', class: 'w-44 min-w-36' },
+  { key: 'name', label: 'Nama Pegawai', class: 'min-w-48' },
+  { key: 'position', label: 'Jabatan', class: 'min-w-40' },
+  { key: 'actions', label: 'Aksi', align: 'center', class: 'w-28' },
+]
 </script>
 
 <template>
-  <div class="table-wrapper">
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="col-no">No</th>
-            <th class="sortable" @click="handleSort('code')">
-              <div class="th-content">
-                NIP / ID
-                <span class="sort-icon" v-if="sort.column === 'code'">
-                  <svg v-if="sort.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </span>
-              </div>
-            </th>
-            <th class="sortable col-name" style="width: 35%;" @click="handleSort('name')">
-              <div class="th-content">
-                Nama Pegawai
-                <span class="sort-icon" v-if="sort.column === 'name'">
-                  <svg v-if="sort.direction === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </span>
-              </div>
-            </th>
-            <th style="width: 20%">Jabatan</th>
-            <th class="col-actions text-center">Aksi</th>
-          </tr>
-        </thead>
+  <BaseDataTable :columns="columns" :rows="items" :loading="loading" caption="Daftar pegawai">
+    <template #cell-no="{ index }">
+      <span class="text-fg-muted">{{ offset + index + 1 }}</span>
+    </template>
 
-        <tbody>
-          <template v-if="loading">
-            <MasterDataSkeletonRow :columns="5" :rows="5" />
-          </template>
+    <template #cell-code="{ row }">
+      <span class="font-medium text-fg">{{ formatEmployeeCode(row) }}</span>
+    </template>
 
-          <template v-else>
-            <tr v-for="(item, index) in items" :key="item.id">
-              <td class="col-no text-muted">{{ getRowNumber(index, pagination) }}</td>
-              <td class="code-text">{{ item.code || '-' }}</td>
-              <td class="col-name font-medium text-navy">{{ item.name || item.person?.name || '-' }}</td>
-              <td>{{ item.position?.name || '-' }}</td>
-              <td class="actions-cell">
-                <MasterDataActionButtons 
-                  :is-active="true"
-                  :show-toggle="false"
-                  @edit="emit('edit', item)"
-                  @delete="emit('delete', item)"
-                />
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
-  </div>
+    <template #cell-name="{ row }">
+      <span class="font-medium text-fg">{{ formatEmployeeName(row) }}</span>
+    </template>
+
+    <template #cell-position="{ row }">
+      <span class="text-fg-muted">{{ formatEmployeePosition(row) }}</span>
+    </template>
+
+    <template #cell-actions="{ row }">
+      <div class="flex justify-center gap-1">
+        <BaseButton
+          variant="ghost"
+          size="icon"
+          :aria-label="`Edit ${resolveEmployeeDisplayName(row)}`"
+          title="Edit"
+          @click="emit('edit', row)"
+        >
+          <Pencil class="size-4" aria-hidden="true" />
+        </BaseButton>
+        <BaseButton
+          variant="ghost-danger"
+          size="icon"
+          :aria-label="`Hapus ${resolveEmployeeDisplayName(row)}`"
+          title="Hapus"
+          @click="emit('delete', row)"
+        >
+          <Trash2 class="size-4" aria-hidden="true" />
+        </BaseButton>
+      </div>
+    </template>
+
+    <template #empty>
+      <slot name="empty" />
+    </template>
+  </BaseDataTable>
 </template>
-
-<style scoped>
-@media (max-width: 1200px) {
-  .hide-md { display: none; }
-}
-
-@media (max-width: 768px) {
-  .hide-sm { display: none; }
-  .data-table { min-width: 800px; }
-}
-</style>

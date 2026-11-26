@@ -1,45 +1,47 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import PolyclinicView from '../PolyclinicView.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
+import { useToast } from '@/composables/core/useToast'
 import { polyclinicService } from '@/services/polyclinic'
 
-// Mock axios and service
-vi.mock('@/utils/axios', () => {
-  return {
-    default: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      patch: vi.fn(),
-      delete: vi.fn(),
-      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }
-    }
-  }
-})
+vi.mock('@/utils/axios', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+  },
+}))
 
-vi.mock('@/services/polyclinic', () => {
-  return {
-    polyclinicService: {
-      getPolyclinics: vi.fn(),
-      getPolyclinic: vi.fn(),
-      getServiceTypes: vi.fn(),
-      createPolyclinic: vi.fn(),
-      updatePolyclinic: vi.fn(),
-      updatePolyclinicStatus: vi.fn(),
-      archivePolyclinic: vi.fn()
-    }
-  }
-})
+vi.mock('@/services/polyclinic', () => ({
+  polyclinicService: {
+    getPolyclinics: vi.fn(),
+    getPolyclinic: vi.fn(),
+    getServiceTypes: vi.fn(),
+    createPolyclinic: vi.fn(),
+    updatePolyclinic: vi.fn(),
+    updatePolyclinicStatus: vi.fn(),
+    archivePolyclinic: vi.fn(),
+  },
+}))
+
+vi.mock('@/services/lookup.service', () => ({
+  default: {
+    getWarehouses: vi.fn().mockResolvedValue([{ id: 1, code: 'W1', name: 'Gudang 1' }]),
+  },
+}))
 
 const mockServiceTypes = {
   data: {
     data: [
       { value: 'rawat-jalan', label: 'Rawat Jalan' },
       { value: 'farmasi', label: 'Farmasi' },
-    ]
-  }
+    ],
+  },
 }
 
 const mockPolyclinics = {
@@ -51,6 +53,7 @@ const mockPolyclinics = {
         name: 'Umum',
         service_type: 'rawat-jalan',
         service_type_label: 'Rawat Jalan',
+        warehouse: { id: 1, code: 'W1', name: 'Gudang 1' },
         quota: 20,
         jkn_quota: 10,
         bpjs_code: 'B-01',
@@ -64,28 +67,60 @@ const mockPolyclinics = {
         name: 'Gigi',
         service_type: 'farmasi',
         service_type_label: 'Farmasi',
+        warehouse: null,
         quota: 0,
         jkn_quota: 0,
         bpjs_code: null,
         is_active: false,
         is_visible: true,
         is_online_visible: false,
-      }
+      },
     ],
     meta: {
       current_page: 1,
       last_page: 2,
       per_page: 15,
-      total: 30
-    }
-  }
+      total: 30,
+      from: 1,
+      to: 2,
+    },
+  },
+}
+
+const mockPolyclinicsPageTwo = {
+  data: {
+    data: [
+      {
+        id: 16,
+        code: 'POLI-16',
+        name: 'Poli Mata',
+        service_type: 'rawat-jalan',
+        service_type_label: 'Rawat Jalan',
+        warehouse: null,
+        quota: 15,
+        jkn_quota: 5,
+        bpjs_code: 'MAT',
+        is_active: true,
+        is_visible: true,
+        is_online_visible: false,
+      },
+    ],
+    meta: {
+      current_page: 2,
+      last_page: 2,
+      per_page: 15,
+      total: 30,
+      from: 16,
+      to: 30,
+    },
+  },
 }
 
 const mockEmptyResponse = {
   data: {
     data: [],
-    meta: { current_page: 1, last_page: 1, per_page: 15, total: 0 }
-  }
+    meta: { current_page: 1, last_page: 1, per_page: 15, total: 0, from: 0, to: 0 },
+  },
 }
 
 const router = createRouter({
@@ -95,16 +130,28 @@ const router = createRouter({
       path: '/master-data/polyclinics',
       name: 'master-data.polyclinics',
       component: PolyclinicView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
     },
-    { path: '/login', name: 'login', component: { template: '<div>Login</div>' } }
-  ]
+    { path: '/login', name: 'login', component: { template: '<div>Login</div>' } },
+  ],
 })
+
+const toast = useToast()
+const toastEntries = () => toast.toasts.value
+
+function findButtonByText(wrapper, text) {
+  return wrapper.findAll('button').find((button) => button.text().includes(text))
+}
 
 describe('Master Data Polyclinic Frontend', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    toast.clear()
     polyclinicService.getServiceTypes.mockResolvedValue(mockServiceTypes)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   describe('Router & Auth Guard', () => {
@@ -120,16 +167,15 @@ describe('Master Data Polyclinic Frontend', () => {
     it('renders Master Data submenu and can be expanded', async () => {
       const wrapper = mount(AppSidebar, {
         global: { plugins: [router] },
-        props: { isOpen: true }
+        props: { isOpen: true },
       })
 
-      const buttons = wrapper.findAll('button.nav-link')
-      const masterDataBtn = buttons.find(b => b.text().includes('Master Data'))
+      const masterDataBtn = wrapper.findAll('button.nav-link').find((b) => b.text().includes('Master Data'))
       expect(masterDataBtn).toBeDefined()
 
       await masterDataBtn.trigger('click')
 
-      const polyclinicLink = wrapper.findAll('.submenu-link').find(l => l.text() === 'Poliklinik')
+      const polyclinicLink = wrapper.findAll('.submenu-link').find((l) => l.text() === 'Poliklinik')
       expect(polyclinicLink).toBeDefined()
     })
   })
@@ -138,146 +184,145 @@ describe('Master Data Polyclinic Frontend', () => {
     const mountView = async (serviceMock = mockPolyclinics) => {
       polyclinicService.getPolyclinics.mockResolvedValue(serviceMock)
       const wrapper = mount(PolyclinicView, {
-        global: { 
+        global: {
           plugins: [router],
           stubs: {
-            Teleport: true
-          }
+            Teleport: true,
+          },
         },
       })
       await flushPromises()
       return wrapper
     }
 
-    it('fetches polyclinics and service types on mount', async () => {
-      await mountView()
+    it('fetches polyclinics and service types on mount and renders columns', async () => {
+      const wrapper = await mountView()
+
       expect(polyclinicService.getPolyclinics).toHaveBeenCalled()
       expect(polyclinicService.getServiceTypes).toHaveBeenCalled()
-    })
-
-    it('fetches and displays listing on mount', async () => {
-      const wrapper = await mountView()
       expect(wrapper.text()).toContain('POLI-01')
       expect(wrapper.text()).toContain('Umum')
-    })
-
-    it('displays Jenis Layanan column in table', async () => {
-      const wrapper = await mountView()
-      expect(wrapper.text()).toContain('Jenis Layanan')
       expect(wrapper.text()).toContain('Rawat Jalan')
-    })
-
-    it('does NOT display Poliklinik Induk column in table', async () => {
-      const wrapper = await mountView()
-      expect(wrapper.text()).not.toContain('Poliklinik Induk')
-    })
-
-    it('does NOT display Kode SatuSehat column in table', async () => {
-      const wrapper = await mountView()
-      expect(wrapper.text()).not.toContain('SatuSehat')
-    })
-
-    it('does NOT display Kode BPJS column in main table', async () => {
-      const wrapper = await mountView()
-      const headers = wrapper.findAll('.data-table thead th').map(th => th.text().trim())
-      expect(headers).not.toContain('Kode BPJS')
-      expect(headers).not.toContain('BPJS')
-    })
-
-    it('displays Kuota column in table', async () => {
-      const wrapper = await mountView()
+      expect(wrapper.text()).toContain('W1 — Gudang 1')
       expect(wrapper.text()).toContain('Kuota JKN')
+
+      const headers = wrapper.findAll('thead th').map((th) => th.text().trim())
+      expect(headers).not.toContain('Poliklinik Induk')
+      expect(headers).not.toContain('Kode SatuSehat')
+      expect(headers).not.toContain('Kode BPJS')
     })
 
-    it('displays empty state when no data', async () => {
-      const wrapper = await mountView(mockEmptyResponse)
-      expect(wrapper.text()).toContain('Belum ada data')
+    it('displays empty state when no data and load error state when API fails', async () => {
+      const emptyWrapper = await mountView(mockEmptyResponse)
+      expect(emptyWrapper.text()).toContain('Belum ada data poliklinik')
+
+      polyclinicService.getPolyclinics.mockRejectedValueOnce({
+        response: { status: 500, data: { message: 'SQLSTATE[42S02]: table error' } },
+      })
+      const errorWrapper = mount(PolyclinicView, {
+        global: { plugins: [router], stubs: { Teleport: true } },
+      })
+      await flushPromises()
+      expect(errorWrapper.text()).toContain('Gagal memuat data poliklinik')
+      expect(errorWrapper.text()).not.toContain('SQLSTATE')
     })
 
-    it('handles debounced search', async () => {
+    it('handles debounced search and status filter correctly', async () => {
       vi.useFakeTimers()
       const wrapper = await mountView()
 
-      const searchInput = wrapper.find('input[type="text"]')
+      const searchInput = wrapper.find('input[type="search"]')
       await searchInput.setValue('test search')
 
-      vi.advanceTimersByTime(500)
+      vi.advanceTimersByTime(450)
       await flushPromises()
 
-      expect(polyclinicService.getPolyclinics).toHaveBeenCalledWith(expect.objectContaining({
-        search: 'test search',
-        page: 1
-      }))
+      expect(polyclinicService.getPolyclinics).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: 'test search',
+          page: 1,
+        }),
+      )
 
-      vi.useRealTimers()
+      const statusSelect = wrapper.find('select[aria-label="Filter status aktif"]')
+      expect(statusSelect.element.value).toBe('')
+      await statusSelect.setValue('true')
+
+      expect(polyclinicService.getPolyclinics).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          is_active: true,
+          page: 1,
+        }),
+      )
     })
 
-    it('opens add modal with correct title', async () => {
+    it('does not render service_type filter or toggle status action button', async () => {
       const wrapper = await mountView()
 
-      await wrapper.find('button.btn-primary').trigger('click')
-      await flushPromises()
+      expect(wrapper.findAll('select').length).toBe(1)
+      expect(wrapper.text()).not.toContain('Semua Jenis Layanan')
+      expect(wrapper.find('button[aria-label="Muat ulang data"]').exists()).toBe(true)
+      expect(wrapper.find('button[title="Edit"]').exists()).toBe(true)
+      expect(wrapper.find('button[title="Arsipkan"]').exists()).toBe(true)
+      expect(wrapper.find('button[title="Nonaktifkan"]').exists()).toBe(false)
 
-      expect(wrapper.find('.modal-content').exists()).toBe(true)
-      expect(wrapper.find('.modal-header h3').text()).toBe('Tambah Poliklinik')
+      const callArgs = polyclinicService.getPolyclinics.mock.calls.at(-1)[0]
+      expect(callArgs).not.toHaveProperty('service_type')
     })
 
-    it('maps 422 validation errors to fields and shows error toast', async () => {
+    it('opens add modal, maps 422 validation errors, and shows error toast without wiping table', async () => {
       const wrapper = await mountView()
       polyclinicService.createPolyclinic.mockRejectedValue({
         response: {
           status: 422,
-          data: { errors: { code: ['Code is taken'] } }
-        }
+          data: {
+            message: 'Data tidak valid.',
+            errors: { code: ['Code is taken'] },
+          },
+        },
       })
 
-      await wrapper.find('button.btn-primary').trigger('click')
+      await findButtonByText(wrapper, 'Tambah Poliklinik').trigger('click')
       await flushPromises()
 
+      expect(wrapper.find('h2').text()).toBe('Tambah Poliklinik')
+
+      await wrapper.find('input#code').setValue('POLI-01')
+      await wrapper.find('input#name').setValue('Umum')
+      await wrapper.find('select#service_type').setValue('rawat-jalan')
       await wrapper.find('form').trigger('submit.prevent')
       await flushPromises()
 
-      // 422 error should show field error and an error toast summary
-      expect(wrapper.find('.invalid-feedback').text()).toBe('Code is taken')
-      const toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(true)
-      expect(toast.classes()).toContain('toast-error')
-      expect(toast.find('.toast-title').text()).toBe('Gagal Menambahkan')
-      expect(toast.find('.toast-message').text()).toBe('Data Poliklinik gagal ditambahkan. Silakan periksa kembali data yang dimasukkan.')
+      expect(wrapper.text()).toContain('Code is taken')
+      expect(wrapper.text()).toContain('POLI-01')
+      expect(toastEntries().at(-1)?.tone).toBe('danger')
     })
 
-    it('shows success toast on successful creation and includes bpjs_code in payload', async () => {
+    it('shows success toast on create and update including bpjs_code', async () => {
       const wrapper = await mountView()
-      polyclinicService.createPolyclinic.mockResolvedValue({ success: true })
+      polyclinicService.createPolyclinic.mockResolvedValue({ data: { data: { id: 99 } } })
 
-      await wrapper.find('button.btn-primary').trigger('click')
+      await findButtonByText(wrapper, 'Tambah Poliklinik').trigger('click')
       await flushPromises()
 
-      // Fill and submit form
-      await wrapper.find('input[id="code"]').setValue('NEW-01')
-      await wrapper.find('input[id="name"]').setValue('Poliklinik Baru')
-      await wrapper.find('select[id="service_type"]').setValue('rawat-jalan')
-      await wrapper.find('input[id="bpjs_code"]').setValue('  BPJS-01  ')
+      await wrapper.find('input#code').setValue('NEW-01')
+      await wrapper.find('input#name').setValue('Poliklinik Baru')
+      await wrapper.find('select#service_type').setValue('rawat-jalan')
+      await wrapper.find('input#bpjs_code').setValue('  BPJS-01  ')
       await wrapper.find('form').trigger('submit.prevent')
-      
       await flushPromises()
 
-      expect(polyclinicService.createPolyclinic).toHaveBeenCalledWith(expect.objectContaining({
-        code: 'NEW-01',
-        name: 'Poliklinik Baru',
-        service_type: 'rawat-jalan',
-        bpjs_code: 'BPJS-01'
-      }))
+      expect(polyclinicService.createPolyclinic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'NEW-01',
+          name: 'Poliklinik Baru',
+          service_type: 'rawat-jalan',
+          bpjs_code: 'BPJS-01',
+        }),
+      )
+      expect(toastEntries().at(-1)?.tone).toBe('success')
+      expect(toastEntries().at(-1)?.message).toBe('Data Poliklinik berhasil ditambahkan.')
 
-      const toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(true)
-      expect(toast.classes()).toContain('toast-success')
-      expect(toast.find('.toast-title').text()).toBe('Berhasil')
-      expect(toast.find('.toast-message').text()).toBe('Data Poliklinik berhasil ditambahkan.')
-    })
-
-    it('shows success toast on successful update and includes bpjs_code in payload', async () => {
-      const wrapper = await mountView()
       polyclinicService.getPolyclinic.mockResolvedValue({
         data: {
           data: {
@@ -288,166 +333,139 @@ describe('Master Data Polyclinic Frontend', () => {
             quota: 20,
             jkn_quota: 10,
             bpjs_code: 'B-01',
-            warehouse_id: null
-          }
-        }
+            warehouse_id: null,
+          },
+        },
       })
-      polyclinicService.updatePolyclinic.mockResolvedValue({ success: true })
+      polyclinicService.updatePolyclinic.mockResolvedValue({ data: { data: { id: 1 } } })
 
-      // Click Edit button on the first item
-      await wrapper.find('.actions-cell .edit').trigger('click')
+      await wrapper.find('button[title="Edit"]').trigger('click')
       await flushPromises()
 
-      const bpjsInput = wrapper.find('input[id="bpjs_code"]')
+      const bpjsInput = wrapper.find('input#bpjs_code')
       expect(bpjsInput.element.value).toBe('B-01')
 
       await bpjsInput.setValue('B-01-UPDATED')
       await wrapper.find('form').trigger('submit.prevent')
       await flushPromises()
 
-      expect(polyclinicService.updatePolyclinic).toHaveBeenCalledWith(1, expect.objectContaining({
-        bpjs_code: 'B-01-UPDATED'
-      }))
-
-      const toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(true)
-      expect(toast.classes()).toContain('toast-success')
-      expect(toast.find('.toast-title').text()).toBe('Berhasil')
-      expect(toast.find('.toast-message').text()).toBe('Data Poliklinik berhasil diperbarui.')
+      expect(polyclinicService.updatePolyclinic).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ bpjs_code: 'B-01-UPDATED' }),
+      )
+      expect(toastEntries().at(-1)?.message).toBe('Data Poliklinik berhasil diperbarui.')
     })
 
-    it('shows success toast on successful archive', async () => {
+    it('shows success toast on archive and 409 error toast on archive conflict', async () => {
       const wrapper = await mountView()
-      polyclinicService.archivePolyclinic.mockResolvedValue({ success: true })
+      polyclinicService.archivePolyclinic.mockResolvedValueOnce({ status: 204 })
 
-      // Click Delete/Archive button on the first item
-      await wrapper.find('.actions-cell .delete').trigger('click')
+      await wrapper.find('button[title="Arsipkan"]').trigger('click')
+      await flushPromises()
+      await findButtonByText(wrapper, 'Ya, Arsipkan').trigger('click')
       await flushPromises()
 
-      // Confirm deletion
-      await wrapper.find('.modal-content .btn-danger').trigger('click')
-      await flushPromises()
+      expect(polyclinicService.archivePolyclinic).toHaveBeenCalledWith(1)
+      expect(toastEntries().at(-1)?.message).toBe('Data Poliklinik berhasil diarsipkan.')
 
-      const toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(true)
-      expect(toast.classes()).toContain('toast-success')
-      expect(toast.find('.toast-title').text()).toBe('Berhasil')
-      expect(toast.find('.toast-message').text()).toBe('Data Poliklinik berhasil diarsipkan.')
-    })
-
-    it('shows backend error message on archive failure', async () => {
-      const wrapper = await mountView()
-      polyclinicService.archivePolyclinic.mockRejectedValue({
+      polyclinicService.archivePolyclinic.mockRejectedValueOnce({
         response: {
-          status: 400,
-          data: { message: 'Backend custom archive error.' }
-        }
+          status: 409,
+          data: { message: 'Poliklinik masih memiliki jadwal dokter aktif.' },
+        },
       })
 
-      await wrapper.find('.actions-cell .delete').trigger('click')
+      await wrapper.find('button[title="Arsipkan"]').trigger('click')
+      await flushPromises()
+      await findButtonByText(wrapper, 'Ya, Arsipkan').trigger('click')
       await flushPromises()
 
-      await wrapper.find('.modal-content .btn-danger').trigger('click')
-      await flushPromises()
-
-      const toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(true)
-      expect(toast.classes()).toContain('toast-error')
-      expect(toast.find('.toast-title').text()).toBe('Gagal Mengarsipkan')
-      expect(toast.find('.toast-message').text()).toBe('Backend custom archive error.')
+      expect(toastEntries().at(-1)?.tone).toBe('danger')
+      expect(toastEntries().at(-1)?.message).toBe('Poliklinik masih memiliki jadwal dokter aktif.')
     })
 
-    it('closes toast when close button is clicked', async () => {
-      const wrapper = await mountView()
-      polyclinicService.createPolyclinic.mockResolvedValue({ success: true })
-
-      await wrapper.find('button.btn-primary').trigger('click')
-      await flushPromises()
-
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
-      let toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(true)
-
-      await toast.find('.toast-close').trigger('click')
-      await flushPromises()
-
-      toast = wrapper.find('.app-toast')
-      expect(toast.exists()).toBe(false)
-    })
-
-    it('hides toast automatically after duration', async () => {
+    it('navigates to page 2, updates row offset numbering, and resets to page 1 on filter/search', async () => {
       vi.useFakeTimers()
       const wrapper = await mountView()
-      polyclinicService.createPolyclinic.mockResolvedValue({ success: true })
 
-      await wrapper.find('button.btn-primary').trigger('click')
+      // Halaman 1 tampil dengan nomor urut 1
+      expect(wrapper.get('tbody tr td:first-child').text()).toBe('1')
+      expect(wrapper.text()).toContain('POLI-01')
+
+      const nextButton = wrapper.get('button[aria-label="Halaman berikutnya"]')
+      expect(nextButton.attributes('disabled')).toBeUndefined()
+
+      polyclinicService.getPolyclinics.mockResolvedValueOnce(mockPolyclinicsPageTwo)
+      await nextButton.trigger('click')
       await flushPromises()
 
-      await wrapper.find('form').trigger('submit.prevent')
+      expect(polyclinicService.getPolyclinics).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 2,
+          per_page: 15,
+        }),
+      )
+      expect(wrapper.text()).toContain('POLI-16')
+      expect(wrapper.text()).toContain('Poli Mata')
+      expect(wrapper.get('tbody tr td:first-child').text()).toBe('16')
+
+      // Filter status mengembalikan pagination ke halaman 1
+      polyclinicService.getPolyclinics.mockResolvedValueOnce(mockPolyclinics)
+      await wrapper.get('select[aria-label="Filter status aktif"]').setValue('false')
       await flushPromises()
 
-      expect(wrapper.find('.app-toast').exists()).toBe(true)
+      expect(polyclinicService.getPolyclinics).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          is_active: false,
+          page: 1,
+        }),
+      )
 
-      vi.advanceTimersByTime(3500)
+      // Pencarian juga menjaga pagination di halaman 1
+      polyclinicService.getPolyclinics.mockResolvedValueOnce(mockPolyclinicsPageTwo)
+      await wrapper.get('button[aria-label="Halaman berikutnya"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('tbody tr td:first-child').text()).toBe('16')
+
+      polyclinicService.getPolyclinics.mockResolvedValueOnce(mockPolyclinics)
+      await wrapper.get('input[type="search"]').setValue('Umum')
+      await vi.advanceTimersByTimeAsync(450)
       await flushPromises()
 
-      expect(wrapper.find('.app-toast').exists()).toBe(false)
-      vi.useRealTimers()
+      expect(polyclinicService.getPolyclinics).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: 'Umum',
+          page: 1,
+        }),
+      )
     })
 
-    it('filter displays correct initial values when null', async () => {
+    it('ignores stale pagination response when a newer search request resolves first', async () => {
+      vi.useFakeTimers()
       const wrapper = await mountView()
-      const selects = wrapper.findAll('select.filter-select')
-      expect(selects.length).toBe(1)
-      expect(selects[0].element.value).toBe('') // Semua Status
-      
-      const searchInput = wrapper.find('input[type="text"]')
-      expect(searchInput.attributes('placeholder')).toContain('Cari kode atau nama poliklinik')
-    })
 
-    it('filter status emits true and false correctly', async () => {
-      const wrapper = await mountView()
-      const filterSelect = wrapper.find('select.filter-select') // first one is status
-      
-      await filterSelect.setValue('true')
-      await filterSelect.trigger('change')
-      
-      // The view's filters should be updated
-      expect(polyclinicService.getPolyclinics).toHaveBeenCalledWith(expect.objectContaining({
-        is_active: true
-      }))
-    })
+      let resolveSlowPageTwo
+      const slowPageTwoPromise = new Promise((resolve) => {
+        resolveSlowPageTwo = resolve
+      })
+      polyclinicService.getPolyclinics.mockReturnValueOnce(slowPageTwoPromise)
 
-    it('does not render service_type filter and reset button', async () => {
-      const wrapper = await mountView()
-      
-      const selects = wrapper.findAll('select.filter-select')
-      expect(selects.length).toBe(1) // Only status filter
-      expect(wrapper.text()).not.toContain('Semua Jenis Layanan')
-      
-      expect(wrapper.find('button[title="Reset Filter"]').exists()).toBe(false)
-      expect(wrapper.find('button[title="Refresh Data"]').exists()).toBe(true)
-      
-      expect(polyclinicService.getPolyclinics).toHaveBeenCalledWith(expect.objectContaining({
-        page: 1
-      }))
-      
-      const callArgs = polyclinicService.getPolyclinics.mock.calls.at(-1)[0]
-      expect(callArgs).not.toHaveProperty('service_type')
-    })
+      await wrapper.get('button[aria-label="Halaman berikutnya"]').trigger('click')
 
-    it('table has no toggle status button', async () => {
-      const wrapper = await mountView()
-      // Toggle button SVG or .toggle class should not exist inside actions
-      expect(wrapper.find('.actions-cell .toggle').exists()).toBe(false)
-      // Status badge should still exist
-      expect(wrapper.find('.status-badge').exists()).toBe(true)
-      // Edit button should exist
-      expect(wrapper.find('.actions-cell .edit').exists()).toBe(true)
-      // Delete/archive button should exist
-      expect(wrapper.find('.actions-cell .delete').exists()).toBe(true)
+      // Sebelum request halaman 2 selesai, user mengetik pencarian baru yang langsung resolve
+      polyclinicService.getPolyclinics.mockResolvedValueOnce(mockEmptyResponse)
+      await wrapper.get('input[type="search"]').setValue('TidakAda')
+      await vi.advanceTimersByTimeAsync(450)
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Poliklinik tidak ditemukan')
+
+      // Response lambat halaman 2 datang belakangan dan harus diabaikan
+      resolveSlowPageTwo(mockPolyclinicsPageTwo)
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Poliklinik tidak ditemukan')
+      expect(wrapper.text()).not.toContain('POLI-16')
     })
   })
 })

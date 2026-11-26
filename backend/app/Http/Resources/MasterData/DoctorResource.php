@@ -10,7 +10,7 @@ class DoctorResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $isDetail = $request->route()->getActionMethod() === 'show' || $request->route()->getActionMethod() === 'store' || $request->route()->getActionMethod() === 'update';
+        $isDetail = in_array($request->route()?->getActionMethod(), ['show', 'store', 'update'], true);
 
         $data = [
             'id' => $this->id,
@@ -24,6 +24,9 @@ class DoctorResource extends JsonResource
         ];
 
         if ($isDetail) {
+            $personModel = $this->relationLoaded('person') ? $this->person : null;
+            $legacyDoctorIhs = $this->ihs_id ?? $this->ihs_number ?? null;
+
             $data = array_merge($data, [
                 'legacy_id' => $this->legacy_id,
                 'employee_id' => $this->employee_id,
@@ -31,29 +34,8 @@ class DoctorResource extends JsonResource
                 'str_number' => $this->str_number,
                 'sip_number' => $this->sip_number,
                 'sip_valid_until' => $this->sip_valid_until ? $this->sip_valid_until->format('Y-m-d') : null,
-                'employee' => $this->employee ? [
-                    'id' => $this->employee->id,
-                    'national_id' => $this->employee->national_id,
-                    'ihs_number' => $this->employee->ihs_number,
-                    'name' => $this->employee->name,
-                    'birth_place' => $this->employee->birth_place,
-                    'birth_date' => $this->employee->birth_date ? $this->employee->birth_date->format('Y-m-d') : null,
-                    'gender' => $this->employee->gender,
-                    'nationality' => $this->employee->nationality,
-                    'blood_type' => $this->employee->blood_type,
-                    'allergies' => $this->employee->allergies,
-                    'religion' => $this->employee->religion,
-                    'marital_status' => $this->employee->marital_status,
-                    'address' => $this->employee->address,
-                    'postal_code' => $this->employee->postal_code,
-                    'province_id' => $this->employee->province_id,
-                    'regency_id' => $this->employee->regency_id,
-                    'district_id' => $this->employee->district_id,
-                    'village_id' => $this->employee->village_id,
-                    'phone' => $this->employee->phone,
-                    'education_id' => $this->employee->education_id,
-                    'occupation_id' => $this->employee->occupation_id,
-                ] : null,
+                'employee' => $this->employee ? $this->serializePersonPayload($this->employee, $legacyDoctorIhs, true) : null,
+                'person' => $personModel ? $this->serializePersonPayload($personModel, $legacyDoctorIhs, false) : null,
                 'bpjs_dpjp_code' => $this->bpjs_dpjp_code,
                 'has_signature' => ! empty($this->signature_path),
                 'signature_url' => $this->signature_path ? Storage::disk('public')->url($this->signature_path) : null,
@@ -63,5 +45,37 @@ class DoctorResource extends JsonResource
         }
 
         return $data;
+    }
+
+    private function serializePersonPayload($source, ?string $doctorIhsNumber, bool $includeId): array
+    {
+        $payload = [
+            'national_id' => $source->national_id,
+            'ihs_number' => $source->ihs_number ?? $doctorIhsNumber,
+            'name' => $source->name,
+            'birth_place' => $source->birth_place,
+            'birth_date' => $source->birth_date ? $source->birth_date->format('Y-m-d') : null,
+            'gender' => $source->gender,
+            'nationality' => $source->nationality,
+            'blood_type' => $source->blood_type,
+            'allergies' => $source->allergies,
+            'religion' => $source->religion,
+            'marital_status' => $source->marital_status,
+            'address' => $source->address,
+            'postal_code' => $source->postal_code,
+            'province_id' => $source->province_id,
+            'regency_id' => $source->regency_id,
+            'district_id' => $source->district_id,
+            'village_id' => $source->village_id,
+            'phone' => $source->phone,
+            'education_id' => $source->education_id,
+            'occupation_id' => $source->occupation_id,
+        ];
+
+        if ($includeId) {
+            return ['id' => $source->id] + $payload;
+        }
+
+        return $payload;
     }
 }

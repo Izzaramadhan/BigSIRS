@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\GuarantorResource;
 use App\Models\District;
 use App\Models\Education;
 use App\Models\Employee;
+use App\Models\Guarantor;
 use App\Models\Legacy\LegacyDistrict;
 use App\Models\Legacy\LegacyEducation;
 use App\Models\Legacy\LegacyEmployee;
 use App\Models\Legacy\LegacyGenericMedicine;
+use App\Models\Legacy\LegacyGuarantor;
 use App\Models\Legacy\LegacyLaboratoryCategory;
 use App\Models\Legacy\LegacyMedicationSigna;
 use App\Models\Legacy\LegacyMedicine;
@@ -773,7 +776,7 @@ class LookupController extends Controller
 
         $items = $query->orderBy('name')->get();
 
-        return response()->json($items->map(function ($med) {
+            return response()->json($items->map(function ($med) {
             return [
                 'id' => $med->id,
                 'name' => $med->name,
@@ -784,5 +787,64 @@ class LookupController extends Controller
                 'price' => (float) ($med->selling_price_per_unit ?? 0),
             ];
         }));
+    }
+
+    public function guarantors(Request $request)
+    {
+        $limit = max(1, min(500, (int) $request->get('limit', $request->get('per_page', 200))));
+        $search = trim((string) $request->get('search', ''));
+        $ids = [];
+        if ($request->filled('ids')) {
+            $rawIds = is_array($request->ids) ? $request->ids : explode(',', (string) $request->ids);
+            $ids = array_values(array_filter(array_map('intval', $rawIds), fn ($id) => $id > 0));
+        }
+
+        if (LegacyAccess::isAvailable('ref_jenis_asuransi')) {
+            $query = LegacyGuarantor::withoutGlobalScope(\Illuminate\Database\Eloquent\SoftDeletingScope::class)
+                ->where(function ($q) {
+                    $q->whereNull('deleted_at')
+                        ->orWhere('deleted_at', '0000-00-00 00:00:00');
+                });
+
+            if ($request->has('is_active') && $request->get('is_active') !== 'all') {
+                $query->where('status', $request->boolean('is_active') ? 1 : 0);
+            } elseif (! $request->boolean('include_inactive') && $request->get('is_active') !== 'all') {
+                $query->where('status', 1);
+            }
+
+            if ($search !== '') {
+                $query->search($search);
+            }
+
+            $items = $query->orderBy('jenis_asuransi')->limit($limit)->get();
+
+            if (! empty($ids)) {
+                $selected = LegacyGuarantor::withTrashed()->whereIn('id', $ids)->get();
+                $items = $selected->merge($items)->unique('id')->values();
+            }
+
+            return response()->json(GuarantorResource::collection($items)->resolve($request));
+        }
+
+        $query = Guarantor::query();
+
+        if ($request->has('is_active') && $request->get('is_active') !== 'all') {
+            $query->where('is_active', $request->boolean('is_active'));
+        } elseif (! $request->boolean('include_inactive') && $request->get('is_active') !== 'all') {
+            $query->where('is_active', true);
+        }
+
+        if ($search !== '') {
+            $query->search($search);
+        }
+
+        $items = $query->orderBy('name')->limit($limit)->get();
+
+        if (! empty($ids)) {
+            $selected = Guarantor::withTrashed()->whereIn('id', $ids)->get();
+            $items = $selected->merge($items)->unique('id')->values();
+        }
+
+        return response()->json(GuarantorResource::collection($items)->resolve($request));
     }
 }

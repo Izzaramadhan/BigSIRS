@@ -53,6 +53,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  error: {
+    type: [String, Object],
+    default: null
   }
 });
 
@@ -397,6 +401,27 @@ const pageNumbers = computed(() => {
             </tr>
           </template>
 
+          <tr v-else-if="error">
+            <td colspan="7" class="empty-cell">
+              <div class="empty-wrapper">
+                <div class="empty-icon-circle" style="background: #fee2e2; color: #dc2626;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <h3 class="empty-title" style="color: #b91c1c;">Gagal Memuat Data Pemeriksaan</h3>
+                <p class="empty-desc" style="color: #7f1d1d;">
+                  {{ typeof error === 'string' ? error : (error.message || 'Terjadi kesalahan sistem saat mengambil data kunjungan.') }}
+                </p>
+                <button type="button" class="btn-primary btn-empty-reset" @click="emit('search')">
+                  Coba Lagi
+                </button>
+              </div>
+            </td>
+          </tr>
+
           <tr v-else-if="examinations.length === 0">
             <td colspan="7" class="empty-cell">
               <div class="empty-wrapper">
@@ -406,7 +431,7 @@ const pageNumbers = computed(() => {
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                   </svg>
                 </div>
-                <h3 class="empty-title">Tidak ada data kunjungan pasien ditemukan.</h3>
+                <h3 class="empty-title">Belum ada kunjungan pasien sesuai filter yang dipilih.</h3>
                 <p class="empty-desc">
                   Silakan ubah kata kunci pencarian, rentang tanggal admisi, atau poliklinik tujuan.
                 </p>

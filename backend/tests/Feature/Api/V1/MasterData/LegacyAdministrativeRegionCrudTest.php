@@ -120,11 +120,17 @@ class LegacyAdministrativeRegionCrudTest extends TestCase
             'status' => 1,
         ], 'legacy');
 
-        // 2. Index with search
-        $listRes = $this->getJson('/api/v1/master-data/provinces?search=JAKARTA');
+        // 2. Index with search, code/status filters, and legacy sorting
+        $listRes = $this->getJson('/api/v1/master-data/provinces?search=JAKARTA&is_active=1&sort=code&order=asc');
         $listRes->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $id);
+            ->assertJsonPath('data.0.id', $id)
+            ->assertJsonPath('data.0.code', '31')
+            ->assertJsonPath('data.0.is_active', true);
+
+        $this->getJson('/api/v1/master-data/provinces?is_active=0')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
 
         // 3. Show
         $showRes = $this->getJson("/api/v1/master-data/provinces/{$id}");
@@ -132,13 +138,58 @@ class LegacyAdministrativeRegionCrudTest extends TestCase
             ->assertJsonPath('data.id', $id)
             ->assertJsonPath('data.name', 'DAERAH KHUSUS JAKARTA');
 
-        // 4. Update
+        // 4. Update keeping same name remains valid
+        $sameNameRes = $this->putJson("/api/v1/master-data/provinces/{$id}", [
+            'name' => 'DAERAH KHUSUS JAKARTA',
+            'code' => '31',
+            'is_active' => true,
+        ]);
+        $sameNameRes->assertOk()
+            ->assertJsonPath('data.id', $id)
+            ->assertJsonPath('data.name', 'DAERAH KHUSUS JAKARTA');
+
+        // 4b. Duplicate active province name rejected with 422 on create & update
+        $this->postJson('/api/v1/master-data/provinces', [
+            'name' => 'DAERAH KHUSUS JAKARTA',
+            'code' => '31-DUP',
+            'is_active' => true,
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors(['name']);
+
+        $otherRes = $this->postJson('/api/v1/master-data/provinces', [
+            'name' => 'JAWA BARAT LEGACY',
+            'code' => '32',
+            'is_active' => true,
+        ])->assertStatus(201);
+        $otherId = $otherRes->json('data.id');
+
+        $this->putJson("/api/v1/master-data/provinces/{$otherId}", [
+            'name' => 'DAERAH KHUSUS JAKARTA',
+            'code' => '32',
+            'is_active' => true,
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors(['name']);
+
+        // Delete temporary other province and verify soft-deleted name can be reused
+        $this->deleteJson("/api/v1/master-data/provinces/{$otherId}")->assertNoContent();
+        $this->assertSoftDeleted('ref_provinsi', ['id' => $otherId], 'legacy');
+
+        $recreateRes = $this->postJson('/api/v1/master-data/provinces', [
+            'name' => 'JAWA BARAT LEGACY',
+            'code' => '32',
+            'is_active' => true,
+        ])->assertStatus(201)
+            ->assertJsonPath('data.name', 'JAWA BARAT LEGACY');
+        $this->deleteJson('/api/v1/master-data/provinces/' . $recreateRes->json('data.id'))->assertNoContent();
+
+        // 4c. Update to new name preserves ID
         $updRes = $this->putJson("/api/v1/master-data/provinces/{$id}", [
             'name' => 'DKI JAKARTA RAYA',
             'code' => '31-REV',
             'is_active' => true,
         ]);
         $updRes->assertOk()
+            ->assertJsonPath('data.id', $id)
             ->assertJsonPath('data.name', 'DKI JAKARTA RAYA');
 
         $this->assertDatabaseHas('ref_provinsi', [
@@ -244,6 +295,32 @@ class LegacyAdministrativeRegionCrudTest extends TestCase
         $delRes->assertNoContent();
 
         $this->assertSoftDeleted('ref_kabupaten', ['id' => $id], 'legacy');
+    }
+
+    public function test_regency_legacy_rejects_missing_or_soft_deleted_province(): void
+    {
+        DB::connection('legacy')->table('ref_provinsi')->insert([
+            'id' => 32,
+            'nama' => 'JAWA BARAT',
+            'status' => 1,
+            'deleted_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $missingRes = $this->postJson('/api/v1/master-data/regencies', [
+            'province_id' => '99',
+            'name' => 'KOTA TIDAK ADA PROV',
+            'code' => '9901',
+        ]);
+        $missingRes->assertStatus(422)
+            ->assertJsonValidationErrors(['province_id']);
+
+        $deletedRes = $this->postJson('/api/v1/master-data/regencies', [
+            'province_id' => '32',
+            'name' => 'KOTA PROVINSI DIHAPUS',
+            'code' => '3201',
+        ]);
+        $deletedRes->assertStatus(422)
+            ->assertJsonValidationErrors(['province_id']);
     }
 
     /* -------------------------------------------------------------

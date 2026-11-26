@@ -5,6 +5,7 @@ namespace App\Services\Registration;
 use App\Models\Legacy\LegacyGuarantor;
 use App\Models\Legacy\LegacyPatient;
 use App\Models\Legacy\LegacyPerson;
+use App\Support\GuarantorValidation;
 use App\Support\LegacyAccess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -103,12 +104,16 @@ class PatientWriteService
                 ->insertGetId($personData);
 
             // 5. Insert data pasien ke ref_pasien
+            $insuranceNumber = GuarantorValidation::isSelfPay($guarantorId)
+                ? ''
+                : (!empty($payload['insurance_number']) ? trim($payload['insurance_number']) : '');
+
             $patientData = [
                 'id_mpi' => $personId,
                 'log_id_mpi' => $personId,
                 'id_penanggung_jawab' => null,
                 'id_jenis_asuransi' => $guarantorId,
-                'no_bpjs' => !empty($payload['insurance_number']) ? trim($payload['insurance_number']) : '',
+                'no_bpjs' => $insuranceNumber,
                 'no_rm' => $nextRm,
                 'alergi' => $allergyStatus,
                 'ket_alergi' => $allergyNotes,
@@ -233,26 +238,38 @@ class PatientWriteService
         }
 
         if (!empty($name)) {
-            $upper = strtoupper($name);
-            if (str_contains($upper, 'BPJS') || str_contains($upper, 'JKN')) {
-                return 3;
-            }
-            if (str_contains($upper, 'UMUM') || str_contains($upper, 'MANDIRI')) {
-                return 2;
-            }
-
+            $trimmed = trim($name);
             $matchedId = DB::connection('legacy')
                 ->table('ref_jenis_asuransi')
-                ->where('jenis_asuransi', 'like', "%{$name}%")
+                ->where(function ($q) {
+                    $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
+                })
+                ->where('status', '1')
+                ->where('jenis_asuransi', 'like', "%{$trimmed}%")
+                ->orderBy('id')
                 ->value('id');
 
             if ($matchedId) {
                 return (int) $matchedId;
             }
+
+            $upper = strtoupper($trimmed);
+            if (str_contains($upper, 'BPJS') || str_contains($upper, 'JKN')) {
+                $bpjsId = DB::connection('legacy')
+                    ->table('ref_jenis_asuransi')
+                    ->where(function ($q) {
+                        $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
+                    })
+                    ->where('status', '1')
+                    ->whereRaw("UPPER(COALESCE(type, '')) = 'BPJS'")
+                    ->orderBy('id')
+                    ->value('id');
+
+                return $bpjsId ? (int) $bpjsId : 3;
+            }
         }
 
-        // Default: 2 (UMUM)
-        return 2;
+        return GuarantorValidation::resolveDefaultSelfPayId();
     }
 
     protected function resolveEducationId(?int $id, ?string $name): ?int
@@ -416,8 +433,10 @@ class PatientWriteService
             if (isset($payload['guarantor_id']) || isset($payload['guarantor'])) {
                 $patient->id_jenis_asuransi = $this->resolveGuarantorId($payload['guarantor_id'] ?? null, $payload['guarantor'] ?? null);
             }
-            if (isset($payload['insurance_number'])) {
-                $patient->no_bpjs = trim($payload['insurance_number']);
+            if (GuarantorValidation::isSelfPay((int) ($patient->id_jenis_asuransi ?? 0))) {
+                $patient->no_bpjs = null;
+            } elseif (array_key_exists('insurance_number', $payload)) {
+                $patient->no_bpjs = $payload['insurance_number'] !== null ? trim((string) $payload['insurance_number']) : null;
             }
             if (isset($payload['has_allergy'])) {
                 $status = in_array(strtolower($payload['has_allergy']), ['ada', 'ya', 'true', '1']) ? 'ada' : 'tidak';
