@@ -7,6 +7,7 @@ import RegistrationPatientListCard from '../components/RegistrationPatientListCa
 import PatientSearchTable from '../components/PatientSearchTable.vue';
 import PatientSearchFilters from '../components/PatientSearchFilters.vue';
 import { mockPatients } from '@/mocks/patients';
+import patientService from '@/services/patient.service';
 import lookupService from '@/services/lookup.service';
 
 const mockPush = vi.fn();
@@ -452,6 +453,151 @@ describe('PatientSearchView (Halaman Awal Pendaftaran Terbaru)', () => {
     expect(wrapper.vm.toast.show).toBe(true);
     expect(wrapper.vm.toast.type).toBe('warning');
     expect(wrapper.vm.toast.message).toContain('belum memiliki riwayat admisi untuk diedit');
+  });
+
+  it('normalizes whitespace for partial-name AYU search, displays API patients with pagination without hiding results', async () => {
+    const page1Patient = {
+      id: 901,
+      medical_record_number: '000901',
+      nik: '3404011111110001',
+      name: 'SRI AYU LESTARI',
+      birth_date: '1997-04-12',
+      gender: 'P',
+      phone: '081234560001',
+      address: 'Sleman',
+      guarantor: { id: 3, name: 'BPJS Kesehatan' },
+      has_unpaid_bills: false
+    };
+    const page2Patient = {
+      id: 902,
+      medical_record_number: '000902',
+      nik: '3404011111110002',
+      name: 'AYU WULANDARI',
+      birth_date: '1995-02-20',
+      gender: 'P',
+      phone: '081234560002',
+      address: 'Yogyakarta',
+      guarantor: { id: 2, name: 'UMUM' },
+      has_unpaid_bills: false
+    };
+
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    patientService.searchPatients.mockResolvedValueOnce({
+      data: {
+        data: [page1Patient],
+        meta: { total: 21, current_page: 1, last_page: 2, per_page: 20 }
+      }
+    });
+
+    await wrapper.find('input#reg-patient-query').setValue('  aYu   lestari  ');
+    await wrapper.find('form.patient-search-form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(patientService.searchPatients).toHaveBeenLastCalledWith({
+      page: 1,
+      per_page: 20,
+      q: 'aYu lestari'
+    });
+    expect(wrapper.find('.results-count-pill').text()).toContain('Ditemukan 21 pasien');
+    expect(wrapper.find('.search-results-panel').text()).toContain('SRI AYU LESTARI');
+    expect(wrapper.find('.results-pagination-bar').exists()).toBe(true);
+
+    patientService.searchPatients.mockResolvedValueOnce({
+      data: {
+        data: [page2Patient],
+        meta: { total: 21, current_page: 2, last_page: 2, per_page: 20 }
+      }
+    });
+
+    const pageBtns = wrapper.findAll('.btn-page-search');
+    await pageBtns[1].trigger('click');
+    await flushPromises();
+
+    expect(patientService.searchPatients).toHaveBeenLastCalledWith({
+      page: 2,
+      per_page: 20,
+      q: 'aYu lestari'
+    });
+    expect(wrapper.find('.search-results-panel').text()).toContain('AYU WULANDARI');
+  });
+
+  it('clears stale results and displays inline error with retry when searchPatients fails with network or auth error', async () => {
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    await wrapper.find('input#reg-patient-query').setValue('Bambang');
+    await wrapper.find('form.patient-search-form').trigger('submit.prevent');
+    await flushPromises();
+    expect(wrapper.find('.search-results-panel').text()).toContain('Bambang Setyadi');
+
+    // Network failure on second search must clear stale Bambang result and show inline retry
+    patientService.searchPatients.mockRejectedValueOnce(new Error('Network Error'));
+    await wrapper.find('input#reg-patient-query').setValue('AYU');
+    await wrapper.find('form.patient-search-form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.find('.results-error-state').exists()).toBe(true);
+    expect(wrapper.find('.search-results-panel').text()).toContain('Tidak dapat terhubung ke server');
+    expect(wrapper.find('.search-results-panel').text()).not.toContain('Bambang Setyadi');
+
+    // Retry succeeds cleanly with 401 test right before
+    patientService.searchPatients.mockRejectedValueOnce({
+      response: { status: 401, data: { message: 'Unauthenticated.' } }
+    });
+    await wrapper.find('.btn-retry-search').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.results-error-state').text()).toContain('Unauthenticated.');
+  });
+
+  it('shows list error state on DAFTAR PASIEN failure and blocks navigation when getPatient verification fails', async () => {
+    mockPush.mockClear();
+    patientService.searchPatients.mockRejectedValueOnce({
+      response: { status: 403, data: { message: 'Forbidden access.' } }
+    });
+
+    const wrapper = mount(PatientSearchView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    const listCard = wrapper.findComponent(RegistrationPatientListCard);
+    expect(listCard.text()).toContain('Gagal memuat data pasien dari server');
+    expect(listCard.text()).toContain('Forbidden access.');
+
+    // Reload recovers
+    await listCard.find('button.btn-reset-empty').trigger('click');
+    await flushPromises();
+    expect(listCard.findAll('tbody tr').length).toBeGreaterThan(0);
+
+    // Clicking Admit on patient row without preloaded has_unpaid_bills aborts if getPatient rejects
+    patientService.getPatient.mockRejectedValueOnce(new Error('Network Error'));
+    await listCard.vm.$emit('admit-patient', { id: 555, patient_name: 'Test Pasien' });
+    await flushPromises();
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(wrapper.vm.toast.show).toBe(true);
+    expect(wrapper.vm.toast.type).toBe('danger');
   });
 });
 

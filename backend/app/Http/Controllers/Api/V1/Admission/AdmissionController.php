@@ -35,7 +35,8 @@ class AdmissionController extends Controller
             });
 
         // Search by keyword (Nama Pasien, No. RM, NIK)
-        $term = trim((string) ($request->get('q') ?? $request->get('search') ?? ''));
+        $rawTerm = trim((string) ($request->get('q') ?? $request->get('search') ?? ''));
+        $term = $rawTerm !== '' ? (preg_replace('/\s+/u', ' ', $rawTerm) ?? $rawTerm) : '';
         if ($term !== '') {
             $like = '%' . mb_strtolower($term, 'UTF-8') . '%';
             $query->where(function ($sub) use ($like) {
@@ -126,7 +127,7 @@ class AdmissionController extends Controller
             }
         }
 
-        $patient = LegacyPatient::findOrFail($validated['patient_id']);
+        $patient = LegacyPatient::active()->findOrFail($validated['patient_id']);
 
         // Check if patient has unpaid visits/billing in legacy database
         $hasUnpaidBills = false;
@@ -167,7 +168,13 @@ class AdmissionController extends Controller
                 ->value('id');
         }
         if (!$polyclinicId) {
-            $polyclinicId = LegacyPolyclinic::value('id') ?? 1;
+            return response()->json([
+                'success' => false,
+                'message' => 'Poliklinik yang dipilih tidak ditemukan dalam master data.',
+                'errors' => [
+                    'polyclinic_id' => ['Poliklinik yang dipilih tidak valid atau tidak ditemukan.']
+                ]
+            ], 422);
         }
 
         $doctorId = !empty($validated['doctor_id']) ? (int) $validated['doctor_id'] : null;
@@ -178,7 +185,13 @@ class AdmissionController extends Controller
                 ->value('id');
         }
         if (!$doctorId) {
-            $doctorId = LegacyDoctor::value('id') ?? 1;
+            return response()->json([
+                'success' => false,
+                'message' => 'Dokter yang dipilih tidak ditemukan dalam master data.',
+                'errors' => [
+                    'doctor_id' => ['Dokter yang dipilih tidak valid atau tidak ditemukan.']
+                ]
+            ], 422);
         }
 
         // Parse admission datetime

@@ -846,4 +846,69 @@ describe('AdmissionCreateView (Tahap 3A: Form Admisi Rawat Jalan)', () => {
 
     vi.useRealTimers();
   });
+
+  it('handles invalid patient_id query or 404 patient lookup without falling back to dummy patient', async () => {
+    mockRoute.query = { patient_id: 'invalid-id' };
+    const wrapperInvalid = mount(AdmissionCreateView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: {
+            template: '<div class="app-toast-stub" v-if="show">{{ title }}: {{ message }}</div>',
+            props: ['show', 'type', 'title', 'message']
+          }
+        }
+      }
+    });
+    await flushPromises();
+    expect(patientService.getPatient).not.toHaveBeenCalled();
+    expect(wrapperInvalid.text()).toContain('Parameter Pasien Tidak Valid');
+
+    mockRoute.query = { patient_id: '99999' };
+    patientService.getPatient.mockRejectedValueOnce({
+      response: { status: 404, data: { message: 'Pasien tidak ditemukan di server.' } }
+    });
+    const wrapper404 = mount(AdmissionCreateView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: {
+            template: '<div class="app-toast-stub" v-if="show">{{ title }}: {{ message }}</div>',
+            props: ['show', 'type', 'title', 'message']
+          }
+        }
+      }
+    });
+    await flushPromises();
+    expect(wrapper404.text()).toContain('Pasien tidak ditemukan di server.');
+  });
+
+  it('handles 401/403 and 409 conflict on createAdmission without navigating', async () => {
+    mockPush.mockClear();
+    admissionService.createAdmission.mockRejectedValueOnce({
+      response: { status: 409, data: { message: 'Kunjungan duplikat terdeteksi.' } }
+    });
+
+    const wrapper = mount(AdmissionCreateView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: {
+            template: '<div class="app-toast-stub" v-if="show">{{ title }}: {{ message }}</div>',
+            props: ['show', 'type', 'title', 'message']
+          }
+        }
+      }
+    });
+    await flushPromises();
+
+    await wrapper.find('select#admission-clinic').setValue(10);
+    await flushPromises();
+    await wrapper.find('select#admission-doctor').setValue(101);
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Konflik Data Admisi: Kunjungan duplikat terdeteksi.');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
 });

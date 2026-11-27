@@ -17,7 +17,7 @@ const {
   error,
   paginatedExaminations,
   paginationInfo,
-  mockPolyclinics,
+  polyclinics,
   fetchExaminations,
   loadPolyclinics,
   applyFilters,
@@ -28,6 +28,8 @@ const {
   startExamination,
   replayQueueAudio
 } = useExaminations();
+
+const isStartingRme = ref(false);
 
 onMounted(() => {
   loadPolyclinics();
@@ -84,13 +86,38 @@ const handleResetFilter = async () => {
 
 // Table Row Action 1 (+): Mulai Pemeriksaan & Buka Halaman Pemeriksaan Pasien
 const handleStartRme = async (patient) => {
-  if (patient.status === 'Menunggu' || patient.status === 'Dipanggil') {
-    await startExamination(patient.id);
+  if (isStartingRme.value) return;
+
+  const visitId = patient?.visit_id || patient?.id;
+  if (!visitId) {
+    showToast({
+      type: 'danger',
+      title: 'Kunjungan Tidak Valid',
+      message: 'Identifier kunjungan (visit_id) pasien tidak ditemukan.'
+    });
+    return;
   }
-  router.push({
-    name: 'clinical.examination-patient',
-    params: { id: patient.id }
-  });
+
+  isStartingRme.value = true;
+  try {
+    if (patient.status === 'Menunggu' || patient.status === 'Dipanggil') {
+      const res = await startExamination(visitId);
+      if (!res?.success) {
+        showToast({
+          type: 'danger',
+          title: 'Gagal Memulai Pemeriksaan',
+          message: res?.message || 'Tidak dapat memperbarui status kunjungan di server.'
+        });
+        return;
+      }
+    }
+    router.push({
+      name: 'clinical.examination-patient',
+      params: { id: visitId }
+    });
+  } finally {
+    isStartingRme.value = false;
+  }
 };
 
 // Table Row Action 2 (Speaker): Panggil Antrean Pasien
@@ -148,7 +175,7 @@ const handleCallPatient = (patient) => {
         :from="paginationInfo.from"
         :to="paginationInfo.to"
         :filters="filters"
-        :polyclinics="mockPolyclinics"
+        :polyclinics="polyclinics"
         :sort-key="sort.key"
         :sort-direction="sort.direction"
         :loading="loading"

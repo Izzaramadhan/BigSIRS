@@ -101,7 +101,7 @@ const formatBirthDateDMY = (isoDate) => {
 };
 
 const formatGuarantor = (val) => {
-  if (!val) return 'UMUM';
+  if (!val) return '—';
   const lower = String(val).toLowerCase();
   if (lower.includes('umum') || lower.includes('tunai') || lower.includes('mandiri')) {
     return 'UMUM';
@@ -457,8 +457,8 @@ const pageNumbers = computed(() => {
               <!-- 3. Waktu -->
               <td class="col-time">
                 <div class="time-cell">
-                  <span class="visit-date">{{ formatDateShort(item.admission_date) }}</span>
-                  <span class="visit-clock font-mono">{{ formatTimeWithSeconds(item.admission_time) }}</span>
+                  <span class="visit-date">{{ formatDateShort(item.admission_date || item.visit_date) }}</span>
+                  <span class="visit-clock font-mono">{{ formatTimeWithSeconds(item.admission_time || item.visit_time) }}</span>
                 </div>
               </td>
 

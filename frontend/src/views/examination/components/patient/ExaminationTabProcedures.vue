@@ -64,16 +64,18 @@ const formatCurrency = (val) => {
 };
 
 const pickItem = (item) => {
+  const itemTariff = Number(item.tariff ?? item.harga ?? item.price ?? 0);
   emit('add-procedure', {
     id: `PR-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    procedure_id: item.procedure_id ?? item.id ?? null,
     code: item.code,
     name: item.name,
     mode: selectedMode.value,
     paramedic: props.paramedics[0] || 'Perawat Poliklinik',
     doctor: props.defaultDoctor && props.defaultDoctor !== '-' ? props.defaultDoctor : (doctorOptions.value[0] || '-'),
     quantity: 1,
-    tariff: item.tariff,
-    subtotal: item.tariff
+    tariff: itemTariff,
+    subtotal: itemTariff
   });
   searchQuery.value = '';
   showSuggestions.value = false;

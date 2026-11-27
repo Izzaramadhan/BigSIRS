@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { formatRupiah } from '@/utils/billingFormatters';
+import { formatDateLong } from '@/utils/dateFormatters';
 
 const props = defineProps({
   orders: {
@@ -35,6 +36,14 @@ const props = defineProps({
   defaultPolyclinic: {
     type: String,
     default: ''
+  },
+  readOnlyMode: {
+    type: Boolean,
+    default: false
+  },
+  unpricedCount: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -95,22 +104,14 @@ watch(
   { deep: true }
 );
 
-const longMonthNames = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-];
-
-const formatOrderDateLong = (isoDate) => {
-  if (!isoDate) return '-';
-  const parts = String(isoDate).split('-');
-  if (parts.length !== 3) return isoDate;
-  const year = parts[0];
-  const monthIdx = Number(parts[1]) - 1;
-  const day = Number(parts[2]);
-  return `${String(day).padStart(2, '0')} ${longMonthNames[monthIdx] || parts[1]} ${year}`;
+const isOrderUnpriced = (item) => {
+  return item?.price === null || item?.price === undefined || item?.pricing_status === 'unpriced';
 };
 
 const computeRowTotal = (item) => {
+  if (isOrderUnpriced(item)) {
+    return null;
+  }
   const qty = Math.max(1, Number(item.qty) || 1);
   const price = Math.max(0, Number(item.price) || 0);
   const discPct = Math.min(100, Math.max(0, Number(item.discount_percent) || 0));
@@ -142,7 +143,7 @@ const filteredOrders = computed(() => {
     list = list.filter((o) =>
       String(o.name || '').toLowerCase().includes(q) ||
       String(o.jenis || '').toLowerCase().includes(q) ||
-      formatOrderDateLong(o.order_date).toLowerCase().includes(q) ||
+      formatDateLong(o.order_date, { emptyText: '-', padDay: true }).toLowerCase().includes(q) ||
       String(o.status || '').toLowerCase().includes(q)
     );
   }
@@ -151,7 +152,7 @@ const filteredOrders = computed(() => {
     const k = sortKey.value;
     const dir = sortDir.value === 'asc' ? 1 : -1;
     list.sort((a, b) => {
-      if (k === 'total') return (computeRowTotal(a) - computeRowTotal(b)) * dir;
+      if (k === 'total') return ((computeRowTotal(a) ?? -1) - (computeRowTotal(b) ?? -1)) * dir;
       if (k === 'price' || k === 'qty' || k === 'discount_percent') {
         return ((Number(a[k]) || 0) - (Number(b[k]) || 0)) * dir;
       }
@@ -224,7 +225,7 @@ const selectedOrders = computed(() => {
 });
 
 const selectedSubtotal = computed(() => {
-  return selectedOrders.value.reduce((sum, item) => sum + computeRowTotal(item), 0);
+  return selectedOrders.value.reduce((sum, item) => sum + (computeRowTotal(item) ?? 0), 0);
 });
 
 const grandTotal = computed(() => {
@@ -363,6 +364,13 @@ const handlePrint = () => {
       </div>
     </div>
 
+    <div v-if="readOnlyMode" class="read-only-notice" role="status">
+      <strong>Mode Baca Saja (Fase 2B.19A):</strong> Data rincian order ditampilkan langsung dari backend. Penambahan item, perubahan diskon, pembatalan, dan pelunasan dinonaktifkan.
+      <span v-if="unpricedCount > 0">
+        Terdapat {{ unpricedCount }} item dengan tarif belum tersedia pada database.
+      </span>
+    </div>
+
     <!-- Orders Data Table -->
     <div class="table-scroll-wrap">
       <table class="orders-table" aria-label="Tabel List Orders Pasien">
@@ -449,18 +457,22 @@ const handlePrint = () => {
                 @change="toggleSelectRow(item.id, $event.target.checked)"
               />
             </td>
-            <td class="col-date">{{ formatOrderDateLong(item.order_date) }}</td>
+            <td class="col-date">{{ formatDateLong(item.order_date, { emptyText: '-', padDay: true }) }}</td>
             <td class="col-jenis">
               <span class="jenis-pill font-mono" :class="getJenisBadgeClass(item.jenis)">{{ item.jenis }}</span>
             </td>
             <td class="col-item-name">{{ item.name }}</td>
             <td class="col-qty text-center">{{ item.qty }}</td>
-            <td class="col-price font-mono">{{ formatRupiah(item.price) }}</td>
+            <td class="col-price font-mono">
+              <span v-if="isOrderUnpriced(item)" class="unpriced-tariff-label">Tarif Belum Tersedia</span>
+              <template v-else>{{ formatRupiah(item.price) }}</template>
+            </td>
             <td class="col-discount">
               <div class="select-wrap select-wrap--compact">
                 <select
                   class="row-discount-select"
                   :value="item.discount_percent || 0"
+                  :disabled="readOnlyMode"
                   :aria-label="`Diskon ${item.name}`"
                   @change="emit('update-discount', { id: item.id, discount: Number($event.target.value) })"
                 >
@@ -473,7 +485,10 @@ const handlePrint = () => {
                 </svg>
               </div>
             </td>
-            <td class="col-total font-mono">{{ formatRupiah(computeRowTotal(item)) }}</td>
+            <td class="col-total font-mono">
+              <span v-if="computeRowTotal(item) === null" class="unpriced-tariff-label">Tarif Belum Tersedia</span>
+              <template v-else>{{ formatRupiah(computeRowTotal(item)) }}</template>
+            </td>
             <td class="col-status text-center">
               <span
                 class="order-status-pill"
@@ -486,7 +501,8 @@ const handlePrint = () => {
               <button
                 type="button"
                 class="btn-delete-order"
-                title="Hapus Order"
+                :disabled="readOnlyMode"
+                :title="readOnlyMode ? 'Mode Baca Saja: hapus item dinonaktifkan pada Fase 2B.19A' : 'Hapus Order'"
                 aria-label="Hapus Order"
                 @click="emit('remove-order', item.id)"
               >
@@ -559,6 +575,7 @@ const handlePrint = () => {
             v-model.number="globalDiscount"
             type="number"
             min="0"
+            :disabled="readOnlyMode"
             class="summary-input font-mono"
           />
         </div>
@@ -581,6 +598,7 @@ const handlePrint = () => {
             v-model.number="payAmount"
             type="number"
             min="0"
+            :disabled="readOnlyMode"
             class="summary-input font-mono"
           />
         </div>
@@ -605,6 +623,7 @@ const handlePrint = () => {
             id="billing-payment-note"
             v-model="paymentNote"
             rows="3"
+            :disabled="readOnlyMode"
             class="summary-textarea"
             placeholder="Catatan pembayaran..."
           ></textarea>
@@ -616,6 +635,7 @@ const handlePrint = () => {
             <select
               id="billing-payment-method"
               v-model="selectedPaymentMethod"
+              :disabled="readOnlyMode"
               class="summary-select"
             >
               <option v-for="m in paymentMethods" :key="m" :value="m">{{ m }}</option>
@@ -632,6 +652,7 @@ const handlePrint = () => {
             id="billing-payment-time"
             v-model="paymentTime"
             type="text"
+            :disabled="readOnlyMode"
             class="summary-input font-mono"
           />
         </div>
@@ -645,6 +666,7 @@ const handlePrint = () => {
           <select
             id="billing-order-polyclinic"
             v-model="selectedPolyclinic"
+            :disabled="readOnlyMode"
             class="footer-poly-select"
             aria-label="Pilih Poliklinik"
           >
@@ -656,13 +678,25 @@ const handlePrint = () => {
           </svg>
         </div>
 
-        <button type="button" class="btn-batal-bayar" @click="handleCancelPay">
+        <button
+          type="button"
+          class="btn-batal-bayar"
+          :disabled="readOnlyMode"
+          :title="readOnlyMode ? 'Mode Baca Saja: pembatalan bayar dinonaktifkan pada Fase 2B.19A' : ''"
+          @click="handleCancelPay"
+        >
           Batal Bayar
         </button>
       </div>
 
       <div class="footer-right-actions">
-        <button type="button" class="btn-submit-order" @click="handleSubmit">
+        <button
+          type="button"
+          class="btn-submit-order"
+          :disabled="readOnlyMode"
+          :title="readOnlyMode ? 'Mode Baca Saja: pembayaran dinonaktifkan pada Fase 2B.19A' : ''"
+          @click="handleSubmit"
+        >
           Submit
         </button>
         <button type="button" class="btn-print-order" @click="handlePrint">
@@ -1228,6 +1262,35 @@ const handlePrint = () => {
 
 .btn-cancel-order:hover {
   background: #cbd5e1;
+}
+
+.read-only-notice {
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.7rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.unpriced-tariff-label {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+}
+
+.btn-batal-bayar:disabled,
+.btn-submit-order:disabled,
+.btn-delete-order:disabled,
+.row-discount-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 @media (max-width: 900px) {

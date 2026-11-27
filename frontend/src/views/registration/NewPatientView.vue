@@ -99,6 +99,7 @@ const wilayahSearchQuery = ref('');
 const isWilayahDropdownOpen = ref(false);
 const apiWilayahList = ref([]);
 const isSearchingWilayah = ref(false);
+const wilayahError = ref('');
 
 let wilayahSearchTimer = null;
 const handleWilayahInput = () => {
@@ -112,6 +113,7 @@ const handleWilayahInput = () => {
   }
 
   isWilayahDropdownOpen.value = true;
+  wilayahError.value = '';
   clearTimeout(wilayahSearchTimer);
   const q = wilayahSearchQuery.value.trim();
   if (!q || q.length < 2) {
@@ -125,6 +127,7 @@ const handleWilayahInput = () => {
       apiWilayahList.value = Array.isArray(res) ? res : [];
     } catch {
       apiWilayahList.value = [];
+      wilayahError.value = 'Gagal memuat daftar wilayah dari server.';
     } finally {
       isSearchingWilayah.value = false;
     }
@@ -186,6 +189,7 @@ const clearWilayah = () => {
   form.value.province_id = '';
   wilayahSearchQuery.value = '';
   apiWilayahList.value = [];
+  wilayahError.value = '';
   isWilayahDropdownOpen.value = false;
   if (errors.value.region) delete errors.value.region;
   if (errors.value.village_id) delete errors.value.village_id;
@@ -449,11 +453,14 @@ const handleReset = () => {
   };
   wilayahSearchQuery.value = '';
   apiWilayahList.value = [];
+  wilayahError.value = '';
   errors.value = {};
 };
 
 // Submit Handler
 const handleSubmit = async () => {
+  if (isSubmitting.value) return;
+
   if (!validateForm()) {
     showToast({
       type: 'danger',
@@ -507,7 +514,10 @@ const handleSubmit = async () => {
     };
 
     const res = await patientService.createPatient(payload);
-    const createdPatient = res.data?.data || res.data;
+    const createdPatient = res?.data?.data || res?.data;
+    if (!createdPatient?.id) {
+      throw new Error('Server tidak mengembalikan ID pasien yang sah.');
+    }
 
     registeredPatient.value = createdPatient;
     isSuccessModalOpen.value = true;
@@ -518,17 +528,16 @@ const handleSubmit = async () => {
       message: 'Registrasi berhasil. Silahkan admisi pasien, pilih jenis visit dan poliklinik yang tersedia'
     });
 
-    const targetPatientId = createdPatient?.id;
-    if (targetPatientId) {
-      setTimeout(() => {
-        router.push({
-          path: '/admisi/baru',
-          query: { patient_id: targetPatientId }
-        });
-      }, 500);
-    }
+    const targetPatientId = createdPatient.id;
+    setTimeout(() => {
+      router.push({
+        path: '/admisi/baru',
+        query: { patient_id: targetPatientId }
+      });
+    }, 500);
   } catch (err) {
-    if (err.response?.status === 422 && err.response?.data?.errors) {
+    const status = err?.response?.status;
+    if (status === 422 && err.response?.data?.errors) {
       const backendErrors = err.response.data.errors;
       const formattedErrors = {};
       for (const key in backendErrors) {
@@ -549,6 +558,20 @@ const handleSubmit = async () => {
         type: 'danger',
         title: 'Validasi Gagal',
         message: err.response.data.message || 'Periksa kembali data yang dimasukkan.'
+      });
+    } else if (status === 401 || status === 403) {
+      showToast({
+        type: 'danger',
+        title: 'Akses Ditolak',
+        message: err.response?.data?.message || 'Sesi login berakhir atau Anda tidak memiliki izin mendaftarkan pasien.'
+      });
+    } else if (!err?.response) {
+      showToast({
+        type: 'danger',
+        title: 'Koneksi Jaringan Bermasalah',
+        message: err?.message && err.message.includes('ID pasien')
+          ? err.message
+          : 'Tidak dapat terhubung ke server. Data pasien belum tersimpan.'
       });
     } else {
       showToast({
@@ -873,6 +896,9 @@ const registerAnother = () => {
                       {{ w.regency_name }} — {{ w.province_name }} &bull; <span class="kodepos-tag">Kode Pos: {{ w.kodepos || '—' }}</span>
                     </div>
                   </div>
+                </div>
+                <div v-else-if="isWilayahDropdownOpen && wilayahError" class="wilayah-popover wilayah-empty-notice text-danger">
+                  <span>{{ wilayahError }}</span>
                 </div>
                 <div v-else-if="isWilayahDropdownOpen && wilayahSearchQuery.length >= 2 && !isSearchingWilayah" class="wilayah-popover wilayah-empty-notice">
                   <span>Wilayah tidak ditemukan. Periksa kata kunci kelurahan/desa.</span>
@@ -1342,7 +1368,7 @@ const registerAnother = () => {
               </div>
               <div class="detail-cell">
                 <span class="cell-label">Jaminan:</span>
-                <span class="cell-val guarantor-pill">{{ registeredPatient.guarantor }}</span>
+                <span class="cell-val guarantor-pill">{{ registeredPatient.guarantor?.name || registeredPatient.guarantor || '—' }}</span>
               </div>
               <div class="detail-cell span-full">
                 <span class="cell-label">Alamat:</span>

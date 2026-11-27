@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import MasterDataPagination from '@/components/master-data/shared/MasterDataPagination.vue';
 import MasterDataEmptyState from '@/components/master-data/shared/MasterDataEmptyState.vue';
+import { formatDateDMY } from '@/utils/dateFormatters';
 
 const props = defineProps({
   items: {
@@ -65,18 +66,10 @@ const formatDate = (item) => {
     return item.formattedDate;
   }
   const val = item.date || item.transaction_date || item.transactionDate;
-  if (!val) return '-';
-  if (/^\d{2}-\d{2}-\d{4}$/.test(val)) return val;
-  try {
-    const d = new Date(val);
-    if (isNaN(d.getTime())) return val;
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}-${month}-${year}`;
-  } catch {
-    return val;
+  if (typeof val === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(val.trim())) {
+    return val.trim();
   }
+  return formatDateDMY(val, '-');
 };
 </script>
 

@@ -1,5 +1,6 @@
 import { ref, reactive, computed } from 'vue';
 import posSalesService from '@/services/logistics/posSales.service';
+import { formatDateDMY } from '@/utils/dateFormatters';
 import {
   initialPosSales,
   mockPosLocations,
@@ -362,18 +363,10 @@ export function usePosSales() {
   };
 
   const formatDateIndo = (val) => {
-    if (!val) return '-';
-    if (/^\d{2}-\d{2}-\d{4}$/.test(val)) return val;
-    try {
-      const d = new Date(val);
-      if (isNaN(d.getTime())) return val;
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}-${month}-${year}`;
-    } catch {
-      return val;
+    if (typeof val === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(val.trim())) {
+      return val.trim();
     }
+    return formatDateDMY(val, '-');
   };
 
   const formatRupiah = (val) => {

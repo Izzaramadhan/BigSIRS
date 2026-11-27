@@ -46,6 +46,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  error: {
+    type: String,
+    default: ''
+  },
   guarantors: {
     type: Array,
     default: () => []
@@ -69,6 +73,7 @@ const emit = defineEmits([
   'delete-admission',
   'print-document',
   'reset-filter',
+  'retry',
   'retry-guarantors'
 ]);
 
@@ -98,7 +103,7 @@ const formatBirthDateDMY = (isoDate) => {
 };
 
 const formatGuarantor = (val) => {
-  if (!val) return 'UMUM';
+  if (!val) return '—';
   if (val === 'Pasien Umum / Mandiri' || val === 'Umum / Pribadi' || val === 'UMUM') {
     return 'UMUM';
   }
@@ -395,6 +400,23 @@ onUnmounted(() => {
               <td class="text-center"><div class="skel-bone bone-btn"></div></td>
             </tr>
           </template>
+
+          <!-- Error State -->
+          <tr v-else-if="error">
+            <td colspan="6" class="empty-cell">
+              <div class="empty-wrapper" role="alert">
+                <h3 class="empty-title text-danger">Gagal memuat data admisi dari server.</h3>
+                <p class="empty-desc">{{ error }}</p>
+                <button
+                  type="button"
+                  class="btn-primary btn-reset-empty"
+                  @click="emit('retry')"
+                >
+                  Muat Ulang
+                </button>
+              </div>
+            </td>
+          </tr>
 
           <!-- Empty State -->
           <tr v-else-if="admissions.length === 0">

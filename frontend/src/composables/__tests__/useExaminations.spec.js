@@ -19,6 +19,14 @@ vi.mock('@/services/examination.service', () => ({
   }
 }));
 
+vi.mock('@/services/polyclinic', () => ({
+  polyclinicService: {
+    getPolyclinics: vi.fn().mockResolvedValue({ data: { data: [] } })
+  }
+}));
+
+import { polyclinicService } from '@/services/polyclinic';
+
 describe('useExaminations composable', () => {
   let exam;
 
@@ -233,5 +241,30 @@ describe('useExaminations composable', () => {
     expect(replayRes.success).toBe(true);
     expect(replayRes.queueNumber).toBe('001');
     expect(replayRes.patientName).toBe('SURYO BROTO');
+  });
+
+  it('does NOT mutate status or fake success when startExamination or completeExamination fails', async () => {
+    examinationService.updateStatus.mockRejectedValueOnce({
+      response: { status: 403, data: { message: 'Akses ditolak' } }
+    });
+    exam.examinations.value = [
+      { id: 786, status: 'Menunggu', patient_name: 'SURYO' }
+    ];
+
+    const startRes = await exam.startExamination(786);
+    expect(startRes.success).toBe(false);
+    expect(exam.examinations.value[0].status).toBe('Menunggu');
+
+    examinationService.updateStatus.mockRejectedValueOnce(new Error('Network Error'));
+    const completeRes = await exam.completeExamination(786);
+    expect(completeRes.success).toBe(false);
+    expect(exam.examinations.value[0].status).toBe('Menunggu');
+  });
+
+  it('keeps polyclinics empty without mock fallback when loadPolyclinics fails', async () => {
+    polyclinicService.getPolyclinics.mockRejectedValueOnce(new Error('Server down'));
+    await exam.loadPolyclinics();
+    expect(exam.polyclinics.value).toEqual([]);
+    expect(exam.polyclinicsError.value).toBeTruthy();
   });
 });

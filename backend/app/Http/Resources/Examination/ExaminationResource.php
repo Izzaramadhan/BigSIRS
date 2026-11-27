@@ -82,6 +82,9 @@ class ExaminationResource extends JsonResource
             'queue_number' => $queueNumber,
             'visit_date' => $visitDate,
             'visit_time' => $visitTime,
+            'completed_at' => $this->waktu_selesai_periksa,
+            'billing_status' => $this->cek_lunas_visit ?? 'belum bayar',
+            'is_billed' => $this->cek_billing ?? 'Tidak',
             'status' => $statusLabel,
             'complaint' => $admission->alasan_datang ?? $admission->keterangan ?? '',
             'created_at' => $this->created_at,
@@ -144,7 +147,8 @@ class ExaminationResource extends JsonResource
                 'riwayat_penyakit_sekarang' => $exam->riwayat_penyakit_sekarang ?? '',
                 'riwayat_penyakit_dahulu' => $exam->riwayat_penyakit_dahulu ?? '',
                 'riwayat_alergi' => $exam->ket_riwayat_alergi_obat_makanan ?? '',
-                'pemeriksaan_fisik' => $exam->pemeriksaan_fisik ?? '',
+                'pemeriksaan_fisik' => $exam->pemeriksaan_fisik ?? $exam->keadaan_umum ?? '',
+                'assessment' => $exam->ket_diagnosis_mulut ?? '',
             ] : null;
             $data['clinical_note'] = $exam?->subjek_keluhan ?? $exam?->subjektif ?? '';
             if ($exam && ($exam->riwayat_alergi_obat_makanan === 'Ada' || !empty($exam->ket_riwayat_alergi_obat_makanan))) {
@@ -160,16 +164,19 @@ class ExaminationResource extends JsonResource
                 'general' => $exam->keadaan_umum ?? '',
                 'consciousness' => $exam->kesadaran ?? '',
                 'head' => $exam->kepala ?? '',
+                'head_neck' => $exam->kepala ?? '',
                 'eye' => '',
                 'ent' => '',
                 'mouth' => $exam->keadaan_rongga_mulut ?? '',
                 'neck' => $exam->leher ?? '',
                 'chest' => $exam->thorax ?? '',
+                'thorax' => $exam->thorax ?? '',
                 'heart' => $exam->cor ?? '',
                 'lungs' => $exam->pulmo ?? '',
                 'abdomen' => $exam->abdomen ?? '',
                 'extremities' => $exam->ekstremitas_all ?? '',
                 'skin' => $exam->kulit ?? '',
+                'localis' => $exam->ket_lain ?? '',
                 'other' => $exam->ket_lain ?? '',
             ] : null;
         }
@@ -252,7 +259,7 @@ class ExaminationResource extends JsonResource
                 return [
                     'id' => (int) $detail->id,
                     'order_id' => (int) $rad->id,
-                    'name' => $detail->item?->nama ?? '',
+                    'name' => $detail->item?->nama ?? $detail->keterangan ?? '',
                     'result' => $detail->hasil ?? '',
                     'status' => $rad->status_pemeriksaan ?? 'proses',
                     'notes' => $detail->catatan ?? '',

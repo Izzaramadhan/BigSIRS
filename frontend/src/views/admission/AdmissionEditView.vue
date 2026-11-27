@@ -7,7 +7,6 @@ import admissionService from '@/services/admission.service';
 import patientService from '@/services/patient.service';
 import lookupService from '@/services/lookup.service';
 import { polyclinicService } from '@/services/polyclinic';
-import { useAdmissions } from '@/composables/useAdmissions';
 import {
   findMatchingGuarantor,
   isSelfPayGuarantor,
@@ -24,14 +23,6 @@ const {
   fetchGuarantors,
   ensureSavedOption
 } = useGuarantorOptions();
-
-const {
-  admissionsList,
-  mockPolyclinics,
-  mockDoctors,
-  getAdmissionById,
-  saveSessionAdmissionEdit
-} = useAdmissions();
 
 const longMonthNames = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -119,9 +110,6 @@ const polyclinicOptions = computed(() => {
       const name = p.name || p.nama || p.nama_poliklinik;
       if (name) base.add(name);
     });
-  } else {
-    mockPolyclinics.forEach((p) => base.add(p));
-    base.add('Poliklinik Obstetri dan Ginekologi');
   }
   if (form.value.polyclinic) base.add(form.value.polyclinic);
   return Array.from(base);
@@ -134,8 +122,6 @@ const doctorOptions = computed(() => {
       const name = d.name || d.nama || d.nama_lengkap;
       if (name) base.add(name);
     });
-  } else {
-    mockDoctors.forEach((d) => base.add(d));
   }
   if (form.value.doctor) base.add(form.value.doctor);
   return Array.from(base);
@@ -179,6 +165,8 @@ const form = ref({
 
 const errors = ref({});
 const isSubmitting = ref(false);
+const isLoadingRecord = ref(false);
+const loadError = ref('');
 
 const toast = ref({
   show: false,
@@ -195,14 +183,17 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
+const unwrapList = (payload) => {
+  const inner = payload?.data?.data ?? payload?.data ?? payload;
+  return Array.isArray(inner) ? inner : [];
+};
+
 // Fetch doctors for clinic
 const loadDoctorsForClinic = async (polyId) => {
   if (!polyId) return;
   try {
     const docs = await lookupService.getDoctorsByPolyclinic(polyId);
-    if (Array.isArray(docs)) {
-      backendDoctorList.value = docs;
-    }
+    backendDoctorList.value = unwrapList(docs);
   } catch {
     backendDoctorList.value = [];
   }
@@ -218,10 +209,10 @@ const loadMasterData = async () => {
     ]);
 
     if (polyclinicRes.status === 'fulfilled') {
-      polyclinicList.value = polyclinicRes.value.data || polyclinicRes.value || [];
+      polyclinicList.value = unwrapList(polyclinicRes.value);
     }
     if (referralRes.status === 'fulfilled') {
-      referralSourceList.value = referralRes.value.data || referralRes.value || [];
+      referralSourceList.value = unwrapList(referralRes.value);
     }
   } catch {
     // Fail-safe
@@ -239,143 +230,103 @@ const syncSelectedGuarantorFromMaster = () => {
   }
 };
 
-const loadRecordFromLocal = () => {
-  const targetId = route.params.id;
-  const record = getAdmissionById(targetId) || admissionsList.value[0];
-  if (!record) return;
-
-  recordVisitId.value = record.visit_id || null;
-  patientSummary.value = {
-    id: record.id,
-    queue_number: record.queue_number || '-',
-    medical_record_number: record.medical_record_number || '-',
-    patient_name: record.patient_name || '-',
-    gender: record.gender || 'L',
-    birth_place: record.birth_place || 'Yogyakarta',
-    birth_date: record.birth_date || '',
-    address: record.address || '-'
-  };
-
-  const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
-  const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
-  const rawGuarantorName = normalizeGuarantor(record.guarantor_type);
-  savedGuarantorContext.value = {
-    id: record.guarantor_id ?? null,
-    name: rawGuarantorName
-  };
-
-  form.value = {
-    admission_datetime: datePart ? `${datePart} ${timePart}` : timePart,
-    guarantor_id: record.guarantor_id ? String(record.guarantor_id) : '',
-    guarantor_type: rawGuarantorName,
-    insurance_number: isSelfPayGuarantor(rawGuarantorName)
-      ? ''
-      : (record.insurance_number || record.guarantor_detail || ''),
-    nik: record.nik || '',
-    referral_source_id: record.referral_source_id || 3,
-    referral_source: record.referral_source || 'Datang Sendiri',
-    referral_name: record.referral_name || '',
-
-    visit_type: record.visit_type || 'IGD',
-    polyclinic_id: record.polyclinic_id || null,
-    polyclinic: record.polyclinic || '',
-    service_type: record.service_type || 'Umum',
-    case_type: normalizeCaseType(record.case_type),
-    doctor_id: record.doctor_id || null,
-    doctor: record.doctor || '',
-
-    family_name: record.family_name || record.emergency_contact?.name || '',
-    family_relationship: record.family_relationship || record.emergency_contact?.relationship || 'IBU',
-    family_phone: record.family_phone || record.emergency_contact?.phone || '',
-    family_address: record.family_address || record.emergency_contact?.address || '',
-    notes: record.notes || ''
-  };
-  initialPolyclinic.value = form.value.polyclinic;
-  syncSelectedGuarantorFromMaster();
-};
-
-const fetchBackendRecord = async () => {
+const fetchBackendRecord = async (options = { syncGuarantorFetch: true }) => {
   const targetId = route.params.id;
   const queryPatientId = route.query.patient_id;
   if (!targetId && !queryPatientId) return;
 
   let loadedAdmission = false;
+  isLoadingRecord.value = true;
+  loadError.value = '';
 
   try {
     if (targetId && admissionService && typeof admissionService.getAdmission === 'function') {
       const res = await admissionService.getAdmission(targetId);
       const record = res.data?.data || res.data;
-      if (record) {
-        loadedAdmission = true;
-        recordVisitId.value = record.visit_id || null;
-        canChangeClinic.value = record.can_change_clinic !== false;
-        cannotChangeReason.value = record.cannot_change_reason || '';
+      if (!record?.id) {
+        throw new Error('Data admisi tidak ditemukan di server.');
+      }
+      loadedAdmission = true;
+      recordVisitId.value = record.visit_id || null;
+      canChangeClinic.value = record.can_change_clinic !== false;
+      cannotChangeReason.value = record.cannot_change_reason || '';
 
-        const vStatus = String(record.service_status || record.status || '').toLowerCase();
-        isServiceLocked.value = vStatus === 'selesai' || vStatus === 'ya';
+      const vStatus = String(record.service_status || record.status || '').toLowerCase();
+      isServiceLocked.value = vStatus === 'selesai' || vStatus === 'ya';
 
-        const pat = record.patient || {};
-        patientSummary.value = {
-          id: record.id,
-          queue_number: record.queue_number || '-',
-          medical_record_number: pat.medical_record_number || pat.no_rm || record.medical_record_number || '-',
-          patient_name: pat.name || pat.nama || record.patient_name || '-',
-          gender: pat.gender || record.gender || 'L',
-          birth_place: pat.birth_place || pat.tempat_lahir || record.birth_place || 'Yogyakarta',
-          birth_date: pat.birth_date || pat.tgl_lahir || record.birth_date || '',
-          address: pat.address || pat.alamat || record.address || '-'
-        };
+      const pat = record.patient || {};
+      patientSummary.value = {
+        id: record.id,
+        queue_number: record.queue_number || '-',
+        medical_record_number: pat.medical_record_number || pat.no_rm || record.medical_record_number || '-',
+        patient_name: pat.name || pat.nama || record.patient_name || '-',
+        gender: pat.gender || record.gender || 'L',
+        birth_place: pat.birth_place || pat.tempat_lahir || record.birth_place || '-',
+        birth_date: pat.birth_date || pat.tgl_lahir || record.birth_date || '',
+        address: pat.address || pat.alamat || record.address || '-'
+      };
 
-        const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
-        const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
-        const rawGuarantorName = normalizeGuarantor(record.guarantor_type || record.guarantor);
-        savedGuarantorContext.value = {
-          id: record.guarantor_id ?? null,
-          name: rawGuarantorName
-        };
+      const datePart = record.admission_date ? formatDateDMY(record.admission_date) : '';
+      const timePart = record.admission_time ? formatTimeHMS(record.admission_time) : '08:00:00';
+      const rawGuarantorName = normalizeGuarantor(record.guarantor_type || record.guarantor);
+      savedGuarantorContext.value = {
+        id: record.guarantor_id ?? null,
+        name: rawGuarantorName
+      };
 
-        form.value.admission_datetime = record.admission_datetime || (datePart ? `${datePart} ${timePart}` : timePart);
-        form.value.guarantor_id = record.guarantor_id ? String(record.guarantor_id) : '';
-        form.value.guarantor_type = rawGuarantorName;
-        form.value.insurance_number = isSelfPayGuarantor(rawGuarantorName)
-          ? ''
-          : (record.insurance_number || record.guarantor_detail || '');
-        if (record.guarantor_id) {
-          await fetchGuarantors({ ids: record.guarantor_id });
-        }
-        syncSelectedGuarantorFromMaster();
-        form.value.nik = record.nik || pat.nik || pat.no_ktp || '';
-        form.value.referral_source_id = record.referral_source_id || 3;
-        form.value.referral_source = record.referral_source || 'Datang Sendiri';
-        form.value.referral_name = record.referral_name || '';
-        form.value.visit_type = record.visit_type || 'IGD';
-        form.value.polyclinic_id = record.polyclinic_id || null;
-        form.value.polyclinic = record.polyclinic || '';
-        form.value.service_type = record.service_type || 'Umum';
-        form.value.case_type = record.case_type || 'Pemeriksaan Kasus Baru';
-        form.value.doctor_id = record.doctor_id || null;
-        form.value.doctor = record.doctor || '';
-        form.value.family_name = record.family_name || record.emergency_contact?.name || pat.emergency_contact?.name || '';
-        form.value.family_relationship = record.family_relationship || record.emergency_contact?.relationship || pat.emergency_contact?.relationship || 'IBU';
-        form.value.family_phone = record.family_phone || record.emergency_contact?.phone || pat.emergency_contact?.phone || '';
-        form.value.family_address = record.family_address || record.emergency_contact?.address || pat.emergency_contact?.address || '';
-        form.value.notes = record.notes || '';
+      form.value.admission_datetime = record.admission_datetime || (datePart ? `${datePart} ${timePart}` : timePart);
+      form.value.guarantor_id = record.guarantor_id ? String(record.guarantor_id) : '';
+      form.value.guarantor_type = rawGuarantorName;
+      form.value.insurance_number = isSelfPayGuarantor(rawGuarantorName)
+        ? ''
+        : (record.insurance_number || record.guarantor_detail || '');
+      if (options?.syncGuarantorFetch && record.guarantor_id) {
+        await fetchGuarantors({ ids: record.guarantor_id });
+      }
+      syncSelectedGuarantorFromMaster();
+      form.value.nik = record.nik || pat.nik || pat.no_ktp || '';
+      form.value.referral_source_id = record.referral_source_id || 3;
+      form.value.referral_source = record.referral_source || 'Datang Sendiri';
+      form.value.referral_name = record.referral_name || '';
+      form.value.visit_type = record.visit_type || 'Rawat Jalan';
+      form.value.polyclinic_id = record.polyclinic_id || null;
+      form.value.polyclinic = record.polyclinic || '';
+      form.value.service_type = record.service_type || 'Umum';
+      form.value.case_type = normalizeCaseType(record.case_type);
+      form.value.doctor_id = record.doctor_id || null;
+      form.value.doctor = record.doctor || '';
+      initialPolyclinic.value = form.value.polyclinic;
+      form.value.family_name = record.family_name || record.emergency_contact?.name || pat.emergency_contact?.name || '';
+      form.value.family_relationship = record.family_relationship || record.emergency_contact?.relationship || pat.emergency_contact?.relationship || 'IBU';
+      form.value.family_phone = record.family_phone || record.emergency_contact?.phone || pat.emergency_contact?.phone || '';
+      form.value.family_address = record.family_address || record.emergency_contact?.address || pat.emergency_contact?.address || '';
+      form.value.notes = record.notes || '';
 
-        if (record.polyclinic_id) {
-          loadDoctorsForClinic(record.polyclinic_id);
-        }
+      if (record.polyclinic_id) {
+        loadDoctorsForClinic(record.polyclinic_id);
       }
     }
-  } catch {
-    // Fail-safe
+  } catch (err) {
+    const status = err?.response?.status;
+    let errMsg = err?.response?.data?.message || err?.message || 'Gagal memuat detail admisi dari server.';
+    if (!err?.response && !err?.message?.includes('tidak ditemukan')) {
+      errMsg = 'Tidak dapat terhubung ke server untuk memuat detail admisi.';
+    } else if (status === 401 || status === 403) {
+      errMsg = err?.response?.data?.message || 'Sesi berakhir atau tidak memiliki izin membaca data admisi.';
+    }
+    loadError.value = errMsg;
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Data Admisi',
+      message: errMsg
+    });
   }
 
-  // Fallback to patient service if admission record wasn't found or patientSummary incomplete
-  const patIdToFetch = queryPatientId || (!loadedAdmission ? targetId : null);
-  if (patIdToFetch && (!loadedAdmission || patientSummary.value.patient_name === '-')) {
+  // Only hydrate patient context from patientService if explicit query patient_id was provided and summary is incomplete
+  if (queryPatientId && (!loadedAdmission || patientSummary.value.patient_name === '-')) {
     try {
       if (patientService && typeof patientService.getPatient === 'function') {
-        const pRes = await patientService.getPatient(patIdToFetch);
+        const pRes = await patientService.getPatient(queryPatientId);
         const pat = pRes.data?.data || pRes.data;
         if (pat) {
           patientSummary.value = {
@@ -384,7 +335,7 @@ const fetchBackendRecord = async () => {
             medical_record_number: pat.medical_record_number || pat.no_rm || '-',
             patient_name: pat.name || pat.nama || '-',
             gender: pat.gender || 'L',
-            birth_place: pat.birth_place || pat.tempat_lahir || 'Yogyakarta',
+            birth_place: pat.birth_place || pat.tempat_lahir || '-',
             birth_date: pat.birth_date || pat.tgl_lahir || '',
             address: pat.address || pat.alamat || '-'
           };
@@ -416,9 +367,8 @@ const fetchBackendRecord = async () => {
       console.warn('Gagal memuat detail pasien untuk edit form:', e);
     }
   }
+  isLoadingRecord.value = false;
 };
-
-loadRecordFromLocal();
 
 watch(
   () => form.value.guarantor_id,
@@ -470,14 +420,13 @@ watch(
 );
 
 watch(() => route.params.id, async () => {
-  loadRecordFromLocal();
   await fetchBackendRecord();
 });
 
 onMounted(async () => {
-  loadRecordFromLocal();
+  await fetchBackendRecord({ syncGuarantorFetch: false });
   await loadMasterData();
-  await fetchBackendRecord();
+  syncSelectedGuarantorFromMaster();
 });
 
 const validateForm = () => {
@@ -515,22 +464,9 @@ const validateForm = () => {
   return Object.keys(newErrors).length === 0;
 };
 
-const parseAdmissionDateTime = (str, fallbackDate, fallbackTime) => {
-  const clean = String(str || '').trim();
-  const match = clean.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2})(?::\d{2})?$/);
-  if (match) {
-    return {
-      admission_date: `${match[3]}-${match[2]}-${match[1]}`,
-      admission_time: `${match[4]} WIB`
-    };
-  }
-  return {
-    admission_date: fallbackDate,
-    admission_time: fallbackTime
-  };
-};
-
 const handleUpdate = async () => {
+  if (isSubmitting.value) return;
+
   if (!validateForm()) {
     showToast({
       type: 'warning',
@@ -540,43 +476,45 @@ const handleUpdate = async () => {
     return;
   }
 
-  isSubmitting.value = true;
-  errors.value = {};
-
-  const currentRecord = getAdmissionById(patientSummary.value.id) || admissionsList.value[0];
-  const parsedTime = parseAdmissionDateTime(
-    form.value.admission_datetime,
-    currentRecord?.admission_date,
-    currentRecord?.admission_time
-  );
-
-  // Resolve guarantor_id
-  let guarantorId = selectedGuarantorOption.value?.numericId ?? (form.value.guarantor_id ? Number(form.value.guarantor_id) : null);
-  if (!guarantorId) {
-    guarantorId = isSelfPaySelected.value ? 2 : 1;
-  }
+  // Resolve guarantor_id without hardcoded defaults
+  const guarantorId = selectedGuarantorOption.value?.numericId ?? (form.value.guarantor_id ? Number(form.value.guarantor_id) : null);
   const resolvedGuarantorName = selectedGuarantorOption.value?.name || form.value.guarantor_type;
 
-  // Resolve polyclinic_id
+  // Resolve polyclinic_id from loaded data or master list
   let polyclinicId = form.value.polyclinic_id;
   if (!polyclinicId) {
     const matchP = polyclinicList.value.find((p) => (p.name || p.nama || p.nama_poliklinik) === form.value.polyclinic);
-    polyclinicId = matchP ? matchP.id : 1;
+    polyclinicId = matchP ? matchP.id : null;
   }
 
-  // Resolve doctor_id
+  // Resolve doctor_id from loaded data or master list
   let doctorId = form.value.doctor_id;
   if (!doctorId) {
     const matchD = backendDoctorList.value.find((d) => (d.name || d.nama || d.nama_lengkap) === form.value.doctor);
-    doctorId = matchD ? matchD.id : 1;
+    doctorId = matchD ? matchD.id : null;
+  }
+
+  if (!guarantorId || !polyclinicId || !doctorId) {
+    if (!guarantorId) errors.value.guarantor_type = 'Referensi penjamin belum valid.';
+    if (!polyclinicId) errors.value.polyclinic = 'Referensi poliklinik belum valid.';
+    if (!doctorId) errors.value.doctor = 'Referensi dokter belum valid.';
+    showToast({
+      type: 'warning',
+      title: 'Referensi Belum Valid',
+      message: 'Pastikan data penjamin, poliklinik, dan dokter valid sebelum menyimpan pembaruan.'
+    });
+    return;
   }
 
   // Resolve referral_source_id
   let referralSourceId = form.value.referral_source_id;
   if (!referralSourceId) {
     const matchR = referralSourceList.value.find((r) => (r.name || r.nama) === form.value.referral_source);
-    referralSourceId = matchR ? matchR.id : (form.value.referral_source === 'Datang Sendiri' ? 3 : 1);
+    referralSourceId = matchR ? matchR.id : (form.value.referral_source === 'Datang Sendiri' ? 3 : null);
   }
+
+  isSubmitting.value = true;
+  errors.value = {};
 
   const payload = {
     visit_id: recordVisitId.value,
@@ -586,7 +524,7 @@ const handleUpdate = async () => {
       ? 'Mandiri / Pribadi'
       : (form.value.insurance_number || resolvedGuarantorName),
     insurance_number: isSelfPaySelected.value ? '' : form.value.insurance_number,
-    referral_source_id: Number(referralSourceId),
+    referral_source_id: referralSourceId ? Number(referralSourceId) : null,
     referral_source: form.value.referral_source,
     referral_name: form.value.referral_source === 'Datang Sendiri' ? '' : form.value.referral_name.trim(),
     polyclinic_id: Number(polyclinicId),
@@ -602,43 +540,15 @@ const handleUpdate = async () => {
 
   try {
     const targetId = patientSummary.value.id || route.params.id;
-
-    if (admissionService && typeof admissionService.updateAdmission === 'function') {
-      try {
-        await admissionService.updateAdmission(targetId, payload);
-      } catch (apiErr) {
-        if (apiErr.response?.status === 422) {
-          const errData = apiErr.response.data;
-          errors.value = errData.errors || {};
-          showToast({
-            type: 'danger',
-            title: 'Pembatasan / Validasi Gagal',
-            message: errData.message || 'Data tidak dapat diperbarui karena pembatasan pelayanan.'
-          });
-          isSubmitting.value = false;
-          return;
-        }
-      }
+    if (!targetId) {
+      throw new Error('ID admisi tidak ditemukan.');
     }
 
-    // Update in-memory session store
-    saveSessionAdmissionEdit(patientSummary.value.id, {
-      ...payload,
-      admission_date: parsedTime.admission_date,
-      admission_time: parsedTime.admission_time,
-      guarantor_type: resolvedGuarantorName,
-      guarantor_detail: isSelfPaySelected.value ? 'Mandiri / Pribadi' : (form.value.insurance_number || resolvedGuarantorName),
-      polyclinic: form.value.polyclinic,
-      doctor: form.value.doctor,
-      emergency_contact: {
-        name: form.value.family_name.trim(),
-        relationship: form.value.family_relationship.trim(),
-        phone: form.value.family_phone.trim(),
-        address: form.value.family_address.trim()
-      }
-    });
-
-    isSubmitting.value = false;
+    const res = await admissionService.updateAdmission(targetId, payload);
+    const updated = res?.data?.data || res?.data;
+    if (!updated?.id && !res?.data?.success) {
+      throw new Error('Server tidak mengembalikan konfirmasi pembaruan admisi yang valid.');
+    }
 
     showToast({
       type: 'success',
@@ -654,12 +564,47 @@ const handleUpdate = async () => {
       }
     }, 550);
   } catch (err) {
+    const status = err?.response?.status;
+    if (status === 422 && err.response?.data) {
+      const errData = err.response.data;
+      const backendErrors = errData.errors || {};
+      const mapped = {};
+      for (const [k, msgs] of Object.entries(backendErrors)) {
+        mapped[k] = Array.isArray(msgs) ? msgs[0] : msgs;
+      }
+      errors.value = { ...errors.value, ...mapped };
+      showToast({
+        type: 'danger',
+        title: 'Pembatasan / Validasi Gagal',
+        message: errData.message || 'Data tidak dapat diperbarui karena pembatasan pelayanan.'
+      });
+    } else if (status === 401 || status === 403) {
+      showToast({
+        type: 'danger',
+        title: 'Akses Ditolak',
+        message: err.response?.data?.message || 'Sesi berakhir atau Anda tidak memiliki izin mengubah admisi.'
+      });
+    } else if (status === 404) {
+      showToast({
+        type: 'danger',
+        title: 'Admisi Tidak Ditemukan',
+        message: err.response?.data?.message || 'Data admisi tidak ditemukan di server.'
+      });
+    } else if (!err?.response) {
+      showToast({
+        type: 'danger',
+        title: 'Koneksi Bermasalah',
+        message: 'Tidak dapat terhubung ke server. Perubahan admisi belum disimpan.'
+      });
+    } else {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Memperbarui Admisi',
+        message: err.response?.data?.message || err.message || 'Terjadi kesalahan sistem saat menyimpan pembaruan admisi.'
+      });
+    }
+  } finally {
     isSubmitting.value = false;
-    showToast({
-      type: 'danger',
-      title: 'Gagal Memperbarui Admisi',
-      message: err.response?.data?.message || err.message || 'Terjadi kesalahan sistem saat menyimpan pembaruan admisi.'
-    });
   }
 };
 
@@ -710,6 +655,11 @@ const handleCancel = () => {
 
     <!-- Main Page Content -->
     <div class="page-content">
+      <div v-if="loadError" class="clinic-restriction-banner" role="alert">
+        <span>{{ loadError }}</span>
+        <button type="button" class="btn-retry-guarantor" @click="fetchBackendRecord">Muat Ulang</button>
+      </div>
+
       <!-- Card 1: DATA PASIEN -->
       <div class="card patient-info-card">
         <div class="card-header-bar patient-info-header">

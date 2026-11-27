@@ -1,6 +1,7 @@
 import { ref, reactive, computed } from 'vue';
 import { initialInvoices, mockSuppliers, mockMedicines } from '@/mocks/invoices';
 import { invoicesService } from '@/services/logistics/invoices.service';
+import { formatDateShort } from '@/utils/dateFormatters';
 
 export function useInvoices() {
   const invoices = ref(JSON.parse(JSON.stringify(initialInvoices)));
@@ -677,14 +678,7 @@ export function useInvoices() {
   };
 
   // Format date helper (e.g. 12 Sep 2026)
-  const formatDateIndo = (dateStr) => {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const day = String(d.getDate()).padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
-  };
+  const formatDateIndo = (dateStr) => formatDateShort(dateStr, '-');
 
   // Export to CSV
   const exportInvoicesCsv = async () => {

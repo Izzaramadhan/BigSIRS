@@ -795,4 +795,38 @@ describe('Goods Issue (Pengeluaran Barang) Module Tests', () => {
       expect(saveBtn.attributes('disabled')).toBeDefined();
     });
   });
+
+  describe('GoodsIssue Date Formatting via dateFormatters (FE-REF-03B.1)', () => {
+    it('formats YYYY-MM-DD, SQL datetime, DD-MM-YYYY passthrough, and null/invalid cleanly', () => {
+      const { formatDateIndo } = useGoodsIssues();
+
+      expect(formatDateIndo('2026-09-12')).toBe('12-09-2026');
+      expect(formatDateIndo('2025-12-31')).toBe('31-12-2025');
+      expect(formatDateIndo('2026-01-01')).toBe('01-01-2026');
+      expect(formatDateIndo('2026-11-20 09:15:00')).toBe('20-11-2026');
+      expect(formatDateIndo('12-09-2026')).toBe('12-09-2026');
+      expect(formatDateIndo(null)).toBe('-');
+      expect(formatDateIndo(undefined)).toBe('-');
+      expect(formatDateIndo('')).toBe('-');
+      expect(formatDateIndo('2026-02-30')).toBe('2026-02-30');
+      expect(formatDateIndo('invalid')).toBe('invalid');
+    });
+
+    it('renders DD-MM-YYYY consistently in GoodsIssueTable across date-only and passthrough rows', () => {
+      const wrapper = mount(GoodsIssueTable, {
+        props: {
+          items: [
+            { id: 1, issue_date: '2026-01-01', officer_name: 'Petugas A', purpose: 'Unit IGD' },
+            { id: 2, issue_date: '12-09-2026', officer_name: 'Petugas B', purpose: 'Poli Gigi' }
+          ],
+          paginationInfo: { current_page: 1, last_page: 1, per_page: 10, total: 2, from: 1, to: 2 },
+          loading: false,
+          search: ''
+        }
+      });
+
+      expect(wrapper.text()).toContain('01-01-2026');
+      expect(wrapper.text()).toContain('12-09-2026');
+    });
+  });
 });

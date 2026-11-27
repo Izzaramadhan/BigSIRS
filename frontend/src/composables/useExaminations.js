@@ -1,8 +1,8 @@
 import { ref, computed, reactive } from 'vue';
 import { examinationService } from '@/services/examination.service';
 import { polyclinicService } from '@/services/polyclinic';
+import { calculateAge } from '@/utils/patientFormatters';
 import {
-  mockPolyclinics as defaultPolyclinics,
   mockDoctors,
   mockMidwives,
   mockBidanPhysicalHistory,
@@ -24,8 +24,7 @@ import {
   mockRadiologyCatalog,
   mockRadiologyHistory,
   mockVkSurgeryOptions,
-  mockIbsSurgeryOptions,
-  calculateAge
+  mockIbsSurgeryOptions
 } from '@/mocks/examinations';
 
 // Frontend-only session clinical cache for patient examination views
@@ -68,31 +67,36 @@ export function useExaminations() {
   // UI state
   const loading = ref(false);
   const error = ref(null);
+  let latestFetchSeq = 0;
 
-  // Dynamic polyclinics list
-  const polyclinicsList = ref([...defaultPolyclinics]);
+  // Dynamic polyclinics list (strictly populated from backend API)
+  const polyclinicsList = ref([]);
+  const polyclinicsError = ref(null);
 
   // Track currently / last called patient
   const lastCalledPatient = ref(null);
 
   // Fetch polyclinics from legacy backend for dropdown filter
   const loadPolyclinics = async () => {
+    polyclinicsError.value = null;
     try {
       const res = await polyclinicService.getPolyclinics({ per_page: 100 });
       const data = res.data?.data || res.data;
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         const names = data.map((p) => p.name || p.nama || p.nama_poliklinik).filter(Boolean);
-        if (names.length > 0) {
-          polyclinicsList.value = Array.from(new Set(names));
-        }
+        polyclinicsList.value = Array.from(new Set(names));
+      } else {
+        polyclinicsList.value = [];
       }
-    } catch {
-      // Keep default polyclinics if API not ready
+    } catch (err) {
+      polyclinicsError.value = err?.response?.data?.message || err?.message || 'Gagal memuat daftar poliklinik.';
+      polyclinicsList.value = [];
     }
   };
 
   // Fetch examinations from backend API
   const fetchExaminations = async () => {
+    const seq = ++latestFetchSeq;
     loading.value = true;
     error.value = null;
 
@@ -139,8 +143,9 @@ export function useExaminations() {
       }
 
       const response = await examinationService.getExaminations(params);
-      const resData = response.data;
+      if (seq !== latestFetchSeq) return;
 
+      const resData = response.data;
       const items = Array.isArray(resData?.data) ? resData.data : (Array.isArray(resData) ? resData : []);
       examinations.value = items;
 
@@ -158,14 +163,17 @@ export function useExaminations() {
         pagination.to = items.length;
       }
     } catch (err) {
-      error.value = err.response?.data?.message || err.message || 'Gagal memuat data kunjungan pemeriksaan.';
+      if (seq !== latestFetchSeq) return;
+      error.value = err?.response?.data?.message || err?.message || 'Gagal memuat data kunjungan pemeriksaan.';
       examinations.value = [];
       pagination.total = 0;
       pagination.from = 0;
       pagination.to = 0;
       pagination.lastPage = 1;
     } finally {
-      loading.value = false;
+      if (seq === latestFetchSeq) {
+        loading.value = false;
+      }
     }
   };
 
@@ -284,6 +292,10 @@ export function useExaminations() {
 
   // Clinical action 1: Start examination (Mulai Periksa)
   const startExamination = async (patientId) => {
+    if (!patientId) {
+      return { success: false, status: 400, message: 'ID kunjungan pasien tidak valid.' };
+    }
+
     const item = examinations.value.find((p) => String(p.id) === String(patientId));
     try {
       await examinationService.updateStatus(patientId, 'Sedang Diperiksa');
@@ -292,12 +304,12 @@ export function useExaminations() {
         lastCalledPatient.value = item;
       }
       return { success: true, patient: item };
-    } catch {
-      if (item) {
-        item.status = 'Sedang Diperiksa';
-        lastCalledPatient.value = item;
-      }
-      return { success: true, patient: item };
+    } catch (err) {
+      return {
+        success: false,
+        status: err?.response?.status ?? null,
+        message: err?.response?.data?.message || err?.message || 'Gagal memperbarui status pemeriksaan.'
+      };
     }
   };
 
@@ -377,18 +389,26 @@ export function useExaminations() {
 
   // Mark examination as Selesai in backend and local state
   const completeExamination = async (patientId) => {
+    if (!patientId) {
+      return { success: false, status: 400, message: 'ID kunjungan pasien tidak valid.' };
+    }
+
     try {
       await examinationService.updateStatus(patientId, 'Selesai');
-    } catch {
-      // Ignore if offline
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      return saveSessionExaminationData(patientId, {
+        status: 'Selesai',
+        completed_time: `${hh}:${mm}`
+      });
+    } catch (err) {
+      return {
+        success: false,
+        status: err?.response?.status ?? null,
+        message: err?.response?.data?.message || err?.message || 'Gagal menyelesaikan pemeriksaan di server.'
+      };
     }
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    return saveSessionExaminationData(patientId, {
-      status: 'Selesai',
-      completed_time: `${hh}:${mm}`
-    });
   };
 
   return {
@@ -398,6 +418,7 @@ export function useExaminations() {
     pagination,
     loading,
     error,
+    polyclinicsError,
     lastCalledPatient,
     sort,
     statistics,

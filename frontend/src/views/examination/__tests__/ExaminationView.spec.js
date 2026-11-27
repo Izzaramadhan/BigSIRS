@@ -130,6 +130,65 @@ vi.mock('@/services/polyclinic', () => ({
   }
 }));
 
+vi.mock('@/services/lookup.service', async () => {
+  const { mockDoctors } = await import('@/mocks/examinations');
+  return {
+    default: {
+      getDoctors: vi.fn().mockResolvedValue({
+        data: mockDoctors.map((name, idx) => ({ id: idx + 1, name }))
+      })
+    }
+  };
+});
+
+vi.mock('@/services/master-data/icd10.service', async () => {
+  const { mockIcd10Catalog } = await import('@/mocks/examinations');
+  return {
+    default: {
+      getIcd10Codes: vi.fn().mockResolvedValue({
+        data: mockIcd10Catalog.map((item, idx) => ({ id: idx + 1, code: item.code, name: item.name }))
+      })
+    }
+  };
+});
+
+vi.mock('@/services/master-data/icd9cm.service', async () => {
+  const { mockIcd9Catalog } = await import('@/mocks/examinations');
+  return {
+    default: {
+      lookup: vi.fn().mockResolvedValue({
+        data: mockIcd9Catalog.map((item, idx) => ({ id: idx + 1, code: item.code, name: item.name }))
+      })
+    }
+  };
+});
+
+vi.mock('@/services/procedure', async () => {
+  const { mockClinicalProcedures } = await import('@/mocks/examinations');
+  return {
+    default: {
+      getProcedures: vi.fn().mockResolvedValue({
+        data: {
+          data: mockClinicalProcedures.map((item, idx) => ({ id: idx + 1, ...item }))
+        }
+      })
+    }
+  };
+});
+
+vi.mock('@/services/master-data/medicines.service', async () => {
+  const { mockMedicinesCatalog } = await import('@/mocks/examinations');
+  return {
+    medicinesService: {
+      getMedicines: vi.fn().mockResolvedValue({
+        data: mockMedicinesCatalog.map((item, idx) => ({ id: idx + 1, ...item }))
+      })
+    }
+  };
+});
+
+import { examinationService } from '@/services/examination.service';
+
 describe('ExaminationView (Halaman Awal Pemeriksaan Terbaru)', () => {
   it('renders PEMERIKSAAN PASIEN header, filter section, and 7 standardized columns', async () => {
     const wrapper = mount(ExaminationView, {
@@ -1011,6 +1070,170 @@ describe('Examination Rawat Jalan Components', () => {
       const nextBtn = wrapper.find('.btn-next');
       await nextBtn.trigger('click');
       expect(wrapper.emitted('page-change')[0]).toEqual([2]);
+    });
+  });
+
+  describe('Fase 2B.18 API Integration, Error & Anti-Fake-Success Guards', () => {
+    it('shows API error on ExaminationView without mock fallback and blocks navigation if startExamination fails', async () => {
+      mockPush.mockClear();
+      examinationService.getExaminations.mockRejectedValueOnce({
+        response: { status: 500, data: { message: 'Koneksi database gagal' } }
+      });
+
+      const wrapper = mount(ExaminationView, {
+        global: { stubs: { AppToast: true } }
+      });
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Gagal Memuat Data Pemeriksaan');
+      expect(wrapper.text()).toContain('Koneksi database gagal');
+
+      // Retry succeeds with backend data
+      examinationService.getExaminations.mockResolvedValueOnce({
+        data: {
+          data: [{
+            id: 901,
+            visit_id: 901,
+            admission_id: 501,
+            patient_id: 42,
+            queue_number: 'A-01',
+            visit_date: '2026-11-26',
+            visit_time: '09:00 WIB',
+            patient_name: 'BUDI API',
+            medical_record_number: 'RM-999001',
+            gender: 'L',
+            birth_date: '1990-01-01',
+            guarantor_type: 'UMUM',
+            polyclinic: 'Poli Penyakit Dalam',
+            doctor: 'dr. Budi Santoso, Sp.PD',
+            status: 'Menunggu'
+          }],
+          meta: { total: 1, current_page: 1, last_page: 1, per_page: 10, from: 1, to: 1 }
+        }
+      });
+
+      await wrapper.find('.btn-empty-reset').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('BUDI API');
+
+      // Failed updateStatus must NOT navigate
+      examinationService.updateStatus.mockRejectedValueOnce({
+        response: { status: 403, data: { message: 'Akses klinik ditolak' } }
+      });
+      await wrapper.find('.btn-action-exam').trigger('click');
+      await flushPromises();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('shows 404/network error with retry button in ExaminationPatientView and never fakes success when clinical APIs fail', async () => {
+      examinationService.getExamination.mockRejectedValueOnce({
+        response: { status: 404, data: { message: 'Kunjungan 999 tidak ditemukan' } }
+      });
+
+      const wrapper = mount(ExaminationPatientView, {
+        global: { stubs: { Teleport: true } }
+      });
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Gagal Memuat Pasien:');
+      expect(wrapper.text()).toContain('Kunjungan 999 tidak ditemukan');
+      expect(wrapper.find('.btn-retry-patient').exists()).toBe(true);
+
+      // Retry loads valid backend record
+      examinationService.getExamination.mockResolvedValueOnce({
+        data: {
+          data: {
+            id: 901,
+            visit_id: 901,
+            admission_id: 501,
+            patient_id: 42,
+            queue_number: 'A-01',
+            medical_record_number: 'RM-999001',
+            patient_name: 'BUDI API',
+            gender: 'L',
+            birth_date: '1990-01-01',
+            address: 'Jl. Merdeka',
+            guarantor: 'BPJS Kesehatan',
+            guarantor_type: 'BPJS',
+            polyclinic: 'Poli Penyakit Dalam',
+            doctor: 'dr. Budi Santoso, Sp.PD',
+            status: 'Sedang Diperiksa',
+            visit_date: '2026-11-26',
+            visit_history: []
+          }
+        }
+      });
+
+      await wrapper.find('.btn-retry-patient').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('BUDI API');
+
+      // 422 on saveClinical must show failure toast and NOT show success toast
+      const tabs = wrapper.findAll('.clinical-tabs-bar [role="tab"]');
+      await tabs[2].trigger('click');
+      await wrapper.findAll('.tab-dropdown-item')[1].trigger('click');
+      examinationService.saveClinical.mockRejectedValueOnce({
+        response: { status: 422, data: { message: 'Catatan klinis tidak valid' } }
+      });
+      await wrapper.find('.btn-save-dokter').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Gagal Menyimpan Catatan Klinis');
+      expect(wrapper.text()).not.toContain('Catatan Klinis Disimpan');
+
+      // 409 on addDiagnosis must NOT add row into diagnoses table
+      await tabs[3].trigger('click');
+      examinationService.addDiagnosis.mockRejectedValueOnce({
+        response: { status: 409, data: { message: 'Diagnosis duplikat' } }
+      });
+      await wrapper.find('#cari-icd10').setValue('I10');
+      await wrapper.find('.icd10-suggestion-item').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('.icd10-table').text()).toContain('Data Tidak Ada');
+      expect(wrapper.text()).toContain('Diagnosis duplikat');
+
+      // 500 on addProcedure must NOT add row into procedures table
+      await tabs[4].trigger('click');
+      examinationService.addProcedure.mockRejectedValueOnce({
+        response: { status: 500, data: { message: 'Gagal menyimpan tindakan' } }
+      });
+      await wrapper.find('#cari-tindakan').setValue('Konsultasi');
+      await wrapper.find('.proc-suggestion-item').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('.proc-table').text()).toContain('Belum ada tindakan yang dipilih.');
+
+      // Prescription save error does not mark persisted; repeat save skips already-persisted items
+      await tabs[5].trigger('click');
+      await wrapper.findAll('.tab-dropdown-item')[0].trigger('click');
+      await wrapper.find('#cari-obat-resep').trigger('focus');
+      await wrapper.find('#cari-obat-resep').setValue('Paracetamol');
+      await wrapper.find('.resep-suggestion-item').trigger('click');
+
+      examinationService.savePrescription.mockClear();
+      examinationService.savePrescription.mockRejectedValueOnce(new Error('Network Error'));
+      await wrapper.find('.btn-save-resep').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Gagal Menyimpan Resep');
+
+      examinationService.savePrescription.mockResolvedValueOnce({ data: { success: true, data: { id: 88 } } });
+      await wrapper.find('.btn-save-resep').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Data Resep Disimpan');
+      expect(examinationService.savePrescription).toHaveBeenCalledTimes(2);
+
+      // Subsequent save with no new pharmacy items must NOT create duplicate backend prescription
+      await wrapper.find('.btn-save-resep').trigger('click');
+      await flushPromises();
+      expect(examinationService.savePrescription).toHaveBeenCalledTimes(2);
+
+      // Failed updateStatus on completeExamination keeps original status
+      await tabs[7].trigger('click');
+      examinationService.updateStatus.mockRejectedValueOnce({
+        response: { status: 403, data: { message: 'Tidak diizinkan menyelesaikan' } }
+      });
+      await wrapper.find('.btn-complete-exam').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('.exam-status-pill').text()).toBe('Sedang Diperiksa');
+      expect(wrapper.text()).toContain('Gagal Menyelesaikan Pemeriksaan');
     });
   });
 });

@@ -1080,4 +1080,29 @@ describe('Invoice Module Tests', () => {
       expect(emittedItem.subtotal).toBe(55000);
     });
   });
+
+  describe('Invoice Date Formatting via dateFormatters (FE-REF-03B.1)', () => {
+    it('formats YYYY-MM-DD, SQL datetime, month/year boundaries, and handles null/invalid safely', () => {
+      const { formatDateIndo } = useInvoices();
+
+      expect(formatDateIndo('2026-09-12')).toBe('12 Sep 2026');
+      expect(formatDateIndo('2025-12-31')).toBe('31 Des 2025');
+      expect(formatDateIndo('2026-01-01')).toBe('01 Jan 2026');
+      expect(formatDateIndo('2026-11-20 14:30:00')).toBe('20 Nov 2026');
+      expect(formatDateIndo(null)).toBe('-');
+      expect(formatDateIndo(undefined)).toBe('-');
+      expect(formatDateIndo('')).toBe('-');
+      expect(formatDateIndo('2026-02-30')).toBe('2026-02-30');
+      expect(formatDateIndo('invalid-date')).toBe('invalid-date');
+    });
+
+    it('preserves ISO timezone offset instants when formatting timestamps', () => {
+      const { formatDateIndo } = useInvoices();
+      const isoZ = '2026-11-20T02:00:00Z';
+      const d = new Date(isoZ);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      const expected = `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      expect(formatDateIndo(isoZ)).toBe(expected);
+    });
+  });
 });

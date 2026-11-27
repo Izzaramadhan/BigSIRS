@@ -9,7 +9,7 @@ import AdmissionPatientListCard from './components/AdmissionPatientListCard.vue'
 import AdmissionPrintModal from './components/AdmissionPrintModal.vue';
 import AdmissionNewModal from './components/AdmissionNewModal.vue';
 import PatientDetailModal from '@/views/registration/components/PatientDetailModal.vue';
-import { useAdmissions } from '@/composables/useAdmissions';
+import { useGuarantorOptions } from '@/composables/useGuarantorOptions';
 import patientService from '@/services/patient.service';
 import admissionService from '@/services/admission.service';
 import lookupService from '@/services/lookup.service';
@@ -19,24 +19,11 @@ const router = useRouter();
 const route = useRoute();
 
 const {
-  paginatedAdmissions,
-  paginationInfo,
-  pagination,
-  filters,
-  sort,
-  nextQueueNumber,
-  loading: mockLoading,
-  mockPolyclinics,
-  mockDoctors,
-  masterGuarantors,
-  guarantorsLoading,
-  guarantorsError,
-  fetchGuarantors,
-  setSort: mockSetSort,
-  setPage: mockSetPage,
-  setPerPage: mockSetPerPage,
-  deleteAdmission
-} = useAdmissions();
+  guarantors: masterGuarantors,
+  loading: guarantorsLoading,
+  error: guarantorsError,
+  fetchGuarantors
+} = useGuarantorOptions();
 
 // Real API Admissions state
 const realAdmissions = ref([]);
@@ -47,37 +34,77 @@ const realPerPage = ref(10);
 const realFrom = ref(0);
 const realTo = ref(0);
 const realLoading = ref(false);
+const realError = ref('');
+const isSubmittingNew = ref(false);
 const polyclinicsList = ref([]);
 const doctorsList = ref([]);
+const guarantorFilter = ref('all');
+const sort = ref({ key: '', direction: 'asc' });
+let latestLoadAdmissionsSeq = 0;
+
+const classifyAdmissionApiError = (err, fallbackMessage) => {
+  const status = err?.response?.status;
+  if (!err?.response) {
+    return 'Tidak dapat terhubung ke server. Periksa koneksi jaringan Anda.';
+  }
+  if (status === 401 || status === 403) {
+    return err.response?.data?.message || 'Sesi login berakhir atau Anda tidak memiliki akses ke data admisi.';
+  }
+  if (status === 404) {
+    return err.response?.data?.message || 'Data pasien atau admisi tidak ditemukan di server.';
+  }
+  if (status === 422) {
+    const errorsObj = err.response?.data?.errors;
+    const firstFieldMsg = errorsObj ? Object.values(errorsObj).flat()[0] : null;
+    return firstFieldMsg || err.response?.data?.message || 'Parameter permintaan tidak valid.';
+  }
+  return err.response?.data?.message || err.message || fallbackMessage;
+};
 
 const loadAdmissions = async () => {
+  const requestSeq = ++latestLoadAdmissionsSeq;
   realLoading.value = true;
+  realError.value = '';
   try {
     const params = {
       page: realCurrentPage.value,
       per_page: realPerPage.value
     };
-    if (filters.guarantor && filters.guarantor !== 'all') {
-      params.guarantor = filters.guarantor;
+    if (guarantorFilter.value && guarantorFilter.value !== 'all') {
+      params.guarantor = guarantorFilter.value;
+      if (/^\d+$/.test(String(guarantorFilter.value))) {
+        params.guarantor_id = Number(guarantorFilter.value);
+      }
     }
     const res = await admissionService.getAdmissions(params);
-    const data = res.data?.data || [];
-    const meta = res.data?.meta || {};
+    if (requestSeq !== latestLoadAdmissionsSeq) return;
+
+    const data = Array.isArray(res?.data?.data) ? res.data.data : [];
+    const meta = res?.data?.meta || {};
     realAdmissions.value = data;
     realTotal.value = meta.total ?? data.length;
     realCurrentPage.value = meta.current_page ?? realCurrentPage.value;
     realLastPage.value = meta.last_page ?? 1;
     realFrom.value = meta.from ?? (data.length > 0 ? (realCurrentPage.value - 1) * realPerPage.value + 1 : 0);
     realTo.value = meta.to ?? (data.length > 0 ? realFrom.value + data.length - 1 : 0);
-  } catch {
-    realAdmissions.value = paginatedAdmissions.value;
-    realTotal.value = paginationInfo.value.total;
-    realCurrentPage.value = paginationInfo.value.current_page;
-    realLastPage.value = paginationInfo.value.last_page;
-    realFrom.value = paginationInfo.value.from;
-    realTo.value = paginationInfo.value.to;
+  } catch (err) {
+    if (requestSeq !== latestLoadAdmissionsSeq) return;
+    const msg = classifyAdmissionApiError(err, 'Gagal memuat daftar admisi dari server.');
+    realAdmissions.value = [];
+    realTotal.value = 0;
+    realLastPage.value = 1;
+    realFrom.value = 0;
+    realTo.value = 0;
+    realError.value = msg;
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Daftar Admisi',
+      message: msg
+    });
   } finally {
-    realLoading.value = false;
+    if (requestSeq === latestLoadAdmissionsSeq) {
+      realLoading.value = false;
+    }
   }
 };
 
@@ -130,7 +157,7 @@ const handleSearchOldPatient = async (payload) => {
     oldPatientBirthDate.value = payload.birthDate;
   }
 
-  const q = (oldPatientQuery.value || '').trim();
+  const q = (oldPatientQuery.value || '').trim().replace(/\s+/g, ' ');
   const bd = (oldPatientBirthDate.value || '').trim();
 
   if (!q && !bd) {
@@ -202,13 +229,37 @@ const handleResetOldPatientSearch = () => {
   searchValidationError.value = '';
 };
 
-const handleSelectOldPatient = (patient) => {
-  if (patient?.has_unpaid_bills) {
+const handleSelectOldPatient = async (patient) => {
+  if (!patient?.id) return;
+
+  let hasUnpaid = patient.has_unpaid_bills;
+  let unpaidMsg = patient.unpaid_billing_message;
+
+  if (hasUnpaid === undefined) {
+    try {
+      const res = await patientService.getPatient(patient.id);
+      const patData = res?.data?.data || res?.data;
+      if (!patData?.id) {
+        throw new Error('Data pasien tidak valid.');
+      }
+      hasUnpaid = Boolean(patData.has_unpaid_bills);
+      unpaidMsg = patData.unpaid_billing_message;
+    } catch (err) {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Memverifikasi Tagihan',
+        message: classifyAdmissionApiError(err, 'Gagal memverifikasi status pembayaran pasien.')
+      });
+      return;
+    }
+  }
+
+  if (hasUnpaid) {
     showToast({
       type: 'danger',
       title: 'Gagal Admisi',
       message:
-        patient.unpaid_billing_message ||
+        unpaidMsg ||
         'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
     });
     return;
@@ -218,13 +269,22 @@ const handleSelectOldPatient = (patient) => {
 };
 
 const handleViewPatientDetail = async (patient) => {
+  if (!patient?.id) return;
   try {
     const res = await patientService.getPatient(patient.id);
-    detailPatient.value = res.data?.data || patient;
-  } catch {
-    detailPatient.value = patient;
+    const detail = res?.data?.data || res?.data;
+    if (!detail?.id) {
+      throw new Error('Data detail pasien tidak valid.');
+    }
+    detailPatient.value = detail;
+    isPatientDetailOpen.value = true;
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Detail Pasien',
+      message: classifyAdmissionApiError(err, 'Gagal memuat detail pasien dari server.')
+    });
   }
-  isPatientDetailOpen.value = true;
 };
 
 const handleSelectFromDetail = (patient) => {
@@ -238,34 +298,47 @@ const handleRegisterNewPatient = () => {
 
 // Filter Asuransi di Daftar Pasien
 const handleGuarantorChange = (val) => {
-  filters.guarantor = val;
-  pagination.currentPage = 1;
+  guarantorFilter.value = val;
   realCurrentPage.value = 1;
   loadAdmissions();
 };
 
 const handleResetGuarantor = () => {
-  filters.guarantor = 'all';
-  pagination.currentPage = 1;
+  guarantorFilter.value = 'all';
   realCurrentPage.value = 1;
   loadAdmissions();
 };
 
 const handlePageChange = (page) => {
   realCurrentPage.value = page;
-  mockSetPage(page);
   loadAdmissions();
 };
 
 const handlePerPageChange = (perPage) => {
   realPerPage.value = perPage;
-  mockSetPerPage(perPage);
   realCurrentPage.value = 1;
   loadAdmissions();
 };
 
 const handleSort = (key) => {
-  mockSetSort(key);
+  if (sort.value.key === key) {
+    sort.value.direction = sort.value.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    sort.value.key = key;
+    sort.value.direction = 'asc';
+  }
+
+  const fieldMap = {
+    waktu: 'admission_date',
+    nama: 'patient_name',
+    admisi_ke: 'polyclinic',
+    asuransi: 'guarantor_type'
+  };
+  const field = fieldMap[key] || key;
+  realAdmissions.value = [...realAdmissions.value].sort((a, b) => {
+    const cmp = String(a[field] || '').localeCompare(String(b[field] || ''), 'id', { numeric: true });
+    return sort.value.direction === 'asc' ? cmp : -cmp;
+  });
 };
 
 // Table Dropdown (Tools) Action Handlers
@@ -294,21 +367,13 @@ const handleOpenDelete = (item) => {
 };
 
 const handleConfirmDelete = () => {
-  if (!activeAdmission.value) return;
-  const res = deleteAdmission(activeAdmission.value.id);
   isDeleteOpen.value = false;
-  if (res.success) {
-    if (paginatedAdmissions.value.length === 0 && pagination.currentPage > 1) {
-      pagination.currentPage -= 1;
-    }
-    loadAdmissions();
-    showToast({
-      type: 'warning',
-      title: 'Data Admisi Dihapus',
-      message: `Data admisi ${res.item.patient_name} (${res.item.medical_record_number}) telah dihapus dari daftar.`
-    });
-  }
   activeAdmission.value = null;
+  showToast({
+    type: 'warning',
+    title: 'Operasi Tidak Tersedia',
+    message: 'Pembatalan atau penghapusan data admisi belum tersedia pada API backend saat ini.'
+  });
 };
 
 const handleCloseNewModal = () => {
@@ -317,6 +382,8 @@ const handleCloseNewModal = () => {
 };
 
 const handleSubmitNew = async (newRecordData) => {
+  if (isSubmittingNew.value) return;
+
   const patientId = selectedOldPatient.value?.id || newRecordData.patient_id;
   if (!patientId) {
     showToast({
@@ -339,6 +406,7 @@ const handleSubmitNew = async (newRecordData) => {
     return;
   }
 
+  isSubmittingNew.value = true;
   try {
     const payload = {
       patient_id: patientId,
@@ -348,21 +416,28 @@ const handleSubmitNew = async (newRecordData) => {
       notes: newRecordData.notes || '',
       admission_date: newRecordData.admission_date
     };
-    await admissionService.createAdmission(payload);
+    const res = await admissionService.createAdmission(payload);
+    const created = res?.data?.data || res?.data;
+    if (!created?.id) {
+      throw new Error('Server tidak mengembalikan ID admisi yang sah.');
+    }
+
     isNewOpen.value = false;
     selectedOldPatient.value = null;
     await loadAdmissions();
     showToast({
       type: 'success',
       title: 'Admisi Berhasil Didaftarkan',
-      message: `Pasien ${newRecordData.patient_name} berhasil didaftarkan ke ${newRecordData.polyclinic}.`
+      message: `Pasien ${newRecordData.patient_name || created.patient_name || ''} berhasil didaftarkan ke ${created.polyclinic || newRecordData.polyclinic}.`
     });
   } catch (err) {
     showToast({
       type: 'danger',
       title: 'Gagal Menyimpan Admisi',
-      message: err.response?.data?.message || err.message || 'Terjadi kesalahan saat menyimpan data admisi ke database.'
+      message: classifyAdmissionApiError(err, 'Terjadi kesalahan saat menyimpan data admisi ke database.')
     });
+  } finally {
+    isSubmittingNew.value = false;
   }
 };
 
@@ -375,28 +450,33 @@ onMounted(async () => {
   if (patientId) {
     try {
       const res = await patientService.getPatient(patientId);
-      const patientData = res.data?.data;
-      if (patientData) {
-        if (patientData.has_unpaid_bills) {
-          showToast({
-            type: 'danger',
-            title: 'Gagal Admisi',
-            message:
-              patientData.unpaid_billing_message ||
-              'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
-          });
-        } else {
-          selectedOldPatient.value = patientData;
-          isNewOpen.value = true;
-          showToast({
-            type: 'info',
-            title: 'Pasien Siap Diadmisi',
-            message: `Melanjutkan pendaftaran admisi untuk pasien ${patientData.name} (${patientData.medical_record_number}).`
-          });
-        }
+      const patientData = res?.data?.data || res?.data;
+      if (!patientData?.id) {
+        throw new Error('Data pasien tidak ditemukan di server.');
       }
-    } catch {
-      // fallback
+      if (patientData.has_unpaid_bills) {
+        showToast({
+          type: 'danger',
+          title: 'Gagal Admisi',
+          message:
+            patientData.unpaid_billing_message ||
+            'Pasien ini belum lunas pembayaran. Silahkan lakukan pembayaran di Billing. Atau silahkan hubungi petugas jika mengalami kesulitan.'
+        });
+      } else {
+        selectedOldPatient.value = patientData;
+        isNewOpen.value = true;
+        showToast({
+          type: 'info',
+          title: 'Pasien Siap Diadmisi',
+          message: `Melanjutkan pendaftaran admisi untuk pasien ${patientData.name} (${patientData.medical_record_number}).`
+        });
+      }
+    } catch (err) {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Memuat Data Pasien',
+        message: classifyAdmissionApiError(err, 'Gagal memuat pasien dari parameter navigasi.')
+      });
     }
   }
 
@@ -464,17 +544,18 @@ onMounted(async () => {
 
       <!-- Card 2: DAFTAR PASIEN -->
       <AdmissionPatientListCard
-        :admissions="realAdmissions.length > 0 ? realAdmissions : paginatedAdmissions"
-        :total-count="realAdmissions.length > 0 ? realTotal : paginationInfo.total"
-        :current-page="realAdmissions.length > 0 ? realCurrentPage : paginationInfo.current_page"
-        :last-page="realAdmissions.length > 0 ? realLastPage : paginationInfo.last_page"
-        :per-page="realAdmissions.length > 0 ? realPerPage : pagination.perPage"
-        :from="realAdmissions.length > 0 ? realFrom : paginationInfo.from"
-        :to="realAdmissions.length > 0 ? realTo : paginationInfo.to"
-        :guarantor-filter="filters.guarantor"
+        :admissions="realAdmissions"
+        :total-count="realTotal"
+        :current-page="realCurrentPage"
+        :last-page="realLastPage"
+        :per-page="realPerPage"
+        :from="realFrom"
+        :to="realTo"
+        :guarantor-filter="guarantorFilter"
         :sort-key="sort.key"
         :sort-direction="sort.direction"
-        :loading="realLoading || mockLoading"
+        :loading="realLoading"
+        :error="realError"
         :guarantors="masterGuarantors"
         :guarantors-loading="guarantorsLoading"
         :guarantors-error="guarantorsError"
@@ -486,6 +567,7 @@ onMounted(async () => {
         @delete-admission="handleOpenDelete"
         @print-document="handleOpenPrint"
         @reset-filter="handleResetGuarantor"
+        @retry="loadAdmissions"
         @retry-guarantors="fetchGuarantors"
       />
     </div>
@@ -512,10 +594,9 @@ onMounted(async () => {
 
     <AdmissionNewModal
       :is-open="isNewOpen"
-      :polyclinics="polyclinicsList.length > 0 ? polyclinicsList : mockPolyclinics"
-      :doctors="doctorsList.length > 0 ? doctorsList : mockDoctors"
+      :polyclinics="polyclinicsList"
+      :doctors="doctorsList"
       :guarantors="masterGuarantors"
-      :next-queue-number="nextQueueNumber"
       :patient="selectedOldPatient"
       @close="handleCloseNewModal"
       @submit="handleSubmitNew"

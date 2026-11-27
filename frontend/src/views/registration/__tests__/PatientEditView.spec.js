@@ -246,4 +246,36 @@ describe('PatientEditView.vue', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/pendaftaran');
   });
+
+  it('preserves historical patient guarantor without hardcoded fallback when guarantor lookup fails', async () => {
+    guarantorsService.getGuarantors.mockRejectedValueOnce(new Error('Network Error'));
+    patientService.getPatient.mockResolvedValueOnce({
+      data: {
+        data: {
+          ...mockPatientData,
+          guarantor: { id: 99, name: 'Asuransi Arsip Lama', type: 'PRIVATE' }
+        }
+      }
+    });
+
+    const wrapper = mount(PatientEditView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: true
+        }
+      }
+    });
+    await flushPromises();
+
+    const options = wrapper.findAll('select#edit-guarantor option').map((o) => ({
+      value: o.attributes('value'),
+      text: o.text().trim()
+    }));
+
+    expect(options.some((o) => o.value === '99' && o.text === 'Asuransi Arsip Lama')).toBe(true);
+    expect(options.some((o) => o.text === 'BPJS KESEHATAN')).toBe(false);
+    expect(wrapper.find('select#edit-guarantor').element.value).toBe('99');
+    expect(wrapper.text()).toContain('Gagal memuat daftar penjamin dari server.');
+  });
 });

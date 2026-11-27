@@ -51,7 +51,9 @@ const handlePrint = () => {
       <div class="receipt-body">
         <div class="paper-sheet">
           <!-- Watermark -->
-          <div class="watermark-overlay">DEMO / SIMULASI</div>
+          <div class="watermark-overlay">
+            {{ bill.read_only_mode ? 'PRATINJAU TAGIHAN (READ-ONLY)' : 'DEMO / SIMULASI' }}
+          </div>
 
           <!-- Hospital Header -->
           <div class="hospital-head">
@@ -61,7 +63,7 @@ const handlePrint = () => {
             </div>
             <div class="receipt-badge">
               <span class="badge-title">KUITANSI RAWAT JALAN</span>
-              <span class="badge-num font-mono">No: KWT-{{ bill.invoice_number.replace('INV-RJ-', '') }}</span>
+              <span class="badge-num font-mono">No: KWT-{{ String(bill.invoice_number || bill.visit_number || '-').replace('INV-RJ-', '') }}</span>
             </div>
           </div>
 
@@ -102,12 +104,16 @@ const handlePrint = () => {
           <!-- Amount Banner -->
           <div class="amount-banner">
             <div class="amount-box">
-              <span class="amount-label">Jumlah Pembayaran Diterima</span>
+              <span class="amount-label">
+                {{ bill.read_only_mode ? 'Subtotal Tarif Terverifikasi' : 'Jumlah Pembayaran Diterima' }}
+              </span>
               <span class="amount-value font-mono font-bold">
-                {{ formatRupiah(bill.paid_amount || bill.total_amount) }}
+                {{ formatRupiah(bill.read_only_mode ? (bill.verified_subtotal ?? bill.total_amount) : (bill.paid_amount || bill.total_amount)) }}
               </span>
             </div>
-            <div class="status-stamp font-mono">LUNAS</div>
+            <div class="status-stamp font-mono">
+              {{ bill.status === 'Lunas' ? 'LUNAS' : String(bill.status || 'BELUM BAYAR').toUpperCase() }}
+            </div>
           </div>
 
           <!-- Footer Sign -->

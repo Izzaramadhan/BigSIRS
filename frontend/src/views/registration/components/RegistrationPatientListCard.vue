@@ -46,6 +46,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  error: {
+    type: String,
+    default: ''
+  },
   guarantorOptions: {
     type: Array,
     default: () => []
@@ -82,6 +86,7 @@ const emit = defineEmits([
   'delete-admission',
   'print-document',
   'reset-filter',
+  'retry',
   'retry-guarantors'
 ]);
 
@@ -480,6 +485,22 @@ onUnmounted(() => {
               <td v-for="c in 10" :key="c"><div class="skel-bone"></div></td>
             </tr>
           </template>
+
+          <tr v-else-if="error">
+            <td colspan="10" class="empty-cell">
+              <div class="empty-wrapper" role="alert">
+                <h3 class="empty-title text-danger">Gagal memuat data pasien dari server.</h3>
+                <p class="empty-desc">{{ error }}</p>
+                <button
+                  type="button"
+                  class="btn-primary btn-reset-empty"
+                  @click="emit('retry')"
+                >
+                  Muat Ulang
+                </button>
+              </div>
+            </td>
+          </tr>
 
           <tr v-else-if="admissions.length === 0">
             <td colspan="10" class="empty-cell">

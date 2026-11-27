@@ -541,4 +541,116 @@ describe('NewPatientView', () => {
     expect(wrapper.text()).not.toContain('No.Kartu Tidak Sesuai');
     expect(hakKelasInput.element.value).toBe('Kelas 1');
   });
+
+  it('prevents double submit while createPatient is in flight and renders object guarantor name safely', async () => {
+    let resolveCreate;
+    patientService.createPatient.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveCreate = resolve;
+      })
+    );
+
+    const wrapper = mount(NewPatientView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: true
+        }
+      }
+    });
+    await flushPromises();
+
+    await wrapper.find('input#wilayah').setValue('Merdeka');
+    await wrapper.find('input#wilayah').trigger('input');
+    await new Promise((r) => setTimeout(r, 300));
+    await flushPromises();
+    await wrapper.find('.wilayah-row').trigger('click');
+
+    await wrapper.find('input#nik').setValue('3201011111110009');
+    await wrapper.find('input#name').setValue('AYU DOUBLE SUBMIT');
+    await wrapper.find('input#birth_place').setValue('Sleman');
+    await wrapper.find('input#birth_date').setValue('1996-05-10');
+    await wrapper.find('textarea#address').setValue('Jl. Merapi No. 1');
+    await wrapper.find('input#phone').setValue('081234567890');
+    await wrapper.find('select#guarantor').setValue(2);
+
+    // Trigger twice concurrently
+    wrapper.find('form').trigger('submit.prevent');
+    wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(patientService.createPatient).toHaveBeenCalledTimes(1);
+
+    resolveCreate({
+      data: {
+        data: {
+          id: 987,
+          medical_record_number: '000987',
+          name: 'AYU DOUBLE SUBMIT',
+          nik: '3201011111110009',
+          gender: 'L',
+          address: 'Jl. Merapi No. 1',
+          guarantor: { id: 2, name: 'UMUM' }
+        }
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('000987');
+    expect(wrapper.find('.guarantor-pill').text()).toBe('UMUM');
+    expect(wrapper.text()).not.toContain('[object Object]');
+
+    await new Promise((r) => setTimeout(r, 550));
+    expect(mockPush).toHaveBeenCalledWith({
+      path: '/admisi/baru',
+      query: { patient_id: 987 }
+    });
+  });
+
+  it('handles 401/403 and network errors on registration without opening success modal or navigating', async () => {
+    const wrapper = mount(NewPatientView, {
+      global: {
+        stubs: {
+          MasterDataPageHeader: true,
+          AppToast: {
+            template: '<div class="toast-stub">{{ title }}: {{ message }}</div>',
+            props: ['show', 'type', 'title', 'message']
+          }
+        }
+      }
+    });
+    await flushPromises();
+
+    await wrapper.find('input#wilayah').setValue('Merdeka');
+    await wrapper.find('input#wilayah').trigger('input');
+    await new Promise((r) => setTimeout(r, 300));
+    await flushPromises();
+    await wrapper.find('.wilayah-row').trigger('click');
+
+    await wrapper.find('input#nik').setValue('3201011111110010');
+    await wrapper.find('input#name').setValue('TEST GAGAL API');
+    await wrapper.find('input#birth_place').setValue('Sleman');
+    await wrapper.find('input#birth_date').setValue('1996-05-10');
+    await wrapper.find('textarea#address').setValue('Jl. Kaliurang');
+    await wrapper.find('input#phone').setValue('081234567891');
+    await wrapper.find('select#guarantor').setValue(2);
+
+    patientService.createPatient.mockRejectedValueOnce({
+      response: { status: 403, data: { message: 'Akses ditolak.' } }
+    });
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Akses Ditolak: Akses ditolak.');
+    expect(wrapper.text()).not.toContain('Pendaftaran Pasien Berhasil!');
+    expect(mockPush).not.toHaveBeenCalled();
+
+    patientService.createPatient.mockRejectedValueOnce(new Error('Network Error'));
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Koneksi Jaringan Bermasalah');
+    expect(wrapper.text()).not.toContain('Pendaftaran Pasien Berhasil!');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
 });

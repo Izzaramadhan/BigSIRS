@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
-import { calculateAge } from '@/mocks/examinations';
+import { calculateAge } from '@/utils/patientFormatters';
 
 const props = defineProps({
   isOpen: {

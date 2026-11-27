@@ -46,6 +46,7 @@ const guarantorList = ref([]);
 const loadingRegencies = ref(false);
 const loadingDistricts = ref(false);
 const loadingVillages = ref(false);
+const guarantorsError = ref('');
 
 // Form State matching media_1794975712652_0db20492.png
 const form = ref({
@@ -267,6 +268,7 @@ const fetchPatientData = async () => {
 
   isLoading.value = true;
   errors.value = {};
+  guarantorsError.value = '';
 
   try {
     // 1. Load lookups in parallel (Occupations dari Master Data => Data Dasar => Pekerjaan)
@@ -297,14 +299,9 @@ const fetchPatientData = async () => {
     if (guarRes.status === 'fulfilled') {
       const gData = guarRes.value?.data || guarRes.value;
       guarantorList.value = Array.isArray(gData) ? gData : [];
-    }
-
-    // Fallback guarantors if empty
-    if (!guarantorList.value || guarantorList.value.length === 0) {
-      guarantorList.value = [
-        { id: 2, name: 'UMUM' },
-        { id: 3, name: 'BPJS KESEHATAN' }
-      ];
+    } else {
+      guarantorList.value = [];
+      guarantorsError.value = 'Gagal memuat daftar penjamin dari server.';
     }
 
     // 2. Load patient data
@@ -360,8 +357,16 @@ const fetchPatientData = async () => {
     else if (marUpper.includes('KAWIN') || marUpper.includes('MENIKAH')) form.value.marital_status = 'KAWIN';
     else form.value.marital_status = 'BELUM KAWIN';
 
-    // Guarantor
-    form.value.guarantor_id = p.guarantor?.id ? Number(p.guarantor.id) : (p.id_jenis_asuransi || 2);
+    // Guarantor (preserve historical/saved option even if inactive or lookup failed)
+    const savedGuarantorId = p.guarantor?.id ? Number(p.guarantor.id) : (p.id_jenis_asuransi ? Number(p.id_jenis_asuransi) : '');
+    if (savedGuarantorId && !guarantorList.value.some((g) => Number(g.id) === Number(savedGuarantorId))) {
+      guarantorList.value.push({
+        id: Number(savedGuarantorId),
+        name: p.guarantor?.name || p.guarantor?.jenis_asuransi || `Penjamin #${savedGuarantorId}`,
+        type: p.guarantor?.type || ''
+      });
+    }
+    form.value.guarantor_id = savedGuarantorId;
     form.value.insurance_number = p.insurance_number || p.no_bpjs || '';
 
     // Emergency Contact
@@ -405,6 +410,7 @@ const fetchPatientData = async () => {
 
 // Form submission handler
 const handleUpdate = async () => {
+  if (isSubmitting.value) return;
   errors.value = {};
 
   // Basic Validation
@@ -488,7 +494,8 @@ const handleUpdate = async () => {
       router.push('/pendaftaran');
     }, 700);
   } catch (err) {
-    if (err.response?.status === 422 && err.response?.data?.errors) {
+    const status = err?.response?.status;
+    if (status === 422 && err.response?.data?.errors) {
       const respErrors = err.response.data.errors;
       for (const [key, msgs] of Object.entries(respErrors)) {
         errors.value[key] = Array.isArray(msgs) ? msgs[0] : msgs;
@@ -497,6 +504,18 @@ const handleUpdate = async () => {
         type: 'warning',
         title: 'Gagal Validasi',
         message: err.response.data.message || 'Data yang dikirim tidak valid.'
+      });
+    } else if (status === 401 || status === 403) {
+      showToast({
+        type: 'error',
+        title: 'Akses Ditolak',
+        message: err.response?.data?.message || 'Sesi login berakhir atau Anda tidak memiliki izin memperbarui pasien.'
+      });
+    } else if (!err?.response) {
+      showToast({
+        type: 'error',
+        title: 'Koneksi Bermasalah',
+        message: 'Tidak dapat terhubung ke server. Perubahan data pasien belum disimpan.'
       });
     } else {
       showToast({
@@ -1092,11 +1111,13 @@ onMounted(() => {
                       required
                       @change="onGuarantorChange"
                     >
+                      <option value="">-- silahkan pilih --</option>
                       <option v-for="g in guarantorList" :key="g.id" :value="Number(g.id)">
                         {{ g.name || g.jenis_asuransi }}
                       </option>
                     </select>
                   </div>
+                  <span v-if="guarantorsError" class="field-error-text">{{ guarantorsError }}</span>
                   <span v-if="errors.guarantor_id" class="field-error-text">{{ errors.guarantor_id }}</span>
                 </div>
               </div>

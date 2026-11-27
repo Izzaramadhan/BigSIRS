@@ -586,4 +586,43 @@ describe('Penjualan Bebas (OTC) Module Tests', () => {
       expect(wrapper.vm.isFormCollapsed).toBe(false);
     });
   });
+
+  describe('PosSale Date Formatting via dateFormatters (FE-REF-03B.1)', () => {
+    it('formats YYYY-MM-DD, SQL datetime, DD-MM-YYYY passthrough, ISO instant, and null/invalid cleanly', () => {
+      const { formatDateIndo } = usePosSales();
+
+      expect(formatDateIndo('2026-09-12')).toBe('12-09-2026');
+      expect(formatDateIndo('2025-12-31')).toBe('31-12-2025');
+      expect(formatDateIndo('2026-01-01')).toBe('01-01-2026');
+      expect(formatDateIndo('2026-11-20 14:30:00')).toBe('20-11-2026');
+      expect(formatDateIndo('12-09-2026')).toBe('12-09-2026');
+      expect(formatDateIndo(null)).toBe('-');
+      expect(formatDateIndo(undefined)).toBe('-');
+      expect(formatDateIndo('')).toBe('-');
+      expect(formatDateIndo('2026-02-30')).toBe('2026-02-30');
+      expect(formatDateIndo('invalid')).toBe('invalid');
+
+      const isoZ = '2026-11-20T02:00:00Z';
+      const d = new Date(isoZ);
+      const expected = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+      expect(formatDateIndo(isoZ)).toBe(expected);
+    });
+
+    it('renders DD-MM-YYYY consistently in PosSaleTable without shifting date-only strings', () => {
+      const wrapper = mount(PosSaleTable, {
+        props: {
+          items: [
+            { id: 1, transaction_date: '2026-01-01', customer_name: 'Pembeli Umum' },
+            { id: 2, date: '12-09-2026', pembeli: 'Pembeli Pasien' }
+          ],
+          paginationInfo: { current_page: 1, last_page: 1, per_page: 10, total: 2, from: 1, to: 2 },
+          loading: false,
+          search: ''
+        }
+      });
+
+      expect(wrapper.text()).toContain('01-01-2026');
+      expect(wrapper.text()).toContain('12-09-2026');
+    });
+  });
 });

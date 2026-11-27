@@ -1,4 +1,5 @@
 // Formatters dan utilities untuk Modul Billing Rawat Jalan SIMRS BigSIRS
+import { formatDateSlash } from './dateFormatters';
 
 /**
  * Format number to Indonesian Rupiah (e.g. 625000 -> "Rp 625.000")
@@ -19,16 +20,7 @@ export function formatRupiah(amount) {
  * @returns {string}
  */
 export function formatBillingDate(dateStr) {
-  if (!dateStr) return '-';
-  try {
-    const d = new Date(dateStr);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
-  } catch {
-    return dateStr;
-  }
+  return formatDateSlash(dateStr, '-');
 }
 
 /**

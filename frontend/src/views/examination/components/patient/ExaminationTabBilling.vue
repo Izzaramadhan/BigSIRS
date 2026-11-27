@@ -47,61 +47,70 @@ const formatCurrency = (val) => {
   }).format(Number(val) || 0);
 };
 
+const formatCellPrice = (val) => {
+  if (val === null || val === undefined) {
+    return 'Tarif Belum Tersedia';
+  }
+  return formatCurrency(val);
+};
+
+const verifiedPriceOrNull = (val) => {
+  if (val === null || val === undefined || val === '') return null;
+  const num = Number(val);
+  return Number.isFinite(num) && num >= 0 ? num : null;
+};
+
 const billingItems = computed(() => {
-  const items = [
-    {
-      id: 'BILL-ADM',
-      category: 'Administrasi',
-      name: `Registrasi & Jasa Pemeriksaan (${props.patient.polyclinic || 'Poliklinik'})`,
-      qty: 1,
-      unitPrice: 75000,
-      subtotal: 75000
-    }
-  ];
+  const items = [];
 
   props.procedures.forEach((proc) => {
+    const unitPrice = verifiedPriceOrNull(proc.tariff ?? proc.price);
+    const qty = Math.max(1, Number(proc.quantity ?? proc.qty) || 1);
+    const verifiedSubtotal = verifiedPriceOrNull(proc.subtotal);
     items.push({
       id: proc.id,
       category: proc.mode === 'Paket' ? 'Tindakan Paket' : 'Tindakan Medis',
       name: proc.name,
-      qty: proc.quantity || 1,
-      unitPrice: proc.tariff,
-      subtotal: proc.subtotal ?? proc.tariff
+      qty,
+      unitPrice,
+      subtotal: verifiedSubtotal ?? (unitPrice !== null ? unitPrice * qty : null)
     });
   });
 
   (props.orders.pharmacy || []).forEach((rx) => {
-    const unitPrice = Number(rx.price) || 12500;
-    const qty = Math.max(1, Number(rx.qty) || 1);
+    const unitPrice = verifiedPriceOrNull(rx.price);
+    const qty = Math.max(1, Number(rx.qty ?? rx.quantity) || 1);
+    const rxName = rx.name || rx.medicine_name || '-';
     items.push({
       id: rx.id,
       category: rx.mode === 'Paket' ? 'Farmasi / Paket Resep' : 'Farmasi / Obat',
-      name: `${rx.name} (${rx.signa})`,
+      name: rx.signa ? `${rxName} (${rx.signa})` : rxName,
       qty,
       unitPrice,
-      subtotal: qty * unitPrice
+      subtotal: unitPrice !== null ? qty * unitPrice : null
     });
   });
 
   (props.orders.racikan || []).forEach((rck) => {
-    const total = Number(rck.total_price) || 25000;
-    const qty = Math.max(1, Number(rck.qty) || 1);
+    const total = verifiedPriceOrNull(rck.total_price);
+    const qty = Math.max(1, Number(rck.qty ?? rck.quantity) || 1);
     items.push({
       id: rck.id,
       category: 'Obat Racikan',
       name: `${rck.name} (${rck.signa})`,
       qty,
-      unitPrice: Math.round(total / qty),
+      unitPrice: total !== null ? Math.round(total / qty) : null,
       subtotal: total
     });
   });
 
   (props.orders.lab || []).forEach((lab) => {
-    const unitPrice = Number(lab.price) || 95000;
+    const unitPrice = verifiedPriceOrNull(lab.price);
+    const labName = lab.item || lab.name || '-';
     items.push({
       id: lab.id,
       category: 'Laboratorium',
-      name: lab.category ? `${lab.item} (${lab.category})` : lab.item,
+      name: lab.category ? `${labName} (${lab.category})` : labName,
       qty: 1,
       unitPrice,
       subtotal: unitPrice
@@ -109,11 +118,12 @@ const billingItems = computed(() => {
   });
 
   (props.orders.radiology || []).forEach((rad) => {
-    const unitPrice = Number(rad.price) || 165000;
+    const unitPrice = verifiedPriceOrNull(rad.price);
+    const radName = rad.item || rad.name || '-';
     items.push({
       id: rad.id,
       category: 'Radiologi',
-      name: rad.category ? `${rad.item} (${rad.category} - ${rad.note || 'Umum/Residen'})` : rad.item,
+      name: rad.category ? `${radName} (${rad.category} - ${rad.note || 'Umum/Residen'})` : radName,
       qty: 1,
       unitPrice,
       subtotal: unitPrice
@@ -124,7 +134,7 @@ const billingItems = computed(() => {
 });
 
 const totalBill = computed(() => {
-  return billingItems.value.reduce((acc, item) => acc + item.subtotal, 0);
+  return billingItems.value.reduce((acc, item) => acc + (item.subtotal ?? 0), 0);
 });
 </script>
 
@@ -172,13 +182,16 @@ const totalBill = computed(() => {
                     <td><span class="cw-pill">{{ row.category }}</span></td>
                     <td>{{ row.name }}</td>
                     <td class="font-mono">{{ row.qty }}</td>
-                    <td class="font-mono">{{ formatCurrency(row.unitPrice) }}</td>
-                    <td class="font-mono font-bold">{{ formatCurrency(row.subtotal) }}</td>
+                    <td class="font-mono">{{ formatCellPrice(row.unitPrice) }}</td>
+                    <td class="font-mono font-bold">{{ formatCellPrice(row.subtotal) }}</td>
                   </tr>
                 </tbody>
                 <tfoot>
                   <tr class="bill-total-row">
-                    <td colspan="5" class="text-right font-bold">Total Estimasi Tagihan</td>
+                    <td colspan="5" class="text-right font-bold">
+                      Total Estimasi Tagihan
+                      <span class="text-xs font-normal text-slate-500 block">(Hanya menjumlahkan tarif terverifikasi; item tanpa tarif tidak diestimasi)</span>
+                    </td>
                     <td class="font-mono font-bold total-amount">{{ formatCurrency(totalBill) }}</td>
                   </tr>
                 </tfoot>

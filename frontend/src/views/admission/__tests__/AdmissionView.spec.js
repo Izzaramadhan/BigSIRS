@@ -9,6 +9,7 @@ import AdmissionStatsCards from '../components/AdmissionStatsCards.vue';
 import AdmissionQueueCard from '../components/AdmissionQueueCard.vue';
 import { mockAdmissions, mockLoketInfo } from '@/mocks/admissions';
 import { mockPatients } from '@/mocks/patients';
+import admissionService from '@/services/admission.service';
 import lookupService from '@/services/lookup.service';
 
 const mockPush = vi.fn();
@@ -64,7 +65,12 @@ vi.mock('@/services/admission.service', () => ({
     getAdmissions: vi.fn(async (params = {}) => {
       let filtered = [...mockAdmissions];
       if (params.guarantor && params.guarantor !== 'all') {
-        filtered = filtered.filter((a) => a.guarantor_type === params.guarantor);
+        const g = String(params.guarantor).toUpperCase();
+        filtered = filtered.filter((a) => {
+          const ag = String(a.guarantor_type || '').toUpperCase();
+          if (g === 'UMUM') return ag.includes('UMUM') || ag.includes('MANDIRI');
+          return ag === g || ag.includes(g);
+        });
       }
       return {
         data: {
@@ -79,10 +85,60 @@ vi.mock('@/services/admission.service', () => ({
         }
       };
     }),
+    getAdmission: vi.fn(async (id) => ({
+      data: {
+        data: {
+          id: Number(id) || 1,
+          visit_id: 10,
+          admission_date: '2026-11-26',
+          admission_time: '08:00 WIB',
+          patient_id: 1,
+          medical_record_number: '000001',
+          patient_name: 'Bambang Setyadi',
+          nik: '3471011205860001',
+          gender: 'L',
+          birth_place: 'Yogyakarta',
+          birth_date: '1986-05-12',
+          address: 'Jl. Malioboro No. 45',
+          guarantor_id: 99,
+          guarantor: 'Asuransi Arsip',
+          guarantor_type: 'Asuransi Arsip',
+          insurance_number: 'POL-ARSIP-01',
+          referral_source_id: 3,
+          referral_source: 'Datang Sendiri',
+          referral_name: '',
+          visit_type: 'Rawat Jalan',
+          polyclinic_id: 1,
+          polyclinic: 'Poli Umum',
+          doctor_id: 1,
+          doctor: 'dr. Budi Santoso, Sp.PD',
+          case_type: 'Pemeriksaan Kasus Baru',
+          service_status: 'Tidak',
+          can_change_clinic: true,
+          emergency_contact: {
+            name: 'Ratna Dewi',
+            relationship: 'Istri',
+            phone: '081234567899',
+            address: 'Yogyakarta'
+          },
+          notes: ''
+        }
+      }
+    })),
     createAdmission: vi.fn(async (payload) => ({
       data: {
         data: {
           id: 999,
+          visit_id: 1999,
+          ...payload
+        }
+      }
+    })),
+    updateAdmission: vi.fn(async (id, payload) => ({
+      data: {
+        success: true,
+        data: {
+          id: Number(id) || 1,
           ...payload
         }
       }
@@ -90,9 +146,28 @@ vi.mock('@/services/admission.service', () => ({
   }
 }));
 
+vi.mock('@/services/polyclinic', () => ({
+  polyclinicService: {
+    getPolyclinics: vi.fn(async () => ({
+      data: {
+        data: [
+          { id: 1, name: 'Poli Umum' },
+          { id: 2, name: 'Poli Anak' }
+        ]
+      }
+    }))
+  }
+}));
+
 vi.mock('@/services/lookup.service', () => ({
   default: {
-    getGuarantors: vi.fn()
+    getGuarantors: vi.fn(),
+    getDoctors: vi.fn(async () => [{ id: 1, name: 'dr. Budi Santoso, Sp.PD' }]),
+    getDoctorsByPolyclinic: vi.fn(async () => [{ id: 1, name: 'dr. Budi Santoso, Sp.PD' }]),
+    getReferralSources: vi.fn(async () => [
+      { id: 1, name: 'FKT Primer' },
+      { id: 3, name: 'Datang Sendiri' }
+    ])
   }
 }));
 
@@ -109,7 +184,7 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
     lookupService.getGuarantors.mockResolvedValue(mockMasterGuarantors);
   });
 
-  it('renders FORM PENCARIAN PASIEN LAMA and DAFTAR PASIEN with 6 standardized columns', () => {
+  it('renders FORM PENCARIAN PASIEN LAMA and DAFTAR PASIEN with 6 standardized columns', async () => {
     const wrapper = mount(AdmissionView, {
       global: {
         stubs: {
@@ -119,6 +194,7 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
         }
       }
     });
+    await flushPromises();
 
     expect(wrapper.text()).toContain('Admisi Pasien');
     expect(wrapper.text()).toContain('Home');
@@ -318,6 +394,7 @@ describe('AdmissionView (Halaman Awal Admisi Terbaru)', () => {
         }
       }
     });
+    await flushPromises();
 
     await wrapper.find('.btn-tools').trigger('click');
     const editBtn = wrapper.findAll('.dropdown-action-btn')[0];
@@ -460,6 +537,7 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
           }
         }
       });
+      await flushPromises();
 
       await wrapper.find('#edit-referral-name').setValue('Puskesmas Banguntapan I');
       const doctorOptions = wrapper.findAll('#edit-doctor option').filter((opt) => opt.element.value);
@@ -468,13 +546,99 @@ describe('AdmissionEditView (Halaman Edit Data Admisi)', () => {
       }
       await wrapper.find('#edit-family-name').setValue('Sabirin');
       await wrapper.find('form').trigger('submit');
+      await flushPromises();
 
+      expect(admissionService.updateAdmission).toHaveBeenCalled();
       expect(wrapper.text()).toContain('Data Admisi Diperbarui');
       vi.advanceTimersByTime(600);
       expect(mockPush).toHaveBeenCalledWith('/admisi');
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('aborts update without fake success or navigation when updateAdmission fails with server/auth/network error', async () => {
+    mockPush.mockClear();
+    admissionService.updateAdmission.mockRejectedValueOnce({
+      response: { status: 403, data: { message: 'Akses edit admisi ditolak.' } }
+    });
+
+    const wrapper = mount(AdmissionEditView, {
+      global: {
+        stubs: {
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    await wrapper.find('#edit-referral-name').setValue('Puskesmas Uji');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Akses edit admisi ditolak.');
+    expect(wrapper.text()).not.toContain('Data Admisi Diperbarui');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('shows API error alert with retry and never falls back to mockAdmissions when getAdmissions fails in AdmissionView', async () => {
+    admissionService.getAdmissions.mockRejectedValueOnce(new Error('Network Error'));
+
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    const listCard = wrapper.findComponent(AdmissionPatientListCard);
+    expect(listCard.text()).toContain('Gagal memuat data admisi dari server.');
+    expect(listCard.text()).toContain('Tidak dapat terhubung ke server.');
+    expect(listCard.findAll('tbody tr td.col-name').length).toBe(0);
+
+    await listCard.find('button.btn-reset-empty').trigger('click');
+    await flushPromises();
+    expect(listCard.findAll('tbody tr td.col-name').length).toBeGreaterThan(0);
+  });
+
+  it('verifies unpaid billing from API before opening AdmissionNewModal and blocks when check fails', async () => {
+    const patientService = (await import('@/services/patient.service')).default;
+    patientService.searchPatients.mockResolvedValueOnce({
+      data: {
+        data: [
+          {
+            id: 505,
+            name: 'Pasien Tanpa Flag Tagihan',
+            medical_record_number: '000505',
+            nik: '3404011111110505'
+          }
+        ],
+        meta: { total: 1 }
+      }
+    });
+
+    const wrapper = mount(AdmissionView, {
+      global: {
+        stubs: {
+          AppToast: true,
+          Teleport: true
+        }
+      }
+    });
+    await flushPromises();
+
+    await wrapper.find('input#old-patient-query').setValue('Pasien');
+    await wrapper.find('form.old-patient-search-form').trigger('submit.prevent');
+    await flushPromises();
+
+    patientService.getPatient.mockRejectedValueOnce(new Error('Network Error'));
+    await wrapper.find('.btn-admit-patient').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.modal-overlay').exists()).toBe(false);
   });
 
   it('navigates back to /admisi when Batal is clicked', async () => {

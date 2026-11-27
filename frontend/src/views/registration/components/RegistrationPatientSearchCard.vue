@@ -26,6 +26,22 @@ const props = defineProps({
   validationError: {
     type: String,
     default: ''
+  },
+  error: {
+    type: String,
+    default: ''
+  },
+  totalCount: {
+    type: Number,
+    default: null
+  },
+  currentPage: {
+    type: Number,
+    default: 1
+  },
+  lastPage: {
+    type: Number,
+    default: 1
   }
 });
 
@@ -34,6 +50,8 @@ const emit = defineEmits([
   'update:birthDate',
   'search',
   'reset',
+  'retry',
+  'page-change',
   'register-new',
   'open-kyc',
   'view-detail',
@@ -309,11 +327,13 @@ onUnmounted(() => {
 
     <!-- Expandable Search Results Panel -->
     <Transition name="fade">
-      <div v-if="hasSearched" class="search-results-panel">
+      <div v-if="hasSearched || loading || error" class="search-results-panel">
         <div class="results-header-bar">
           <div class="results-title-group">
             <span class="results-heading">Hasil Pencarian Pasien</span>
-            <span class="results-count-pill">Ditemukan {{ results.length }} pasien</span>
+            <span v-if="!loading && !error" class="results-count-pill">
+              Ditemukan {{ totalCount ?? results.length }} pasien
+            </span>
           </div>
           <button type="button" class="btn-close-results" @click="emit('reset')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -324,7 +344,22 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div v-if="results.length > 0" class="results-table-wrap">
+        <div v-if="loading" class="results-loading-state">
+          <span class="btn-spinner results-spinner"></span>
+          <span>Mencari data pasien di server...</span>
+        </div>
+
+        <div v-else-if="error" class="results-error-state" role="alert">
+          <div class="empty-info">
+            <strong>Gagal memuat hasil pencarian pasien.</strong>
+            <span>{{ error }}</span>
+          </div>
+          <button type="button" class="btn-primary btn-retry-search" @click="emit('retry')">
+            Coba Lagi
+          </button>
+        </div>
+
+        <div v-else-if="results.length > 0" class="results-table-wrap">
           <table class="results-table" aria-label="Hasil Pencarian Pasien">
             <thead>
               <tr>
@@ -369,6 +404,30 @@ onUnmounted(() => {
               </tr>
             </tbody>
           </table>
+
+          <div v-if="lastPage > 1" class="results-pagination-bar">
+            <span class="results-page-info">
+              Halaman {{ currentPage }} dari {{ lastPage }}
+            </span>
+            <div class="results-page-actions">
+              <button
+                type="button"
+                class="btn-cancel btn-page-search"
+                :disabled="currentPage <= 1 || loading"
+                @click="emit('page-change', currentPage - 1)"
+              >
+                Sebelumnya
+              </button>
+              <button
+                type="button"
+                class="btn-cancel btn-page-search"
+                :disabled="currentPage >= lastPage || loading"
+                @click="emit('page-change', currentPage + 1)"
+              >
+                Berikutnya
+              </button>
+            </div>
+          </div>
         </div>
 
         <div v-else class="results-empty-state">
@@ -972,7 +1031,9 @@ onUnmounted(() => {
   height: 13px;
 }
 
-.results-empty-state {
+.results-empty-state,
+.results-error-state,
+.results-loading-state {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -980,6 +1041,57 @@ onUnmounted(() => {
   gap: 0.85rem;
   padding: 1.1rem 1.4rem;
   background: #ffffff;
+}
+
+.results-loading-state {
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.results-spinner {
+  border-color: rgba(8, 127, 120, 0.25);
+  border-top-color: var(--color-primary);
+}
+
+.results-error-state {
+  background: var(--color-danger-bg);
+}
+
+.results-error-state .empty-info strong {
+  color: var(--color-danger);
+}
+
+.btn-retry-search {
+  height: 34px;
+  padding: 0 0.85rem;
+  font-size: 0.8rem;
+}
+
+.results-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 1.15rem;
+  border-top: 1px solid var(--color-border-soft);
+  background: #f8fafc;
+}
+
+.results-page-info {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.results-page-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-page-search {
+  height: 30px;
+  padding: 0 0.7rem;
+  font-size: 0.76rem;
 }
 
 .empty-info {

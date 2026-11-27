@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\V1\Examination;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Examination\ExaminationResource;
 use App\Models\Legacy\LegacyClinicalExamination;
+use App\Models\Legacy\LegacyIcd10;
 use App\Models\Legacy\LegacyLabOrder;
 use App\Models\Legacy\LegacyLabOrderDetail;
+use App\Models\Legacy\LegacyMedicalProcedure;
 use App\Models\Legacy\LegacyPatientDiagnosis;
 use App\Models\Legacy\LegacyPatientProcedure;
 use App\Models\Legacy\LegacyPerson;
@@ -20,12 +22,43 @@ use App\Support\LegacyAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class ExaminationController extends Controller
 {
+    /**
+     * Resolve a valid active visit bound to an active admission or abort 404.
+     */
+    protected function findValidVisit(int $id, array $with = []): LegacyVisit
+    {
+        if (!in_array('admission', $with, true)) {
+            $with[] = 'admission';
+        }
+
+        $visit = LegacyVisit::with($with)->findOrFail($id);
+
+        if ((int) $visit->id_admisi <= 0 || !$visit->admission || (string) $visit->admission->status === '0' || (int) ($visit->status ?? 1) === 0) {
+            abort(404, 'Data kunjungan atau admisi pasien tidak valid.');
+        }
+
+        return $visit;
+    }
+
+    /**
+     * Resolve deterministic cache key when idempotency_key is provided.
+     */
+    protected function idempotencyCacheKey(Request $request, string $scope, int $visitId): ?string
+    {
+        $key = trim((string) ($request->input('idempotency_key') ?? $request->header('X-Idempotency-Key') ?? ''));
+        if ($key === '') {
+            return null;
+        }
+
+        return sprintf('exam_idem:%s:%d:%s', $scope, $visitId, sha1($key));
+    }
     /**
      * Display a listing of outpatient examinations.
      */
@@ -62,7 +95,7 @@ class ExaminationController extends Controller
             });
 
         // Search by keyword (Nama Pasien, No. RM, NIK)
-        $term = trim((string) ($request->get('q') ?? $request->get('search') ?? ''));
+        $term = trim((string) preg_replace('/\s+/', ' ', (string) ($request->get('q') ?? $request->get('search') ?? '')));
         if ($term !== '') {
             $like = '%' . mb_strtolower($term, 'UTF-8') . '%';
             $strippedRm = str_replace('-', '', $term);
@@ -105,6 +138,31 @@ class ExaminationController extends Controller
         if ($doctorId = $request->get('doctor_id')) {
             if ($doctorId !== 'all' && $doctorId !== 'Semua Dokter Pemeriksa') {
                 $query->where('id_dokter', $doctorId);
+            }
+        } elseif ($doctor = $request->get('doctor')) {
+            if ($doctor !== 'all' && $doctor !== 'Semua Dokter Pemeriksa') {
+                $docLike = '%' . mb_strtolower(trim((string) $doctor), 'UTF-8') . '%';
+                $query->whereHas('doctor', function ($dq) use ($docLike) {
+                    $dq->whereRaw('LOWER(nama_lengkap) LIKE ?', [$docLike])
+                        ->orWhereHas('person', fn($pq) => $pq->whereRaw('LOWER(nama) LIKE ?', [$docLike]));
+                });
+            }
+        }
+
+        // Filter Guarantor
+        if ($guarantorId = $request->get('guarantor_id')) {
+            if ($guarantorId !== 'all' && $guarantorId !== 'Semua Penjamin') {
+                $query->whereHas('admission', fn($aq) => $aq->where('id_jenis_asuransi', $guarantorId));
+            }
+        } elseif ($guarantor = $request->get('guarantor')) {
+            if ($guarantor !== 'all' && $guarantor !== 'Semua Penjamin') {
+                $query->whereHas('admission.guarantor', function ($gq) use ($guarantor) {
+                    if (strtoupper((string) $guarantor) === 'UMUM') {
+                        $gq->where('type', 'UMUM')->orWhereRaw('LOWER(jenis_asuransi) LIKE ?', ['%umum%']);
+                    } else {
+                        $gq->where('jenis_asuransi', $guarantor);
+                    }
+                });
             }
         }
 
@@ -205,11 +263,7 @@ class ExaminationController extends Controller
             $withDetail[] = 'radiologyOrders.details.item';
         }
 
-        $visit = LegacyVisit::with($withDetail)->findOrFail($id);
-
-        if ($visit->id_admisi <= 0 || !$visit->admission) {
-            abort(404, 'Data kunjungan atau admisi pasien tidak valid.');
-        }
+        $visit = $this->findValidVisit($id, $withDetail);
 
         // Fetch patient's previous visit history
         if ($visit->admission?->id_pasien) {
@@ -251,8 +305,8 @@ class ExaminationController extends Controller
 
                 // Subjective / Complaint
                 $s = '-';
-                if (LegacyAccess::hasTable('trx_pemeriksaan') && $h->relationLoaded('clinicalExamination') && $h->clinicalExamination?->keluhan_utama) {
-                    $s = $h->clinicalExamination->keluhan_utama;
+                if (LegacyAccess::hasTable('trx_pemeriksaan') && $h->relationLoaded('clinicalExamination') && ($h->clinicalExamination?->subjek_keluhan || $h->clinicalExamination?->subjektif || $h->clinicalExamination?->keluhan_utama)) {
+                    $s = $h->clinicalExamination->subjek_keluhan ?? $h->clinicalExamination->subjektif ?? $h->clinicalExamination->keluhan_utama;
                 } elseif ($h->admission?->alasan_datang) {
                     $s = $h->admission->alasan_datang;
                 } elseif ($h->admission?->keterangan) {
@@ -282,8 +336,8 @@ class ExaminationController extends Controller
                 }
                 $primaryDiag = !empty($diagNames) ? $diagNames[0] : ($h->admission?->diagnosa_awal ?? '-');
                 $assessment = '-';
-                if (LegacyAccess::hasTable('trx_pemeriksaan') && $h->relationLoaded('clinicalExamination') && !empty($h->clinicalExamination?->rencana_terapi)) {
-                    $assessment = $h->clinicalExamination->rencana_terapi;
+                if (LegacyAccess::hasTable('trx_pemeriksaan') && $h->relationLoaded('clinicalExamination') && (!empty($h->clinicalExamination?->planning) || !empty($h->clinicalExamination?->rencana_terapi))) {
+                    $assessment = $h->clinicalExamination->planning ?? $h->clinicalExamination->rencana_terapi;
                 } elseif (!empty($diagNames)) {
                     $assessment = implode('; ', $diagNames);
                 }
@@ -351,7 +405,7 @@ class ExaminationController extends Controller
             default => 'Tidak',
         };
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         DB::connection('legacy')->transaction(function () use ($visit, $statusValue, $legacyUserId) {
@@ -364,6 +418,9 @@ class ExaminationController extends Controller
             if ($statusValue === 'Proses' && empty($visit->waktu_mulai_periksa)) {
                 $updates['waktu_mulai_periksa'] = now();
             } elseif ($statusValue === 'Ya') {
+                if (empty($visit->waktu_mulai_periksa)) {
+                    $updates['waktu_mulai_periksa'] = now();
+                }
                 $updates['waktu_selesai_periksa'] = now();
             }
 
@@ -420,39 +477,65 @@ class ExaminationController extends Controller
             'kesadaran' => 'nullable|string',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
-        $systole = (float) ($validated['systole'] ?? $validated['sistole'] ?? 0);
-        $diastole = (float) ($validated['diastole'] ?? 0);
-        $bp = $validated['blood_pressure'] ?? $validated['nilai_tensi'] ?? null;
-        if (($systole === 0.0 || $diastole === 0.0) && !empty($bp)) {
-            $parts = explode('/', $bp);
-            if (count($parts) === 2) {
-                $systole = (float) trim($parts[0]);
-                $diastole = (float) trim($parts[1]);
-            }
-        }
-
-        $vitals = DB::connection('legacy')->transaction(function () use ($visit, $validated, $systole, $diastole, $legacyUserId) {
+        $vitals = DB::connection('legacy')->transaction(function () use ($visit, $validated, $legacyUserId) {
             $vital = LegacyVitalSign::where('id_visit', $visit->id)->first();
+
+            $hasSystole = array_key_exists('systole', $validated) || array_key_exists('sistole', $validated);
+            $hasDiastole = array_key_exists('diastole', $validated);
+            $hasBp = array_key_exists('blood_pressure', $validated) || array_key_exists('nilai_tensi', $validated);
+
+            $systole = $hasSystole
+                ? (float) ($validated['systole'] ?? $validated['sistole'] ?? 0)
+                : (float) ($vital?->sistole ?? 0);
+            $diastole = $hasDiastole
+                ? (float) ($validated['diastole'] ?? 0)
+                : (float) ($vital?->diastole ?? 0);
+            $bp = $hasBp ? ($validated['blood_pressure'] ?? $validated['nilai_tensi'] ?? null) : null;
+            if ((!$hasSystole || !$hasDiastole || $systole === 0.0 || $diastole === 0.0) && !empty($bp)) {
+                $parts = explode('/', (string) $bp);
+                if (count($parts) === 2) {
+                    if (!$hasSystole || $systole === 0.0) {
+                        $systole = (float) trim($parts[0]);
+                    }
+                    if (!$hasDiastole || $diastole === 0.0) {
+                        $diastole = (float) trim($parts[1]);
+                    }
+                }
+            }
+
+            $pickNumeric = function (array $keys, $existing = 0) use ($validated): float {
+                foreach ($keys as $k) {
+                    if (array_key_exists($k, $validated)) {
+                        return (float) ($validated[$k] ?? 0);
+                    }
+                }
+                return (float) ($existing ?? 0);
+            };
+
             $payload = [
                 'id_visit' => $visit->id,
                 'sistole' => $systole,
                 'diastole' => $diastole,
-                'nilai_tensi' => $systole > 0 && $diastole > 0 ? "{$systole}/{$diastole}" : null,
-                'nadi' => (float) ($validated['heart_rate'] ?? $validated['nadi'] ?? $validated['detak_nadi'] ?? 0),
-                'pernafasan' => (float) ($validated['respiratory_rate'] ?? $validated['pernafasan'] ?? $validated['pernapasan'] ?? 0),
-                'suhu' => (float) ($validated['temperature'] ?? $validated['suhu'] ?? $validated['suhu_tubuh'] ?? 0),
-                'spo2' => (float) ($validated['spo2'] ?? $validated['saturasi_o2'] ?? 0),
-                'berat_badan' => (float) ($validated['weight'] ?? $validated['berat_badan'] ?? 0),
-                'tinggi_badan' => (float) ($validated['height'] ?? $validated['tinggi_badan'] ?? 0),
-                'skor_gcs' => isset($validated['gcs']) || isset($validated['skor_gcs'])
-                    ? (float) filter_var($validated['gcs'] ?? $validated['skor_gcs'], FILTER_SANITIZE_NUMBER_INT)
-                    : null,
-                'lingkar_pinggang' => isset($validated['waist_circumference']) || isset($validated['lingkar_pinggang'])
-                    ? (float) ($validated['waist_circumference'] ?? $validated['lingkar_pinggang'])
-                    : null,
+                'nilai_tensi' => $systole > 0 && $diastole > 0 ? "{$systole}/{$diastole}" : ($vital?->nilai_tensi ?? null),
+                'nadi' => $pickNumeric(['heart_rate', 'nadi', 'detak_nadi'], $vital?->nadi ?? 0),
+                'pernafasan' => $pickNumeric(['respiratory_rate', 'pernafasan', 'pernapasan'], $vital?->pernafasan ?? 0),
+                'suhu' => $pickNumeric(['temperature', 'suhu', 'suhu_tubuh'], $vital?->suhu ?? 0),
+                'spo2' => $pickNumeric(['spo2', 'saturasi_o2'], $vital?->spo2 ?? 0),
+                'berat_badan' => $pickNumeric(['weight', 'berat_badan'], $vital?->berat_badan ?? 0),
+                'tinggi_badan' => $pickNumeric(['height', 'tinggi_badan'], $vital?->tinggi_badan ?? 0),
+                'skor_gcs' => (array_key_exists('gcs', $validated) || array_key_exists('skor_gcs', $validated))
+                    ? (($validated['gcs'] ?? $validated['skor_gcs']) !== null && ($validated['gcs'] ?? $validated['skor_gcs']) !== ''
+                        ? (float) filter_var($validated['gcs'] ?? $validated['skor_gcs'], FILTER_SANITIZE_NUMBER_INT)
+                        : null)
+                    : ($vital?->skor_gcs ?? null),
+                'lingkar_pinggang' => (array_key_exists('waist_circumference', $validated) || array_key_exists('lingkar_pinggang', $validated))
+                    ? (($validated['waist_circumference'] ?? $validated['lingkar_pinggang']) !== null && ($validated['waist_circumference'] ?? $validated['lingkar_pinggang']) !== ''
+                        ? (float) ($validated['waist_circumference'] ?? $validated['lingkar_pinggang'])
+                        : null)
+                    : ($vital?->lingkar_pinggang ?? null),
                 'status' => 1,
                 'id_user' => $legacyUserId,
                 'updated_at' => now(),
@@ -503,11 +586,12 @@ class ExaminationController extends Controller
             'physical_chest' => 'nullable|string',
             'physical_abdomen' => 'nullable|string',
             'physical_extremities' => 'nullable|string',
+            'physical_localis' => 'nullable|string',
             'allergy_note' => 'nullable|string',
             'ket_riwayat_alergi_obat_makanan' => 'nullable|string',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id, ['admission.patient']);
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         $exam = DB::connection('legacy')->transaction(function () use ($visit, $validated, $legacyUserId) {
@@ -515,8 +599,10 @@ class ExaminationController extends Controller
             $chiefComplaint = $validated['chief_complaint'] ?? $validated['anamnesa'] ?? null;
             $subjective = $validated['subjective'] ?? $validated['catatan_s'] ?? $validated['subjektif'] ?? null;
             $objective = $validated['objective'] ?? $validated['catatan_o'] ?? $validated['objektif'] ?? null;
+            $assessment = $validated['assessment'] ?? $validated['catatan_a'] ?? null;
             $planning = $validated['plan'] ?? $validated['catatan_p'] ?? $validated['planning'] ?? null;
             $physGen = $validated['physical_general'] ?? $validated['pemeriksaan_fisik'] ?? null;
+            $hasAllergyInput = array_key_exists('allergy_note', $validated) || array_key_exists('ket_riwayat_alergi_obat_makanan', $validated);
             $allergyText = trim((string) ($validated['allergy_note'] ?? $validated['ket_riwayat_alergi_obat_makanan'] ?? ''));
             $hasAllergy = $allergyText !== '' && strtolower($allergyText) !== 'tidak ada' && $allergyText !== '-';
 
@@ -532,12 +618,24 @@ class ExaminationController extends Controller
                 'thorax' => $validated['physical_chest'] ?? ($clinical->thorax ?? null),
                 'abdomen' => $validated['physical_abdomen'] ?? ($clinical->abdomen ?? null),
                 'ekstremitas_all' => $validated['physical_extremities'] ?? ($clinical->ekstremitas_all ?? null),
-                'riwayat_alergi_obat_makanan' => $hasAllergy ? 'Ada' : 'Tidak',
-                'ket_riwayat_alergi_obat_makanan' => $allergyText,
                 'status' => 1,
                 'id_user' => $legacyUserId,
                 'updated_at' => now(),
             ];
+
+            if ($assessment !== null && Schema::connection('legacy')->hasColumn('trx_pemeriksaan', 'ket_diagnosis_mulut')) {
+                $payload['ket_diagnosis_mulut'] = $assessment;
+            }
+            if (array_key_exists('physical_localis', $validated) && Schema::connection('legacy')->hasColumn('trx_pemeriksaan', 'ket_lain')) {
+                $payload['ket_lain'] = $validated['physical_localis'];
+            }
+            if ($hasAllergyInput) {
+                $payload['riwayat_alergi_obat_makanan'] = $hasAllergy ? 'Ada' : 'Tidak';
+                $payload['ket_riwayat_alergi_obat_makanan'] = $allergyText;
+            } elseif (!$clinical) {
+                $payload['riwayat_alergi_obat_makanan'] = 'Tidak';
+                $payload['ket_riwayat_alergi_obat_makanan'] = '';
+            }
 
             if ($clinical) {
                 $clinical->update($payload);
@@ -547,7 +645,7 @@ class ExaminationController extends Controller
             }
 
             // Also synchronize patient master record in ref_pasien if allergy was updated
-            if (isset($validated['allergy_note']) || isset($validated['ket_riwayat_alergi_obat_makanan'])) {
+            if ($hasAllergyInput) {
                 $patient = $visit->admission?->patient;
                 if ($patient) {
                     $patient->update([
@@ -711,13 +809,32 @@ class ExaminationController extends Controller
     public function addDiagnosis(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'diagnosis_id' => 'required|integer',
+            'diagnosis_id' => 'required|integer|min:1',
             'type' => 'nullable|string|in:Primer,Sekunder,Utama',
             'case_type' => 'nullable|string|in:Kasus Baru,Kasus Lama',
             'notes' => 'nullable|string',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
+
+        if (LegacyAccess::hasTable('ref_diagnosa') && !LegacyIcd10::where('id', $validated['diagnosis_id'])->exists()) {
+            return response()->json([
+                'message' => 'Diagnosis ICD-10 tidak ditemukan di master data.',
+                'errors' => ['diagnosis_id' => ['Diagnosis ICD-10 tidak valid atau tidak aktif.']],
+            ], 422);
+        }
+
+        $duplicate = LegacyPatientDiagnosis::where('id_visit', $visit->id)
+            ->where('id_diagnosa', $validated['diagnosis_id'])
+            ->where('status', 1)
+            ->first();
+        if ($duplicate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Diagnosis tersebut sudah tercatat pada kunjungan ini.',
+            ], 409);
+        }
+
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         $category = in_array($validated['type'] ?? '', ['Primer', 'Utama'], true) ? 'Primer' : 'Sekunder';
@@ -761,10 +878,11 @@ class ExaminationController extends Controller
      */
     public function deleteDiagnosis(Request $request, int $id, int $diagnosisId): JsonResponse
     {
-        $diag = LegacyPatientDiagnosis::where('id_visit', $id)->findOrFail($diagnosisId);
+        $visit = $this->findValidVisit($id);
+        $diag = LegacyPatientDiagnosis::where('id_visit', $visit->id)->findOrFail($diagnosisId);
         $diag->update(['status' => 0, 'deleted_at' => now()]);
 
-        $this->logActivity($request, sprintf("Menghapus diagnosis #%d dari visit #%d", $diagnosisId, $id));
+        $this->logActivity($request, sprintf("Menghapus diagnosis #%d dari visit #%d", $diagnosisId, $visit->id));
 
         return response()->json([
             'success' => true,
@@ -778,13 +896,27 @@ class ExaminationController extends Controller
     public function addProcedure(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'procedure_id' => 'required|integer',
+            'procedure_id' => 'required|integer|min:1',
             'qty' => 'nullable|integer|min:1',
             'discount' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
+            'idempotency_key' => 'nullable|string|max:100',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
+
+        if (LegacyAccess::hasTable('ref_tarif_tindakan') && !LegacyMedicalProcedure::where('id', $validated['procedure_id'])->exists()) {
+            return response()->json([
+                'message' => 'Tindakan medis tidak ditemukan di master data.',
+                'errors' => ['procedure_id' => ['Tindakan medis tidak valid atau tidak ditemukan.']],
+            ], 422);
+        }
+
+        $idemKey = $this->idempotencyCacheKey($request, 'procedure', $visit->id);
+        if ($idemKey && Cache::has($idemKey)) {
+            return response()->json(Cache::get($idemKey), 200);
+        }
+
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         $proc = DB::connection('legacy')->transaction(function () use ($visit, $validated, $legacyUserId) {
@@ -812,12 +944,12 @@ class ExaminationController extends Controller
         $discount = (int) $proc->diskon;
         $subtotal = max(0, ($price * $qty) - $discount);
 
-        return response()->json([
+        $body = [
             'success' => true,
             'message' => 'Tindakan berhasil ditambahkan.',
             'data' => [
                 'id' => $proc->id,
-                'procedure_id' => $tariff ? (int) $tariff->id : null,
+                'procedure_id' => $tariff ? (int) $tariff->id : (int) $proc->id_tindakan,
                 'code' => $tariff->kode ?? '',
                 'name' => $tariff->nama ?? '',
                 'price' => $price,
@@ -826,7 +958,13 @@ class ExaminationController extends Controller
                 'subtotal' => $subtotal,
                 'notes' => $proc->keterangan ?? '',
             ]
-        ], 201);
+        ];
+
+        if ($idemKey) {
+            Cache::put($idemKey, $body, now()->addMinutes(5));
+        }
+
+        return response()->json($body, 201);
     }
 
     /**
@@ -834,10 +972,11 @@ class ExaminationController extends Controller
      */
     public function deleteProcedure(Request $request, int $id, int $procedureId): JsonResponse
     {
-        $proc = LegacyPatientProcedure::where('id_visit', $id)->findOrFail($procedureId);
+        $visit = $this->findValidVisit($id);
+        $proc = LegacyPatientProcedure::where('id_visit', $visit->id)->findOrFail($procedureId);
         $proc->update(['status' => 0, 'deleted_at' => now()]);
 
-        $this->logActivity($request, sprintf("Menghapus tindakan #%d dari visit #%d", $procedureId, $id));
+        $this->logActivity($request, sprintf("Menghapus tindakan #%d dari visit #%d", $procedureId, $visit->id));
 
         return response()->json([
             'success' => true,
@@ -857,9 +996,15 @@ class ExaminationController extends Controller
             'items.*.signa' => 'nullable|string',
             'items.*.instruction' => 'nullable|string',
             'items.*.notes' => 'nullable|string',
+            'idempotency_key' => 'nullable|string|max:100',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
+        $idemKey = $this->idempotencyCacheKey($request, 'prescription', $visit->id);
+        if ($idemKey && Cache::has($idemKey)) {
+            return response()->json(Cache::get($idemKey), 200);
+        }
+
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         $prescription = DB::connection('legacy')->transaction(function () use ($visit, $validated, $legacyUserId) {
@@ -893,11 +1038,16 @@ class ExaminationController extends Controller
 
         $this->logActivity($request, sprintf("Menyimpan order resep baru untuk visit ID #%d", $visit->id));
 
-        return response()->json([
+        $body = [
             'success' => true,
             'message' => 'Resep berhasil disimpan.',
             'data' => $prescription
-        ], 201);
+        ];
+        if ($idemKey) {
+            Cache::put($idemKey, $body, now()->addMinutes(5));
+        }
+
+        return response()->json($body, 201);
     }
 
     /**
@@ -910,9 +1060,15 @@ class ExaminationController extends Controller
             'items.*.name' => 'required|string',
             'items.*.item_id' => 'nullable|integer',
             'notes' => 'nullable|string',
+            'idempotency_key' => 'nullable|string|max:100',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
+        $idemKey = $this->idempotencyCacheKey($request, 'lab', $visit->id);
+        if ($idemKey && Cache::has($idemKey)) {
+            return response()->json(Cache::get($idemKey), 200);
+        }
+
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         $lab = DB::connection('legacy')->transaction(function () use ($visit, $validated, $legacyUserId) {
@@ -944,11 +1100,16 @@ class ExaminationController extends Controller
 
         $this->logActivity($request, sprintf("Menyimpan order laboratorium untuk visit ID #%d", $visit->id));
 
-        return response()->json([
+        $body = [
             'success' => true,
             'message' => 'Order laboratorium berhasil disimpan.',
             'data' => $lab
-        ], 201);
+        ];
+        if ($idemKey) {
+            Cache::put($idemKey, $body, now()->addMinutes(5));
+        }
+
+        return response()->json($body, 201);
     }
 
     /**
@@ -961,9 +1122,15 @@ class ExaminationController extends Controller
             'items.*.name' => 'required|string',
             'items.*.item_id' => 'nullable|integer',
             'notes' => 'nullable|string',
+            'idempotency_key' => 'nullable|string|max:100',
         ]);
 
-        $visit = LegacyVisit::findOrFail($id);
+        $visit = $this->findValidVisit($id);
+        $idemKey = $this->idempotencyCacheKey($request, 'radiology', $visit->id);
+        if ($idemKey && Cache::has($idemKey)) {
+            return response()->json(Cache::get($idemKey), 200);
+        }
+
         $legacyUserId = $request->user()?->getLegacyUserId() ?? 103;
 
         $rad = DB::connection('legacy')->transaction(function () use ($visit, $validated, $legacyUserId) {
@@ -994,11 +1161,16 @@ class ExaminationController extends Controller
 
         $this->logActivity($request, sprintf("Menyimpan order radiologi untuk visit ID #%d", $visit->id));
 
-        return response()->json([
+        $body = [
             'success' => true,
             'message' => 'Order radiologi berhasil disimpan.',
             'data' => $rad
-        ], 201);
+        ];
+        if ($idemKey) {
+            Cache::put($idemKey, $body, now()->addMinutes(5));
+        }
+
+        return response()->json($body, 201);
     }
 
     /**

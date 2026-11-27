@@ -56,12 +56,34 @@ class StoreAdmissionRequest extends FormRequest
             $polyclinic = $this->input('polyclinic');
             if (empty($polyclinicId) && empty($polyclinic)) {
                 $validator->errors()->add('polyclinic_id', 'Klinik / Poliklinik tujuan wajib dipilih.');
+            } elseif (!empty($polyclinicId) && LegacyAccess::isAvailable('ref_poliklinik') && LegacyAccess::hasTable('ref_poliklinik')) {
+                $validPoly = DB::connection('legacy')->table('ref_poliklinik')
+                    ->where('id', $polyclinicId)
+                    ->where(function ($q) {
+                        $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
+                    })
+                    ->whereIn('status', [1, '1'])
+                    ->exists();
+                if (!$validPoly) {
+                    $validator->errors()->add('polyclinic_id', 'Poliklinik yang dipilih tidak valid atau nonaktif.');
+                }
             }
 
             $doctorId = $this->input('doctor_id');
             $doctor = $this->input('doctor');
             if (empty($doctorId) && empty($doctor)) {
                 $validator->errors()->add('doctor_id', 'Dokter Klinik wajib dipilih.');
+            } elseif (!empty($doctorId) && LegacyAccess::isAvailable('ref_dokter') && LegacyAccess::hasTable('ref_dokter')) {
+                $validDoctor = DB::connection('legacy')->table('ref_dokter')
+                    ->where('id', $doctorId)
+                    ->where(function ($q) {
+                        $q->whereNull('deleted_at')->orWhere('deleted_at', '0000-00-00 00:00:00');
+                    })
+                    ->whereIn('status', [1, '1'])
+                    ->exists();
+                if (!$validDoctor) {
+                    $validator->errors()->add('doctor_id', 'Dokter yang dipilih tidak valid atau nonaktif.');
+                }
             }
 
             if (!empty($polyclinicId) && !empty($doctorId)) {

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Logistics\StockMutationController;
 use App\Http\Controllers\Api\V1\Logistics\StockOpnameController;
 use App\Http\Controllers\Api\V1\LookupController;
 use App\Http\Controllers\Api\V1\Admission\AdmissionController;
+use App\Http\Controllers\Api\V1\Billing\BillingController;
 use App\Http\Controllers\Api\V1\Examination\ExaminationController;
 use App\Http\Controllers\Api\V1\Registration\PatientController;
 use App\Http\Controllers\Api\V1\MasterData\ActivityTypeController;
@@ -106,6 +107,11 @@ Route::prefix('v1')->group(function () {
             Route::post('{id}/prescriptions', [ExaminationController::class, 'storePrescription'])->whereNumber('id');
             Route::post('{id}/labs', [ExaminationController::class, 'storeLabOrder'])->whereNumber('id');
             Route::post('{id}/radiologies', [ExaminationController::class, 'storeRadiologyOrder'])->whereNumber('id');
+        });
+
+        Route::prefix('billings')->group(function () {
+            Route::get('/', [BillingController::class, 'index']);
+            Route::get('{id}', [BillingController::class, 'show'])->whereNumber('id');
         });
 
         Route::prefix('master-data')->group(function () {

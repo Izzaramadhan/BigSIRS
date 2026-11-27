@@ -22,6 +22,10 @@ const props = defineProps({
   serviceDate: {
     type: String,
     default: ''
+  },
+  readOnlyMode: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -153,7 +157,12 @@ const handleAdd = () => {
         </div>
 
         <div class="cat-field cat-field--btn">
-          <button type="submit" class="btn-add-cat-order">
+          <button
+            type="submit"
+            class="btn-add-cat-order"
+            :disabled="readOnlyMode"
+            :title="readOnlyMode ? 'Mode Baca Saja: penambahan item dinonaktifkan pada Fase 2B.19A' : ''"
+          >
             + Tambah ke Orders
           </button>
         </div>

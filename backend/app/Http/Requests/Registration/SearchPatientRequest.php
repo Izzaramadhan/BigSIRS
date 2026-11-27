@@ -14,9 +14,16 @@ class SearchPatientRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         if ($this->has('q') && is_string($this->input('q'))) {
-            $trimmed = trim($this->input('q'));
+            $normalized = preg_replace('/\s+/u', ' ', trim($this->input('q')));
             $this->merge([
-                'q' => $trimmed === '' ? null : $trimmed,
+                'q' => ($normalized === '' || $normalized === null) ? null : $normalized,
+            ]);
+        }
+
+        if ($this->has('guarantor') && is_string($this->input('guarantor'))) {
+            $trimmedGuarantor = trim($this->input('guarantor'));
+            $this->merge([
+                'guarantor' => $trimmedGuarantor === '' ? null : $trimmedGuarantor,
             ]);
         }
     }

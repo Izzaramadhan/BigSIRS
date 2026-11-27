@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { formatDateLong } from '@/utils/dateFormatters';
 
 const props = defineProps({
   records: {
@@ -53,6 +54,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  error: {
+    type: [String, Object],
+    default: null
   }
 });
 
@@ -69,25 +74,10 @@ const emit = defineEmits([
 
 const perPageOptions = [10, 25, 50, 100];
 
-const longMonthNames = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-];
-
 const internalSearch = computed({
   get: () => props.searchQuery,
   set: (val) => emit('update:searchQuery', val)
 });
-
-const formatDateLong = (isoDate) => {
-  if (!isoDate) return '—';
-  const parts = String(isoDate).split('-');
-  if (parts.length !== 3) return isoDate;
-  const year = parts[0];
-  const monthIdx = Number(parts[1]) - 1;
-  const day = Number(parts[2]);
-  return `${String(day).padStart(2, '0')} ${longMonthNames[monthIdx] || parts[1]} ${year}`;
-};
 
 const formatTimeWithSeconds = (timeStr) => {
   if (!timeStr) return '00:00:00';
@@ -97,7 +87,7 @@ const formatTimeWithSeconds = (timeStr) => {
 };
 
 const formatGuarantor = (val) => {
-  if (!val) return 'UMUM';
+  if (!val) return '—';
   const lower = String(val).toLowerCase();
   if (lower.includes('umum') || lower.includes('tunai') || lower.includes('mandiri')) {
     if (lower.includes('inhealth')) return 'Mandiri Inhealth';
@@ -485,6 +475,27 @@ const pageNumbers = computed(() => {
             </tr>
           </template>
 
+          <tr v-else-if="error">
+            <td colspan="9" class="empty-cell">
+              <div class="empty-wrapper">
+                <div class="empty-icon-circle" style="background: #fee2e2; color: #dc2626;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <h3 class="empty-title" style="color: #b91c1c;">Gagal Memuat Data Tagihan</h3>
+                <p class="empty-desc" style="color: #7f1d1d;">
+                  {{ typeof error === 'string' ? error : (error.message || 'Terjadi kesalahan saat mengambil data billing dari server.') }}
+                </p>
+                <button type="button" class="btn-primary btn-empty-reset btn-retry-billing" @click="emit('search')">
+                  Coba Lagi
+                </button>
+              </div>
+            </td>
+          </tr>
+
           <tr v-else-if="records.length === 0">
             <td colspan="9" class="empty-cell">
               <div class="empty-wrapper">
@@ -520,7 +531,7 @@ const pageNumbers = computed(() => {
               <!-- 3. Waktu -->
               <td class="col-time">
                 <div class="time-cell">
-                  <span class="visit-date">{{ formatDateLong(item.service_date) }}</span>
+                  <span class="visit-date">{{ formatDateLong(item.service_date, { emptyText: '—', padDay: true }) }}</span>
                   <span class="visit-clock font-mono">{{ formatTimeWithSeconds(item.service_time) }}</span>
                 </div>
               </td>

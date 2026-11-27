@@ -62,6 +62,8 @@ const filteredIcd9 = computed(() => {
 const pickIcd10 = (item) => {
   emit('add-diagnosis', {
     id: `DX-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    diagnosis_id: item.diagnosis_id ?? item.id_diagnosa ?? item.id ?? null,
+    id_diagnosa: item.id_diagnosa ?? item.id ?? null,
     code: item.code,
     name: item.name,
     note: '',
@@ -76,6 +78,7 @@ const pickIcd10 = (item) => {
 const pickIcd9 = (item) => {
   emit('add-icd9', {
     id: `ICD9-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    icd9_id: item.icd9_id ?? item.id ?? null,
     code: item.code,
     name: item.name,
     note: ''

@@ -39,7 +39,8 @@ class PatientService
                     ->orWhere('master_person_index.deleted_at', '0000-00-00');
             });
 
-        $term = isset($filters['q']) ? trim((string) $filters['q']) : '';
+        $rawTerm = isset($filters['q']) ? trim((string) $filters['q']) : '';
+        $term = $rawTerm !== '' ? (preg_replace('/\s+/u', ' ', $rawTerm) ?? $rawTerm) : '';
         if ($term !== '') {
             $like = '%' . mb_strtolower($term, 'UTF-8') . '%';
             $strippedRm = str_replace('-', '', $term);
@@ -136,6 +137,11 @@ class PatientService
             ->join('master_person_index', 'master_person_index.id', '=', 'ref_pasien.id_mpi')
             ->with(['person', 'guarantor', 'latestAdmission.latestVisit.polyclinic'])
             ->active()
+            ->where(function (Builder $q) {
+                $q->whereNull('master_person_index.deleted_at')
+                    ->orWhere('master_person_index.deleted_at', '0000-00-00 00:00:00')
+                    ->orWhere('master_person_index.deleted_at', '0000-00-00');
+            })
             ->where('ref_pasien.id', $id)
             ->first();
 

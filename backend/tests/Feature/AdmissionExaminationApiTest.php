@@ -44,6 +44,12 @@ class AdmissionExaminationApiTest extends TestCase
         $schema = Schema::connection('legacy');
 
         foreach ([
+            'trx_rad_detail_pemeriksaan', 'trx_rad', 'ref_item_rad',
+            'trx_lab_detail_pemeriksaan', 'trx_lab', 'ref_item_lab',
+            'trx_resep_detail', 'trx_resep',
+            'trx_tindakan', 'ref_tarif_tindakan',
+            'trx_icd_9', 'ref_icd_9',
+            'trx_diagnosa', 'ref_diagnosa',
             'trx_vital_sign', 'trx_pemeriksaan',
             'log_user', 'ref_asal_rujukan', 'ref_pegawai', 'trx_jadwal_dokter', 'trx_visit', 'trx_admisi', 'ref_pasien', 'ref_dokter', 'ref_poliklinik',
             'ref_jenis_asuransi', 'ref_pendidikan', 'ref_pekerjaan',
@@ -319,6 +325,173 @@ class AdmissionExaminationApiTest extends TestCase
             $table->dateTime('deleted_at')->nullable();
             $table->timestamps();
         });
+
+        $schema->create('ref_diagnosa', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('code', 50);
+            $table->string('code_root', 20)->nullable();
+            $table->string('nama', 255);
+            $table->string('nama_en', 255)->nullable();
+            $table->string('riwayat_penyakit', 5)->default('0');
+            $table->string('status', 5)->default('1');
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('ref_icd_9', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('kode', 50);
+            $table->string('nama', 255);
+            $table->string('kode_inacbg', 50)->nullable();
+            $table->integer('status')->default(1);
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('ref_tarif_tindakan', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('kode', 50)->nullable();
+            $table->string('nama', 255);
+            $table->integer('harga')->default(0);
+            $table->unsignedInteger('id_kategori')->nullable();
+            $table->unsignedInteger('id_jenis_tarif')->nullable();
+            $table->integer('status')->default(1);
+            $table->dateTime('deleted_at')->nullable();
+        });
+
+        $schema->create('ref_item_lab', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('nama', 255);
+            $table->integer('status')->default(1);
+            $table->dateTime('deleted_at')->nullable();
+        });
+
+        $schema->create('ref_item_rad', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('nama', 255);
+            $table->integer('status')->default(1);
+            $table->dateTime('deleted_at')->nullable();
+        });
+
+        $schema->create('trx_diagnosa', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_visit');
+            $table->unsignedInteger('id_diagnosa');
+            $table->string('kategori', 50)->nullable();
+            $table->string('kasus', 50)->nullable();
+            $table->string('group', 50)->nullable();
+            $table->text('catatan')->nullable();
+            $table->integer('status')->default(1);
+            $table->integer('id_user')->nullable();
+            $table->dateTime('create_time_stamp')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_icd_9', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_visit');
+            $table->unsignedInteger('id_icd_9');
+            $table->integer('status')->default(1);
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_tindakan', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_visit');
+            $table->unsignedInteger('id_tindakan');
+            $table->integer('qty')->default(1);
+            $table->integer('diskon')->default(0);
+            $table->text('keterangan')->nullable();
+            $table->string('group', 50)->nullable();
+            $table->integer('status')->default(1);
+            $table->integer('id_user')->nullable();
+            $table->dateTime('create_time_stamp')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_resep', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_visit');
+            $table->unsignedInteger('dokter_pengirim')->nullable();
+            $table->string('status_resep', 50)->default('order');
+            $table->integer('status')->default(1);
+            $table->integer('id_user')->nullable();
+            $table->dateTime('create_time_stamp')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_resep_detail', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_resep');
+            $table->string('nama_obat', 255);
+            $table->integer('jml_item')->default(1);
+            $table->string('id_satuan', 50)->nullable();
+            $table->string('signa', 100)->nullable();
+            $table->string('aturan_pakai', 150)->nullable();
+            $table->text('catatan')->nullable();
+            $table->integer('approve')->default(1);
+            $table->integer('status')->default(1);
+            $table->integer('id_user')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_lab', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_visit');
+            $table->unsignedInteger('dokter_pengirim')->nullable();
+            $table->string('status_pemeriksaan', 50)->default('proses');
+            $table->text('keterangan')->nullable();
+            $table->integer('status')->default(1);
+            $table->integer('id_user')->nullable();
+            $table->dateTime('create_time_stamp')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_lab_detail_pemeriksaan', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_trx_lab');
+            $table->unsignedInteger('id_item_lab')->default(0);
+            $table->string('nama_grup_lab', 255)->nullable();
+            $table->text('hasil')->nullable();
+            $table->text('catatan')->nullable();
+            $table->string('status_pemeriksaan', 50)->default('proses');
+            $table->integer('status')->default(1);
+            $table->integer('id_user')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_rad', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_visit');
+            $table->unsignedInteger('dokter_pengirim')->nullable();
+            $table->string('status_pemeriksaan', 50)->default('proses');
+            $table->text('keterangan')->nullable();
+            $table->string('status', 10)->default('1');
+            $table->integer('id_user')->nullable();
+            $table->dateTime('create_time_stamp')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('trx_rad_detail_pemeriksaan', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('id_trx_rad');
+            $table->unsignedInteger('id_item_rad')->default(0);
+            $table->text('hasil')->nullable();
+            $table->text('catatan')->nullable();
+            $table->text('keterangan')->nullable();
+            $table->string('status', 10)->default('1');
+            $table->integer('id_user')->nullable();
+            $table->dateTime('deleted_at')->nullable();
+            $table->timestamps();
+        });
     }
 
     protected function seedLegacyData(): void
@@ -472,6 +645,20 @@ class AdmissionExaminationApiTest extends TestCase
             'id_user' => 103,
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+
+        $db->table('ref_diagnosa')->insert([
+            ['id' => 1, 'code' => 'I10', 'code_root' => 'I10', 'nama' => 'Essential (primary) hypertension', 'status' => '1', 'deleted_at' => null],
+            ['id' => 2, 'code' => 'J06.9', 'code_root' => 'J06', 'nama' => 'Acute upper respiratory infection', 'status' => '1', 'deleted_at' => null],
+        ]);
+
+        $db->table('ref_icd_9')->insert([
+            ['id' => 1, 'kode' => '89.52', 'nama' => 'Electrocardiogram', 'status' => 1, 'deleted_at' => null],
+        ]);
+
+        $db->table('ref_tarif_tindakan')->insert([
+            ['id' => 1, 'kode' => 'TND-001', 'nama' => 'Konsultasi Dokter Spesialis', 'harga' => 120000, 'status' => 1, 'deleted_at' => null],
+            ['id' => 2, 'kode' => 'TND-002', 'nama' => 'EKG 12-Lead', 'harga' => 85000, 'status' => 1, 'deleted_at' => null],
         ]);
     }
 
@@ -1481,5 +1668,230 @@ class AdmissionExaminationApiTest extends TestCase
             'polyclinic_id' => 1,
             'doctor_id' => 1,
         ])->assertStatus(422)->assertJsonValidationErrors(['guarantor_id']);
+    }
+
+    public function test_admission_index_pagination_filters_and_validation_reject_invalid_references_and_unpaid_billing(): void
+    {
+        // Unauthenticated requests must return 401
+        $this->getJson('/api/v1/admissions')->assertStatus(401);
+        $this->postJson('/api/v1/admissions', [])->assertStatus(401);
+
+        Sanctum::actingAs($this->user);
+
+        // 1. Rejects non-existent patient_id (404), non-existent polyclinic_id (422), and non-existent doctor_id (422)
+        $this->postJson('/api/v1/admissions', [
+            'patient_id' => 999999,
+            'polyclinic_id' => 1,
+            'doctor_id' => 1,
+            'guarantor_id' => 2,
+        ])->assertStatus(404);
+
+        $this->postJson('/api/v1/admissions', [
+            'patient_id' => 1,
+            'polyclinic_id' => 9999,
+            'doctor_id' => 1,
+            'guarantor_id' => 2,
+        ])->assertStatus(422)->assertJsonValidationErrors(['polyclinic_id']);
+
+        $this->postJson('/api/v1/admissions', [
+            'patient_id' => 1,
+            'polyclinic_id' => 1,
+            'doctor_id' => 9999,
+            'guarantor_id' => 2,
+        ])->assertStatus(422)->assertJsonValidationErrors(['doctor_id']);
+
+        // 2. Rejects patient with unpaid billing (cek_lunas_visit = 'belum bayar')
+        DB::connection('legacy')->table('trx_visit')->where('id', 1)->update(['cek_lunas_visit' => 'belum bayar']);
+        $this->postJson('/api/v1/admissions', [
+            'patient_id' => 1,
+            'polyclinic_id' => 1,
+            'doctor_id' => 1,
+            'guarantor_id' => 2,
+        ])->assertStatus(422)->assertJsonValidationErrors(['patient_id']);
+
+        // Clear unpaid billing and create a second admission so pagination can be verified
+        DB::connection('legacy')->table('trx_visit')->update(['cek_lunas_visit' => 'lunas']);
+        $createRes = $this->postJson('/api/v1/admissions', [
+            'patient_id' => 1,
+            'polyclinic_id' => 2,
+            'doctor_id' => 1,
+            'guarantor_id' => 1,
+            'insurance_number' => '000999888777',
+            'notes' => 'Admisi pagination test',
+        ])->assertCreated();
+
+        $newAdmId = (int) $createRes->json('data.id');
+        $newVisitId = (int) $createRes->json('data.visit_id');
+        $this->assertNotSame($newAdmId, 0);
+        $this->assertNotSame($newVisitId, 0);
+
+        // 3. Index pagination and search (whitespace normalized) + filters
+        $page1 = $this->getJson('/api/v1/admissions?per_page=1&page=1&q=' . urlencode('  sUrYo   bRoTo  '));
+        $page1->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 1)
+            ->assertJsonPath('data.0.id', $newAdmId);
+
+        $this->getJson('/api/v1/admissions?polyclinic_id=2&guarantor_id=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $newAdmId)
+            ->assertJsonPath('data.0.polyclinic_id', 2);
+
+        $this->getJson('/api/v1/admissions?q=TIDAKADAZZZ999')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        // 4. Handoff identifier consistency: examination show resolves visit_id and admission_id cleanly
+        $this->getJson("/api/v1/examinations/{$newVisitId}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $newVisitId)
+            ->assertJsonPath('data.visit_id', $newVisitId)
+            ->assertJsonPath('data.admission_id', $newAdmId)
+            ->assertJsonPath('data.patient_id', 1);
+    }
+
+    public function test_examination_clinical_persistence_partial_update_duplicate_protection_and_billing_handoff(): void
+    {
+        // Unauthenticated requests rejected
+        $this->getJson('/api/v1/examinations')->assertStatus(401);
+        $this->getJson('/api/v1/examinations/1')->assertStatus(401);
+
+        Sanctum::actingAs($this->user);
+
+        // 1. Index filtering & pagination
+        $this->getJson('/api/v1/examinations?per_page=1&q=' . urlencode('  sUrYo   bRoTo  ') . '&polyclinic=' . urlencode('Poli Penyakit Dalam'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.visit_id', 1)
+            ->assertJsonPath('data.0.admission_id', 1)
+            ->assertJsonPath('data.0.patient_id', 1)
+            ->assertJsonPath('data.0.billing_status', 'sudah bayar')
+            ->assertJsonPath('meta.total', 1);
+
+        // 2. Non-existent or soft-deleted visit returns 404
+        $this->getJson('/api/v1/examinations/999999')->assertStatus(404);
+        $this->putJson('/api/v1/examinations/999999/status', ['status' => 'Selesai'])->assertStatus(404);
+
+        // 3. Save full vitals then partial vitals update (must NOT wipe sistole/diastole)
+        $this->putJson('/api/v1/examinations/1/vitals', [
+            'systole' => 130,
+            'diastole' => 85,
+            'heart_rate' => 80,
+            'temperature' => 36.5,
+        ])->assertOk();
+
+        $this->putJson('/api/v1/examinations/1/vitals', [
+            'temperature' => 37.2,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('trx_vital_sign', [
+            'id_visit' => 1,
+            'sistole' => 130,
+            'diastole' => 85,
+            'nadi' => 80,
+            'suhu' => 37.2,
+        ], 'legacy');
+
+        // 4. Save allergy then partial clinical save (must NOT wipe saved allergy)
+        $this->putJson('/api/v1/examinations/1/allergies', ['allergy_note' => 'Sulfa'])->assertOk();
+        $this->putJson('/api/v1/examinations/1/clinical', [
+            'chief_complaint' => 'Pusing sejak pagi',
+            'subjective' => 'Sakit kepala berdenyut',
+            'objective' => 'Kesadaran compos mentis',
+            'plan' => 'Terapi analgesik',
+            'physical_general' => 'Tampak sakit ringan',
+            'physical_head' => 'Konjungtiva anemis (-)',
+            'physical_chest' => 'Cor/Pulmo dbn',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('trx_pemeriksaan', [
+            'id_visit' => 1,
+            'subjek_keluhan' => 'Pusing sejak pagi',
+            'kepala' => 'Konjungtiva anemis (-)',
+            'thorax' => 'Cor/Pulmo dbn',
+            'ket_riwayat_alergi_obat_makanan' => 'Sulfa',
+        ], 'legacy');
+
+        // 5. Diagnosis: 422 invalid ID, 201 add, 409 duplicate, 200 delete disappears from reload
+        $this->postJson('/api/v1/examinations/1/diagnoses', ['diagnosis_id' => 9999])->assertStatus(422);
+        $diagRes = $this->postJson('/api/v1/examinations/1/diagnoses', [
+            'diagnosis_id' => 1,
+            'type' => 'Utama',
+            'case_type' => 'Kasus Baru',
+        ])->assertCreated();
+        $diagId = (int) $diagRes->json('data.id');
+
+        $this->postJson('/api/v1/examinations/1/diagnoses', ['diagnosis_id' => 1])->assertStatus(409);
+
+        $diag2Res = $this->postJson('/api/v1/examinations/1/diagnoses', [
+            'diagnosis_id' => 2,
+            'type' => 'Sekunder',
+        ])->assertCreated();
+        $this->deleteJson("/api/v1/examinations/1/diagnoses/" . $diag2Res->json('data.id'))->assertOk();
+
+        // 6. Procedure: 422 invalid ID, idempotency_key prevents duplicate charge, Billing tariff calculated
+        $this->postJson('/api/v1/examinations/1/procedures', ['procedure_id' => 9999])->assertStatus(422);
+        $this->postJson('/api/v1/examinations/1/procedures', [
+            'procedure_id' => 1,
+            'qty' => 2,
+            'discount' => 10000,
+            'idempotency_key' => 'proc-idem-001',
+        ])->assertCreated()
+            ->assertJsonPath('data.price', 120000)
+            ->assertJsonPath('data.subtotal', 230000);
+
+        $this->postJson('/api/v1/examinations/1/procedures', [
+            'procedure_id' => 1,
+            'qty' => 2,
+            'discount' => 10000,
+            'idempotency_key' => 'proc-idem-001',
+        ])->assertOk();
+
+        $this->assertSame(1, DB::connection('legacy')->table('trx_tindakan')->where('id_visit', 1)->count());
+
+        // 7. Prescriptions, Lab & Radiology orders with idempotency_key protection
+        $this->postJson('/api/v1/examinations/1/prescriptions', [
+            'idempotency_key' => 'rx-idem-1',
+            'items' => [['medicine_name' => 'Paracetamol 500 mg', 'quantity' => 10, 'signa' => '3x1']],
+        ])->assertCreated();
+        $this->postJson('/api/v1/examinations/1/prescriptions', [
+            'idempotency_key' => 'rx-idem-1',
+            'items' => [['medicine_name' => 'Paracetamol 500 mg', 'quantity' => 10, 'signa' => '3x1']],
+        ])->assertOk();
+        $this->assertSame(1, DB::connection('legacy')->table('trx_resep')->where('id_visit', 1)->count());
+
+        $this->postJson('/api/v1/examinations/1/labs', [
+            'idempotency_key' => 'lab-idem-1',
+            'items' => [['name' => 'UREUM', 'item_id' => 0]],
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/examinations/1/radiologies', [
+            'idempotency_key' => 'rad-idem-1',
+            'items' => [['name' => 'Panoramik(OPG)', 'item_id' => 0]],
+        ])->assertCreated();
+
+        // 8. Complete status & verify full reload matches all persisted data + Billing handoff context
+        $this->putJson('/api/v1/examinations/1/status', ['status' => 'Selesai'])->assertOk();
+
+        $reload = $this->getJson('/api/v1/examinations/1')->assertOk();
+        $reload->assertJsonPath('data.visit_id', 1)
+            ->assertJsonPath('data.admission_id', 1)
+            ->assertJsonPath('data.patient_id', 1)
+            ->assertJsonPath('data.status', 'Selesai')
+            ->assertJsonPath('data.billing_status', 'sudah bayar')
+            ->assertJsonPath('data.vitals.systole', '130')
+            ->assertJsonPath('data.vitals.temperature', '37.2')
+            ->assertJsonPath('data.physical.head_neck', 'Konjungtiva anemis (-)')
+            ->assertJsonPath('data.physical.thorax', 'Cor/Pulmo dbn')
+            ->assertJsonPath('data.allergy_note', 'Sulfa')
+            ->assertJsonCount(1, 'data.diagnoses')
+            ->assertJsonPath('data.diagnoses.0.id', $diagId)
+            ->assertJsonPath('data.diagnoses.0.code', 'I10')
+            ->assertJsonCount(1, 'data.procedures')
+            ->assertJsonPath('data.procedures.0.subtotal', 230000)
+            ->assertJsonPath('data.prescriptions.0.medicine_name', 'Paracetamol 500 mg')
+            ->assertJsonPath('data.lab_orders.0.name', 'UREUM')
+            ->assertJsonPath('data.radiology_orders.0.name', 'Panoramik(OPG)');
     }
 }

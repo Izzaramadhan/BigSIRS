@@ -924,5 +924,76 @@ class RegistrationPatientApiTest extends TestCase
             'guarantor_id' => 11,
         ])->assertStatus(422)->assertJsonValidationErrors(['guarantor_id']);
     }
+
+    public function test_partial_name_search_ayu_is_case_insensitive_whitespace_normalized_and_finds_newly_registered_patient(): void
+    {
+        // Tanpa autentikasi wajib ditolak 401
+        $this->getJson('/api/v1/patients/search?q=AYU')->assertStatus(401);
+        $this->postJson('/api/v1/patients', [])->assertStatus(401);
+
+        Sanctum::actingAs($this->user);
+
+        // Daftarkan pasien baru dengan nama mengandung AYU dan wilayah lengkap
+        $createRes = $this->postJson('/api/v1/patients', [
+            'nik' => '3404021205980099',
+            'name' => 'SRI AYU LESTARI',
+            'birth_place' => 'Sleman',
+            'birth_date' => '1997-04-12',
+            'gender' => 'P',
+            'address' => 'Jl. Kebon Agung No. 12',
+            'region' => 'SENDANG MULYO — Kec. MINGGIR — KABUPATEN SLEMAN — DI YOGYAKARTA',
+            'province_id' => '34',
+            'regency_id' => '3404',
+            'district_id' => '3404020',
+            'village_id' => '39774',
+            'phone' => '081299988877',
+            'guarantor_id' => 3,
+            'insurance_number' => '0009988776655',
+            'hak_kelas' => 'Kelas 1',
+        ]);
+
+        $createRes->assertCreated();
+        $createdId = (int) $createRes->json('data.id');
+        $createdRm = (string) $createRes->json('data.medical_record_number');
+        $this->assertGreaterThan(0, $createdId);
+        $this->assertNotEmpty($createdRm);
+
+        // Pencarian partial name AYU (huruf besar, kecil, dan spasi ekstra) menemukan pasien baru yang sama tanpa duplikasi
+        foreach (['AYU', 'ayu', '  sRi   aYu  '] as $term) {
+            $searchRes = $this->getJson('/api/v1/patients/search?q=' . urlencode($term));
+            $searchRes->assertOk();
+            $rows = collect($searchRes->json('data'));
+            $matchingIds = $rows->where('id', $createdId)->pluck('id')->all();
+            $this->assertCount(1, $matchingIds, "Query '{$term}' harus mengembalikan tepat 1 baris pasien baru");
+            $this->assertSame('SRI AYU LESTARI', $rows->firstWhere('id', $createdId)['name']);
+        }
+
+        // Pembacaan ulang detail mempertahankan ID, No. RM, penjamin, dan wilayah
+        $this->getJson("/api/v1/patients/{$createdId}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $createdId)
+            ->assertJsonPath('data.medical_record_number', $createdRm)
+            ->assertJsonPath('data.guarantor.id', 3)
+            ->assertJsonPath('data.region.village.id', '39774');
+
+        // Pencarian dengan kata kunci tidak cocok mengembalikan array kosong (bukan error)
+        $this->getJson('/api/v1/patients/search?q=ZZZZTIDAKADA999')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        // Registrasi dengan NIK duplikat ditolak 422 dan tidak menambah baris pasien
+        $countBefore = LegacyPatient::count();
+        $this->postJson('/api/v1/patients', [
+            'nik' => '3404021205980099',
+            'name' => 'DUPLIKAT AYU',
+            'birth_place' => 'Sleman',
+            'birth_date' => '1997-04-12',
+            'gender' => 'P',
+            'address' => 'Jl. Kebon Agung No. 12',
+            'phone' => '081299988877',
+            'guarantor_id' => 2,
+        ])->assertStatus(422)->assertJsonValidationErrors(['nik']);
+        $this->assertSame($countBefore, LegacyPatient::count());
+    }
 }
 

@@ -2,20 +2,20 @@
  * Patient data formatting helpers for SIMRS BigSIRS
  */
 
-const INDO_MONTHS = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-];
+import {
+  parseDateSafe,
+  formatDateLong,
+  formatDateTimeIndo
+} from './dateFormatters';
 
 /**
- * Calculates current age from birthdate string (YYYY-MM-DD)
- * @param {string} birthDateStr 
+ * Calculates current age from birthdate string (YYYY-MM-DD or timestamp)
+ * @param {string|Date} birthDateStr
  * @returns {number}
  */
 export function calculateAge(birthDateStr) {
-  if (!birthDateStr) return 0;
-  const birth = new Date(birthDateStr);
-  if (isNaN(birth.getTime())) return 0;
+  const birth = parseDateSafe(birthDateStr);
+  if (!birth) return 0;
 
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
@@ -30,38 +30,14 @@ export function calculateAge(birthDateStr) {
 
 /**
  * Formats ISO date to Indonesian standard string: "12 Mei 1986"
- * @param {string} dateStr 
+ * @param {string|Date} dateStr
  * @returns {string}
  */
 export function formatDateIndo(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  
-  const day = d.getDate();
-  const month = INDO_MONTHS[d.getMonth()];
-  const year = d.getFullYear();
-  return `${day} ${month} ${year}`;
+  return formatDateLong(dateStr, { emptyText: '—', padDay: false });
 }
 
-/**
- * Formats date-time string to Indonesian standard: "12 Mei 1986 • 14:30 WIB"
- * @param {string} dateTimeStr
- * @returns {string}
- */
-export function formatDateTimeIndo(dateTimeStr) {
-  if (!dateTimeStr) return '—';
-  const cleanStr = String(dateTimeStr).replace(' ', 'T');
-  const d = new Date(cleanStr);
-  if (isNaN(d.getTime())) return dateTimeStr;
-
-  const day = d.getDate();
-  const month = INDO_MONTHS[d.getMonth()];
-  const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day} ${month} ${year} • ${hours}:${minutes} WIB`;
-}
+export { formatDateTimeIndo };
 
 /**
  * Formats birthdate and age: "12 Mei 1986 (40 th)"
@@ -126,10 +102,11 @@ export function formatGenderCode(gender) {
  */
 export function calculateDetailedAge(birthDateStr, referenceDate = new Date()) {
   if (!birthDateStr) return '—';
-  const birth = new Date(birthDateStr);
-  if (isNaN(birth.getTime())) return '—';
+  const birth = parseDateSafe(birthDateStr);
+  if (!birth) return '—';
 
-  const ref = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+  const ref = parseDateSafe(referenceDate);
+  if (!ref) return '—';
 
   let years = ref.getFullYear() - birth.getFullYear();
   let months = ref.getMonth() - birth.getMonth();

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
@@ -8,18 +8,19 @@ import BillingOrderCategoryTab from './components/BillingOrderCategoryTab.vue';
 import BillingReceiptModal from './components/BillingReceiptModal.vue';
 import { useBilling } from '@/composables/useBilling';
 
+const READ_ONLY_ACTION_TITLE = 'Mode Baca Saja (Fase 2B.19A)';
+const READ_ONLY_ACTION_MESSAGE = 'Perubahan item, diskon, dan transaksi pembayaran dinonaktifkan sampai aturan bisnis Fase 2B.19B ditetapkan.';
+
 const route = useRoute();
 const router = useRouter();
 
 const {
-  billingList,
-  mockPolyclinics,
+  polyclinics,
   mockBillingPaymentMethods,
   mockOrderDiscountOptions,
   mockBillingOrderCatalogs,
-  getBillById,
-  getBillOrders,
-  saveBillOrders
+  loadPolyclinics,
+  fetchBillingDetail
 } = useBilling();
 
 const activeTab = ref('orders');
@@ -35,7 +36,10 @@ const tabs = [
 
 const activeBill = ref(null);
 const orderList = ref([]);
+const isLoading = ref(false);
+const loadError = ref(null);
 const isReceiptModalOpen = ref(false);
+let latestLoadSeq = 0;
 
 const toast = ref({
   show: false,
@@ -52,17 +56,43 @@ const closeToast = () => {
   toast.value.show = false;
 };
 
-const loadBillData = () => {
-  const id = route?.params?.id;
-  const found = getBillById(id) || billingList.value[0];
-  if (!found) return;
-  activeBill.value = { ...found };
-  orderList.value = getBillOrders(found.id);
+const loadBillData = async () => {
+  const visitId = route?.params?.id;
+  const seq = ++latestLoadSeq;
+  loadError.value = null;
+
+  if (!visitId) {
+    activeBill.value = null;
+    orderList.value = [];
+    loadError.value = 'Identifier kunjungan (visit_id) tidak tersedia.';
+    return;
+  }
+
+  isLoading.value = true;
+  const res = await fetchBillingDetail(visitId);
+  if (seq !== latestLoadSeq) return;
+  isLoading.value = false;
+
+  if (!res.success || !res.data) {
+    activeBill.value = null;
+    orderList.value = [];
+    loadError.value = res.message || 'Gagal memuat rincian tagihan kunjungan.';
+    return;
+  }
+
+  activeBill.value = { ...res.data };
+  orderList.value = Array.isArray(res.data.items)
+    ? res.data.items.map((item) => ({ ...item }))
+    : [];
 };
 
-loadBillData();
+onMounted(async () => {
+  await Promise.all([loadPolyclinics(), loadBillData()]);
+});
 
-watch(() => route?.params?.id, loadBillData);
+watch(() => route?.params?.id, () => {
+  loadBillData();
+});
 
 const normalizedDefaultPayMethod = computed(() => {
   const raw = String(activeBill.value?.guarantor_type || '').toLowerCase();
@@ -84,160 +114,94 @@ const activeCategoryCatalog = computed(() => {
 const receiptBillSnapshot = computed(() => {
   if (!activeBill.value) return null;
   const totalSum = orderList.value.reduce((acc, item) => {
-    const gross = (Number(item.price) || 0) * (Math.max(1, Number(item.qty) || 1));
+    if (item.price === null || item.price === undefined || item.pricing_status === 'unpriced') {
+      return acc;
+    }
+    const gross = Number(item.price) * (Math.max(1, Number(item.qty) || 1));
     const discPct = Math.min(100, Math.max(0, Number(item.discount_percent) || 0));
     return acc + Math.max(0, Math.round(gross * (1 - discPct / 100)));
   }, 0);
 
   return {
     ...activeBill.value,
-    total_amount: totalSum,
+    read_only_mode: true,
+    total_amount: activeBill.value.verified_subtotal ?? totalSum,
     items: orderList.value.map((ord) => {
-      const gross = (Number(ord.price) || 0) * (Math.max(1, Number(ord.qty) || 1));
+      const hasPrice = ord.price !== null && ord.price !== undefined && ord.pricing_status !== 'unpriced';
+      const qty = Math.max(1, Number(ord.qty) || 1);
       const discPct = Math.min(100, Math.max(0, Number(ord.discount_percent) || 0));
+      const unitPrice = hasPrice ? Number(ord.price) : null;
       return {
         name: ord.name,
         category: ord.jenis,
-        qty: Number(ord.qty) || 1,
-        unit_price: Number(ord.price) || 0,
-        total: Math.max(0, Math.round(gross * (1 - discPct / 100)))
+        qty,
+        unit_price: unitPrice,
+        total: hasPrice ? Math.max(0, Math.round(unitPrice * qty * (1 - discPct / 100))) : null
       };
     })
   };
 });
 
-const persistOrders = (nextOrders, meta = {}) => {
-  if (!activeBill.value) return;
-  const res = saveBillOrders(activeBill.value.id, nextOrders, meta);
-  if (res.success) {
-    orderList.value = res.orders;
-    activeBill.value = { ...res.bill };
-  }
-};
-
-const handleUpdateDiscount = ({ id, discount }) => {
-  const next = orderList.value.map((item) =>
-    item.id === id ? { ...item, discount_percent: discount } : item
-  );
-  persistOrders(next);
-};
-
-const handleRemoveOrder = (id) => {
-  const target = orderList.value.find((item) => item.id === id);
-  const next = orderList.value.filter((item) => item.id !== id);
-  persistOrders(next);
+const notifyReadOnlyBlocked = () => {
   showToast({
     type: 'warning',
-    title: 'Item Order Dihapus',
-    message: target ? `${target.name} dihapus dari daftar order pasien.` : 'Item order dihapus.'
+    title: READ_ONLY_ACTION_TITLE,
+    message: READ_ONLY_ACTION_MESSAGE
   });
 };
 
-const handleAddCategoryOrder = (newItem) => {
-  const created = {
-    id: `${activeBill.value?.id || 'BILL'}-ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    order_date: newItem.order_date,
-    jenis: newItem.jenis,
-    name: newItem.name,
-    qty: newItem.qty,
-    price: newItem.price,
-    discount_percent: 0,
-    status: 'Belum Bayar'
-  };
-  const next = [...orderList.value, created];
-  persistOrders(next);
-  showToast({
-    type: 'success',
-    title: 'Order Ditambahkan',
-    message: `${created.name} (${created.jenis}) berhasil ditambahkan ke LIST ORDERS.`
-  });
+const handleUpdateDiscount = () => {
+  notifyReadOnlyBlocked();
 };
 
-const handleSubmitPayment = (payload) => {
-  if (!payload.selectedIds || payload.selectedIds.length === 0) {
-    showToast({
-      type: 'warning',
-      title: 'Pilih Item Order',
-      message: 'Centang minimal 1 item order terlebih dahulu sebelum menekan Submit.'
-    });
-    return;
-  }
-
-  const selectedSet = new Set(payload.selectedIds);
-  const next = orderList.value.map((item) =>
-    selectedSet.has(item.id) ? { ...item, status: 'Lunas' } : item
-  );
-
-  persistOrders(next, {
-    payment_method: payload.paymentMethod,
-    polyclinic: payload.polyclinic
-  });
-
-  showToast({
-    type: 'success',
-    title: 'Pembayaran Berhasil Diproses',
-    message: `${payload.selectedIds.length} item order untuk ${activeBill.value?.patient_name} berhasil dibayar (${payload.paymentMethod}).`
-  });
+const handleRemoveOrder = () => {
+  notifyReadOnlyBlocked();
 };
 
-const handleCancelPayment = ({ selectedIds }) => {
-  const selectedSet = new Set(selectedIds || []);
-  const paidTargets = orderList.value.filter(
-    (item) => selectedSet.has(item.id) && item.status === 'Lunas'
-  );
+const handleAddCategoryOrder = () => {
+  notifyReadOnlyBlocked();
+};
 
-  if (paidTargets.length === 0) {
-    showToast({
-      type: 'warning',
-      title: 'Tidak Ada Item Terbayar Dipilih',
-      message: 'Centang minimal 1 item order berstatus sudah bayar untuk membatalkan pembayaran.'
-    });
-    return;
-  }
+const handleSubmitPayment = () => {
+  notifyReadOnlyBlocked();
+};
 
-  const next = orderList.value.map((item) =>
-    selectedSet.has(item.id) && item.status === 'Lunas'
-      ? { ...item, status: 'Belum Bayar' }
-      : item
-  );
-  persistOrders(next);
-
-  showToast({
-    type: 'info',
-    title: 'Pembayaran Dibatalkan',
-    message: `${paidTargets.length} item order dikembalikan ke status belum bayar.`
-  });
+const handleCancelPayment = () => {
+  notifyReadOnlyBlocked();
 };
 
 const handlePrintOrder = () => {
+  if (!activeBill.value) return;
   isReceiptModalOpen.value = true;
 };
 
 const handlePrintReceipt = (bill) => {
   isReceiptModalOpen.value = false;
   showToast({
-    type: 'success',
-    title: 'Cetak Kuitansi Billing',
-    message: `Kuitansi ${bill?.invoice_number || ''} untuk ${bill?.patient_name || ''} siap dicetak (Simulasi).`
+    type: 'info',
+    title: 'Pratinjau Kuitansi Billing',
+    message: `Pratinjau tagihan ${bill?.invoice_number || bill?.visit_number || ''} untuk ${bill?.patient_name || ''} dibuka dalam mode baca saja.`
   });
 };
 
 const handleCallPatient = () => {
   if (!activeBill.value) return;
   showToast({
-    type: 'success',
-    title: 'Memanggil Pasien ke Kasir',
-    message: `Nomor antrean ${activeBill.value.queue_number || activeBill.value.visit_number} (${activeBill.value.patient_name}) dipanggil ke Loket Billing.`
+    type: 'info',
+    title: 'Informasi Kunjungan Pasien',
+    message: `Antrean ${activeBill.value.queue_number || activeBill.value.visit_number || '-'} (${activeBill.value.patient_name}) berada pada tampilan rincian tagihan read-only.`
   });
 };
 
-const handleRefreshVisit = () => {
-  loadBillData();
-  showToast({
-    type: 'info',
-    title: 'Data Diperbarui',
-    message: 'Data kunjungan dan daftar order billing pasien dimuat ulang.'
-  });
+const handleRefreshVisit = async () => {
+  await loadBillData();
+  if (!loadError.value) {
+    showToast({
+      type: 'info',
+      title: 'Data Diperbarui',
+      message: 'Rincian tagihan kunjungan dimuat ulang dari backend.'
+    });
+  }
 };
 
 const goBack = () => {
@@ -278,7 +242,24 @@ const goBack = () => {
       </template>
     </MasterDataPageHeader>
 
-    <div v-if="activeBill" class="page-content">
+    <div v-if="isLoading && !activeBill" class="card billing-state-card">
+      <p class="billing-state-text">Memuat rincian tagihan kunjungan dari backend...</p>
+    </div>
+
+    <div v-else-if="loadError" class="card billing-state-card billing-state-card--error" role="alert">
+      <p class="billing-state-title">Gagal Memuat Rincian Tagihan</p>
+      <p class="billing-state-text">{{ loadError }}</p>
+      <div class="billing-state-actions">
+        <button type="button" class="btn-retry-bill" @click="loadBillData">
+          Muat Ulang
+        </button>
+        <button type="button" class="btn-header-back" @click="goBack">
+          Kembali ke Billing
+        </button>
+      </div>
+    </div>
+
+    <div v-else-if="activeBill" class="page-content">
       <!-- Patient Profile Summary + Tabs Header Card -->
       <div class="card patient-banner-card">
         <div class="patient-banner-body">
@@ -389,11 +370,13 @@ const goBack = () => {
         <BillingOrdersTab
           v-if="activeTab === 'orders'"
           :orders="orderList"
-          :polyclinics="mockPolyclinics"
+          :polyclinics="polyclinics"
           :payment-methods="mockBillingPaymentMethods"
           :discount-options="mockOrderDiscountOptions"
           :default-payment-method="normalizedDefaultPayMethod"
           :default-polyclinic="activeBill.polyclinic"
+          :read-only-mode="true"
+          :unpriced-count="activeBill.unpriced_item_count || 0"
           @update-discount="handleUpdateDiscount"
           @remove-order="handleRemoveOrder"
           @submit-payment="handleSubmitPayment"
@@ -410,6 +393,7 @@ const goBack = () => {
           :catalog="activeCategoryCatalog"
           :orders="orderList"
           :service-date="activeBill.service_date"
+          :read-only-mode="true"
           @add-order="handleAddCategoryOrder"
           @remove-order="handleRemoveOrder"
         />
@@ -482,6 +466,48 @@ const goBack = () => {
 .btn-header-back:hover {
   background: #f8fafc;
   border-color: #cbd5e1;
+}
+
+.billing-state-card {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.billing-state-card--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.billing-state-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.billing-state-text {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.billing-state-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-retry-bill {
+  height: 40px;
+  padding: 0 1rem;
+  border-radius: 8px;
+  border: 1px solid #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .btn-header-back svg {

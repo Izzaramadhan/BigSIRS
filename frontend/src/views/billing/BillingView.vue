@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPageHeader.vue';
 import AppToast from '@/components/common/AppToast.vue';
@@ -18,9 +18,12 @@ const {
   pagination,
   sort,
   loading,
+  error,
   paginatedRecords,
   paginationInfo,
-  mockPolyclinics,
+  polyclinics,
+  loadPolyclinics,
+  fetchBillings,
   applyFilters,
   resetFilters,
   setSort,
@@ -30,6 +33,11 @@ const {
   verifyBill,
   settleRemainder
 } = useBilling();
+
+onMounted(() => {
+  loadPolyclinics();
+  fetchBillings();
+});
 
 // Toast notification state
 const toast = ref({
@@ -61,46 +69,62 @@ const isReceiptModalOpen = ref(false);
 const isDetailModalOpen = ref(false);
 
 // Filter actions
-const handleApplySearch = () => {
-  applyFilters();
-  showToast({
-    type: 'success',
-    title: 'Data Tagihan Ditampilkan',
-    message: `Ditemukan ${paginationInfo.value.total} data billing pasien sesuai filter.`
-  });
+const handleApplySearch = async () => {
+  await applyFilters();
+  if (error.value) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Data Tagihan',
+      message: error.value
+    });
+  } else {
+    showToast({
+      type: 'success',
+      title: 'Data Tagihan Ditampilkan',
+      message: `Ditemukan ${paginationInfo.value.total} data billing pasien sesuai filter.`
+    });
+  }
 };
 
-const handleResetFilter = () => {
-  resetFilters();
-  showToast({
-    type: 'info',
-    title: 'Filter Direset',
-    message: 'Kriteria pencarian, periode tanggal, status bayar, klinik, dan jaminan telah direset.'
-  });
+const handleResetFilter = async () => {
+  await resetFilters();
+  if (error.value) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Ulang Data',
+      message: error.value
+    });
+  } else {
+    showToast({
+      type: 'info',
+      title: 'Filter Direset',
+      message: 'Kriteria pencarian, periode tanggal, status bayar, klinik, dan jaminan telah direset.'
+    });
+  }
 };
 
 // Table Row Action 1 (+): Buka Halaman Billing Order Pasien
 const handleOpenBill = (bill) => {
+  const visitId = bill?.visit_id || bill?.id;
+  if (!visitId) {
+    showToast({
+      type: 'danger',
+      title: 'Kunjungan Tidak Valid',
+      message: 'Identifier kunjungan (visit_id) tagihan tidak ditemukan.'
+    });
+    return;
+  }
+
   if (router) {
     router.push({
       name: 'clinical.billing-order',
-      params: { id: bill.id }
+      params: { id: visitId }
     });
     return;
   }
 
   activeBill.value = bill;
-  if (bill.status === 'Dibayar Sebagian' && bill.remaining_balance > 0) {
-    isSettleMode.value = true;
-    isPaymentModalOpen.value = true;
-  } else if (bill.remaining_balance > 0) {
-    isSettleMode.value = false;
-    isPaymentModalOpen.value = true;
-  } else if (bill.status === 'Menunggu Verifikasi') {
-    isVerifyModalOpen.value = true;
-  } else {
-    isDetailModalOpen.value = true;
-  }
+  isDetailModalOpen.value = true;
 };
 
 // Table Row Action 2 (Speaker): Panggil Antrean Kasir
@@ -118,33 +142,29 @@ const handleConfirmPayment = ({ billId, amount, method }) => {
     : processPayment(billId, { amount, method });
   isPaymentModalOpen.value = false;
 
-  if (res.success) {
-    showToast({
-      type: 'success',
-      title: 'Pembayaran Berhasil Diproses',
-      message: `Tagihan ${res.bill.invoice_number} a.n ${res.bill.patient_name} berhasil diperbarui (${res.bill.status}).`
-    });
-  }
+  showToast({
+    type: 'warning',
+    title: 'Mode Baca Saja (Fase 2B.19A)',
+    message: res.message || 'Transaksi pembayaran menunggu pengesahan aturan bisnis Fase 2B.19B.'
+  });
 };
 
 const handleConfirmVerify = (billId) => {
   const res = verifyBill(billId);
   isVerifyModalOpen.value = false;
-  if (res.success) {
-    showToast({
-      type: 'success',
-      title: 'Dokumen Klaim Terverifikasi',
-      message: `Tagihan ${res.bill.invoice_number} telah diverifikasi dan siap diproses.`
-    });
-  }
+  showToast({
+    type: 'warning',
+    title: 'Mode Baca Saja (Fase 2B.19A)',
+    message: res.message || 'Verifikasi klaim menunggu pengesahan aturan bisnis Fase 2B.19B.'
+  });
 };
 
 const handlePrintReceipt = (bill) => {
   isReceiptModalOpen.value = false;
   showToast({
-    type: 'success',
-    title: 'Cetak Kuitansi Kasir',
-    message: `Kuitansi ${bill.invoice_number} untuk ${bill.patient_name} berhasil diproses (Simulasi).`
+    type: 'info',
+    title: 'Pratinjau Tagihan Read-Only',
+    message: `Pratinjau rincian tagihan ${bill?.visit_number || ''} a.n ${bill?.patient_name || ''} dibuka (bukan kuitansi pelunasan resmi).`
   });
 };
 </script>
@@ -183,10 +203,11 @@ const handlePrintReceipt = (bill) => {
         :from="paginationInfo.from"
         :to="paginationInfo.to"
         :filters="filters"
-        :polyclinics="mockPolyclinics"
+        :polyclinics="polyclinics"
         :sort-key="sort.key"
         :sort-direction="sort.direction"
         :loading="loading"
+        :error="error"
         @update:perPage="setPerPage"
         @page-change="setPage"
         @sort="setSort"

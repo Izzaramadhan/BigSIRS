@@ -1,5 +1,6 @@
 import { ref, reactive, computed, onMounted, getCurrentInstance } from 'vue';
 import goodsIssuesService from '@/services/logistics/goodsIssues.service';
+import { formatDateDMY } from '@/utils/dateFormatters';
 
 export function useGoodsIssues() {
   const issues = ref([]);
@@ -425,17 +426,10 @@ export function useGoodsIssues() {
 
   // Format Date to DD-MM-YYYY
   const formatDateIndo = (dateStr) => {
-    if (!dateStr) return '-';
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}-${month}-${year}`;
-    } catch {
-      return dateStr;
+    if (typeof dateStr === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(dateStr.trim())) {
+      return dateStr.trim();
     }
+    return formatDateDMY(dateStr, '-');
   };
 
   // Format Currency to Rupiah

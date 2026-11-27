@@ -1,6 +1,4 @@
 <script setup>
-import { calculateAge } from '@/mocks/examinations';
-
 const props = defineProps({
   isOpen: {
     type: Boolean,

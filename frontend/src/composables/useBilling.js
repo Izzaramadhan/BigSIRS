@@ -1,8 +1,7 @@
 import { ref, computed, reactive } from 'vue';
+import { billingService } from '@/services/billing.service';
+import { polyclinicService } from '@/services/polyclinic';
 import {
-  generateMockBillingRecords,
-  buildDefaultBillingOrders,
-  mockPolyclinics,
   mockDoctors,
   mockGuarantorOptions,
   mockPeriodOptions,
@@ -10,32 +9,23 @@ import {
   mockPaymentMethods,
   mockBillingPaymentMethods,
   mockOrderDiscountOptions,
-  mockBillingOrderCatalogs,
-  mockCashierShift
+  mockBillingOrderCatalogs
 } from '@/mocks/billing';
 
-// Frontend-only session state shared between BillingView and BillingOrderView
-const sessionBillingOrders = reactive({});
-const sessionBillingOverrides = reactive({});
-
 export function useBilling() {
-  // All billing records in reactive local state (hydrated with session edits if any)
-  const initialRecords = generateMockBillingRecords().map((item) => {
-    const override = sessionBillingOverrides[String(item.id)];
-    return override ? { ...item, ...override } : item;
-  });
-  const billingList = ref(initialRecords);
+  // Billing records loaded strictly from backend API
+  const billingList = ref([]);
+  const polyclinicsList = ref([]);
+  const polyclinicsError = ref(null);
 
   // Search input query
   const searchQuery = ref('');
 
-  const todayStr = new Date().toISOString().split('T')[0];
-
   // Dropdown multi-filters
   const filters = reactive({
-    period: 'today',
-    customStartDate: todayStr,
-    customEndDate: todayStr,
+    period: 'all',
+    customStartDate: '',
+    customEndDate: '',
     polyclinic: 'Semua Poliklinik',
     doctor: 'Semua Dokter DPJP',
     guarantor: 'Semua Jenis Penjamin',
@@ -49,189 +39,190 @@ export function useBilling() {
     direction: 'asc'
   });
 
-  // Active quick filter chip ('all', 'ready_cashier', 'verify_bpjs', 'general_today', 'tariff_adjustment')
+  // Active quick filter chip
   const activeQuickFilter = ref('all');
 
-  // Pagination state
+  // Pagination state (driven by backend metadata)
   const pagination = reactive({
     currentPage: 1,
-    perPage: 10
+    perPage: 10,
+    total: 0,
+    lastPage: 1,
+    from: 0,
+    to: 0
   });
 
-  // Selected row IDs for batch actions
+  // Selected row IDs for display selection
   const selectedRowIds = ref(new Set());
 
   // UI state
   const loading = ref(false);
   const error = ref(null);
+  let latestFetchSeq = 0;
 
-  // Cashier shift data
-  const cashierShift = reactive({ ...mockCashierShift });
+  const cashierShift = reactive({
+    shift_number: 1,
+    cashier_name: '-',
+    time_range: '-',
+    total_income: 0,
+    yesterday_income: 0,
+    growth_percentage: '0%'
+  });
 
-  // 5 Card Statistics dynamically calculated
+  const extractBillingErrorMessage = (err, fallback) => {
+    const status = err?.response?.status;
+    if (status === 401 || status === 403) {
+      return err.response?.data?.message || 'Sesi tidak sah atau akses data billing ditolak.';
+    }
+    if (status === 404) {
+      return err.response?.data?.message || 'Data tagihan kunjungan tidak ditemukan di database.';
+    }
+    if (!err?.response) {
+      return 'Gagal terhubung ke server backend saat memuat data billing.';
+    }
+    return err.response?.data?.message || err.message || fallback;
+  };
+
+  const loadPolyclinics = async () => {
+    polyclinicsError.value = null;
+    try {
+      const res = await polyclinicService.getPolyclinics({ per_page: 100 });
+      const data = res.data?.data || res.data;
+      if (Array.isArray(data)) {
+        const names = data.map((p) => p.name || p.nama || p.nama_poliklinik).filter(Boolean);
+        polyclinicsList.value = Array.from(new Set(names));
+      } else {
+        polyclinicsList.value = [];
+      }
+    } catch (err) {
+      polyclinicsError.value = extractBillingErrorMessage(err, 'Gagal memuat daftar poliklinik.');
+      polyclinicsList.value = [];
+    }
+  };
+
+  const fetchBillings = async () => {
+    const seq = ++latestFetchSeq;
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const params = {
+        page: pagination.currentPage,
+        per_page: pagination.perPage
+      };
+
+      if (searchQuery.value && searchQuery.value.trim() !== '') {
+        params.q = searchQuery.value.trim();
+      }
+      if (filters.customStartDate) {
+        params.date_from = filters.customStartDate;
+      }
+      if (filters.customEndDate) {
+        params.date_to = filters.customEndDate;
+      }
+      if (filters.polyclinic && filters.polyclinic !== 'Semua Poliklinik') {
+        params.polyclinic = filters.polyclinic;
+      }
+      if (filters.guarantor && filters.guarantor !== 'Semua Jenis Penjamin') {
+        params.guarantor = filters.guarantor;
+      }
+      if (filters.status && filters.status !== 'Semua') {
+        params.status = filters.status;
+      }
+      if (sort.key) {
+        params.sort_by = sort.key;
+        params.sort_direction = sort.direction;
+      }
+
+      const response = await billingService.getBillings(params);
+      if (seq !== latestFetchSeq) return;
+
+      const resData = response.data;
+      const items = Array.isArray(resData?.data) ? resData.data : (Array.isArray(resData) ? resData : []);
+      billingList.value = items;
+
+      const meta = resData?.meta;
+      if (meta) {
+        pagination.total = meta.total ?? items.length;
+        pagination.lastPage = meta.last_page ?? 1;
+        pagination.from = meta.from ?? (items.length > 0 ? 1 : 0);
+        pagination.to = meta.to ?? items.length;
+        pagination.currentPage = meta.current_page ?? pagination.currentPage;
+      } else {
+        pagination.total = items.length;
+        pagination.lastPage = 1;
+        pagination.from = items.length > 0 ? 1 : 0;
+        pagination.to = items.length;
+      }
+    } catch (err) {
+      if (seq !== latestFetchSeq) return;
+      error.value = extractBillingErrorMessage(err, 'Gagal memuat data billing pasien dari backend.');
+      billingList.value = [];
+      pagination.total = 0;
+      pagination.lastPage = 1;
+      pagination.from = 0;
+      pagination.to = 0;
+    } finally {
+      if (seq === latestFetchSeq) {
+        loading.value = false;
+      }
+    }
+  };
+
+  // Statistics derived honestly from loaded backend records (never hardcoded fallback numbers)
   const statistics = computed(() => {
     const list = billingList.value;
-
     const waitingVerify = list.filter((b) => b.status === 'Menunggu Verifikasi');
-    const waitingCount = waitingVerify.length;
-    const inhealthClaims = waitingVerify.filter((b) => b.guarantor_type.includes('Inhealth')).length;
-    const bpjsClaims = waitingVerify.filter((b) => b.guarantor_type.includes('BPJS')).length;
-
-    const readyToPay = list.filter((b) => b.status === 'Siap Dibayar');
-    const readyCount = readyToPay.length;
-    const elderlyReady = readyToPay.filter((b) => b.priority === 'Lansia').length;
-    const cashEdcReady = readyCount - elderlyReady;
-
+    const readyToPay = list.filter((b) => b.status === 'Siap Dibayar' || b.status === 'Belum Bayar');
     const paidList = list.filter((b) => b.status === 'Lunas');
-    const paidCount = paidList.length;
-
     const pendingList = list.filter((b) => b.status === 'Dibayar Sebagian' || b.status === 'Belum Lengkap');
-    const pendingCount = pendingList.length;
-    const totalExcess = pendingList.reduce((acc, curr) => acc + (curr.patient_responsibility || 0), 0) || 3420000;
+    const totalProcessed = paidList.length + readyToPay.length + pendingList.length + waitingVerify.length;
+    const ratio = totalProcessed > 0 ? ((paidList.length / totalProcessed) * 100).toFixed(1).replace('.', ',') : '0';
 
     return {
-      waiting: waitingCount,
-      inhealthClaims: inhealthClaims || 4,
-      bpjsClaims: bpjsClaims || 14,
-      ready: readyCount,
-      elderlyReady: elderlyReady || 6,
-      cashEdcReady: cashEdcReady || 18,
-      paid: paidCount,
-      completionRatio: '91,2%',
-      pending: pendingCount,
-      totalExcess: totalExcess,
-      todayIncome: cashierShift.total_income,
-      yesterdayIncome: cashierShift.yesterday_income,
-      growth: cashierShift.growth_percentage
+      waiting: waitingVerify.length,
+      inhealthClaims: waitingVerify.filter((b) => String(b.guarantor_type || '').includes('Inhealth')).length,
+      bpjsClaims: waitingVerify.filter((b) => String(b.guarantor_type || '').includes('BPJS')).length,
+      ready: readyToPay.length,
+      elderlyReady: readyToPay.filter((b) => b.priority === 'Lansia').length,
+      cashEdcReady: readyToPay.filter((b) => b.priority !== 'Lansia').length,
+      paid: paidList.length,
+      completionRatio: `${ratio}%`,
+      pending: pendingList.length,
+      totalExcess: pendingList.reduce((acc, curr) => acc + (Number(curr.remaining_balance) || 0), 0),
+      todayIncome: paidList.reduce((acc, curr) => acc + (Number(curr.paid_amount) || 0), 0),
+      yesterdayIncome: 0,
+      growth: '0%'
     };
   });
 
-  // Quick filter counts
+  // Quick filter counts derived from loaded records
   const quickFilterCounts = computed(() => {
     const list = billingList.value;
     return {
-      all: list.length,
-      ready_cashier: list.filter((b) => b.status === 'Siap Dibayar').length,
+      all: pagination.total || list.length,
+      ready_cashier: list.filter((b) => b.status === 'Siap Dibayar' || b.status === 'Belum Bayar').length,
       verify_bpjs: list.filter((b) => b.status === 'Menunggu Verifikasi').length,
-      general_today: list.filter((b) => b.guarantor_type.includes('Umum')).length,
-      tariff_adjustment: list.filter((b) => b.needs_tariff_adjustment).length
+      general_today: list.filter((b) => String(b.guarantor_type || '').toUpperCase().includes('UMUM')).length,
+      tariff_adjustment: list.filter((b) => Number(b.unpriced_item_count || 0) > 0).length
     };
   });
 
-  // Filtered billing records
   const filteredRecords = computed(() => {
     let result = [...billingList.value];
-
-    // 1. Text Search (RM, NIK, Nama Pasien, No Kunjungan, No Tagihan)
-    if (searchQuery.value && searchQuery.value.trim() !== '') {
-      const q = searchQuery.value.toLowerCase().trim();
-      result = result.filter((item) => {
-        const matchName = item.patient_name.toLowerCase().includes(q);
-        const matchRM = item.medical_record_number.toLowerCase().includes(q);
-        const matchNik = item.nik.toLowerCase().includes(q);
-        const matchVisit = item.visit_number.toLowerCase().includes(q);
-        const matchInvoice = item.invoice_number.toLowerCase().includes(q);
-        return matchName || matchRM || matchNik || matchVisit || matchInvoice;
-      });
-    }
-
-    // 1.5. Periode Tanggal (Start - End)
-    if (filters.customStartDate) {
-      result = result.filter((item) => !item.service_date || item.service_date >= filters.customStartDate);
-    }
-    if (filters.customEndDate) {
-      result = result.filter((item) => !item.service_date || item.service_date <= filters.customEndDate);
-    }
-
-    // 2. Dropdown Filters
-    if (filters.polyclinic && filters.polyclinic !== 'Semua Poliklinik') {
-      result = result.filter((item) => item.polyclinic === filters.polyclinic);
-    }
-
-    if (filters.doctor && filters.doctor !== 'Semua Dokter DPJP') {
-      result = result.filter((item) => item.doctor === filters.doctor);
-    }
-
-    if (filters.guarantor && filters.guarantor !== 'Semua Jenis Penjamin') {
-      result = result.filter((item) => {
-        if (filters.guarantor === 'BPJS Kesehatan') {
-          return item.guarantor_type.includes('BPJS');
-        } else if (filters.guarantor === 'Pasien Umum') {
-          return item.guarantor_type.includes('Umum');
-        } else if (filters.guarantor === 'Mandiri Inhealth') {
-          return item.guarantor_type.includes('Inhealth');
-        } else if (filters.guarantor === 'Asuransi Lainnya') {
-          return item.guarantor_type.includes('Asuransi') || item.guarantor_type.includes('Inhealth');
-        }
-        return item.guarantor_type === filters.guarantor;
-      });
-    }
-
-    if (filters.status && filters.status !== 'Semua') {
-      if (filters.status === 'Belum Bayar') {
-        result = result.filter(
-          (item) =>
-            item.status === 'Siap Dibayar' ||
-            item.status === 'Menunggu Verifikasi' ||
-            item.status === 'Belum Lengkap'
-        );
-      } else {
-        result = result.filter((item) => item.status === filters.status);
-      }
-    }
-
-    if (filters.paymentMethod && filters.paymentMethod !== 'Semua') {
-      result = result.filter((item) => item.payment_method === filters.paymentMethod);
-    }
-
-    // 3. Quick Filter Segmented Chips
     if (activeQuickFilter.value === 'ready_cashier') {
-      result = result.filter((item) => item.status === 'Siap Dibayar');
+      result = result.filter((item) => item.status === 'Siap Dibayar' || item.status === 'Belum Bayar');
     } else if (activeQuickFilter.value === 'verify_bpjs') {
       result = result.filter((item) => item.status === 'Menunggu Verifikasi');
     } else if (activeQuickFilter.value === 'general_today') {
-      result = result.filter((item) => item.guarantor_type.includes('Umum'));
+      result = result.filter((item) => String(item.guarantor_type || '').toUpperCase().includes('UMUM'));
     } else if (activeQuickFilter.value === 'tariff_adjustment') {
-      result = result.filter((item) => item.needs_tariff_adjustment);
+      result = result.filter((item) => Number(item.unpriced_item_count || 0) > 0);
     }
-
-    if (sort.key) {
-      const dir = sort.direction === 'asc' ? 1 : -1;
-      result.sort((a, b) => {
-        let valA = '';
-        let valB = '';
-        if (sort.key === 'antrian') {
-          valA = (a.queue_number || '').toLowerCase();
-          valB = (b.queue_number || '').toLowerCase();
-        } else if (sort.key === 'waktu') {
-          valA = `${a.service_date || ''} ${a.service_time || ''}`;
-          valB = `${b.service_date || ''} ${b.service_time || ''}`;
-        } else if (sort.key === 'nama') {
-          valA = (a.patient_name || '').toLowerCase();
-          valB = (b.patient_name || '').toLowerCase();
-        } else if (sort.key === 'klinik') {
-          valA = (a.polyclinic || '').toLowerCase();
-          valB = (b.polyclinic || '').toLowerCase();
-        } else if (sort.key === 'exam_status') {
-          valA = (a.exam_status || '').toLowerCase();
-          valB = (b.exam_status || '').toLowerCase();
-        } else if (sort.key === 'pharmacy_status') {
-          valA = (a.pharmacy_status || '').toLowerCase();
-          valB = (b.pharmacy_status || '').toLowerCase();
-        } else if (sort.key === 'payment_status') {
-          valA = (a.status || '').toLowerCase();
-          valB = (b.status || '').toLowerCase();
-        }
-        if (valA < valB) return -1 * dir;
-        if (valA > valB) return 1 * dir;
-        return 0;
-      });
-    }
-
     return result;
   });
 
-  const setSort = (key) => {
+  const setSort = async (key) => {
     if (sort.key === key) {
       if (sort.direction === 'asc') {
         sort.direction = 'desc';
@@ -244,33 +235,22 @@ export function useBilling() {
       sort.direction = 'asc';
     }
     pagination.currentPage = 1;
+    await fetchBillings();
   };
 
-  // Paginated records
-  const paginatedRecords = computed(() => {
-    const start = (pagination.currentPage - 1) * pagination.perPage;
-    return filteredRecords.value.slice(start, start + pagination.perPage);
-  });
+  // Paginated records from API
+  const paginatedRecords = computed(() => filteredRecords.value);
 
-  // Subtotal for currently visible page
   const pageSubtotal = computed(() => {
-    return paginatedRecords.value.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
+    return paginatedRecords.value.reduce((acc, curr) => acc + (Number(curr.verified_subtotal ?? curr.total_amount) || 0), 0);
   });
 
-  // Pagination details and count info
-  const paginationInfo = computed(() => {
-    const total = filteredRecords.value.length;
-    const lastPage = Math.ceil(total / pagination.perPage) || 1;
-    const from = total === 0 ? 0 : (pagination.currentPage - 1) * pagination.perPage + 1;
-    const to = Math.min(pagination.currentPage * pagination.perPage, total);
-
-    return {
-      total,
-      last_page: lastPage,
-      from,
-      to
-    };
-  });
+  const paginationInfo = computed(() => ({
+    total: pagination.total,
+    last_page: pagination.lastPage,
+    from: pagination.from,
+    to: pagination.to
+  }));
 
   // Selection Checkbox Logic
   const areAllVisibleSelected = computed(() => {
@@ -304,19 +284,16 @@ export function useBilling() {
   };
 
   // Actions
-  const applyFilters = () => {
+  const applyFilters = async () => {
     pagination.currentPage = 1;
-    loading.value = true;
-    setTimeout(() => {
-      loading.value = false;
-    }, 200);
+    await fetchBillings();
   };
 
-  const resetFilters = () => {
+  const resetFilters = async () => {
     searchQuery.value = '';
-    filters.period = 'today';
-    filters.customStartDate = todayStr;
-    filters.customEndDate = todayStr;
+    filters.period = 'all';
+    filters.customStartDate = '';
+    filters.customEndDate = '';
     filters.polyclinic = 'Semua Poliklinik';
     filters.doctor = 'Semua Dokter DPJP';
     filters.guarantor = 'Semua Jenis Penjamin';
@@ -325,10 +302,7 @@ export function useBilling() {
     activeQuickFilter.value = 'all';
     pagination.currentPage = 1;
     selectedRowIds.value.clear();
-    loading.value = true;
-    setTimeout(() => {
-      loading.value = false;
-    }, 200);
+    await fetchBillings();
   };
 
   const setQuickFilter = (key) => {
@@ -336,179 +310,61 @@ export function useBilling() {
     pagination.currentPage = 1;
   };
 
-  const setPage = (page) => {
+  const setPage = async (page) => {
     if (page >= 1 && page <= paginationInfo.value.last_page) {
       pagination.currentPage = page;
+      await fetchBillings();
     }
   };
 
-  const setPerPage = (num) => {
+  const setPerPage = async (num) => {
     pagination.perPage = Number(num);
     pagination.currentPage = 1;
+    await fetchBillings();
   };
 
-  const refreshData = () => {
-    loading.value = true;
-    error.value = null;
+  const refreshData = async () => {
     selectedRowIds.value.clear();
-    setTimeout(() => {
-      billingList.value = generateMockBillingRecords();
-      pagination.currentPage = 1;
-      loading.value = false;
-    }, 300);
+    pagination.currentPage = 1;
+    await fetchBillings();
   };
 
-  // Cashier Action: Bayar (Process Payment)
-  const processPayment = (billId, { amount, method }) => {
-    const bill = billingList.value.find((b) => b.id === billId);
-    if (!bill) return { success: false };
+  const READ_ONLY_MSG = 'Fitur pembayaran, verifikasi klaim, dan perubahan status lunas dinonaktifkan pada Fase 2B.19A (menunggu aturan bisnis Fase 2B.19B).';
 
-    const paymentVal = Number(amount) || bill.remaining_balance;
-    bill.paid_amount += paymentVal;
-    bill.remaining_balance = Math.max(0, bill.patient_responsibility - bill.paid_amount);
-    bill.payment_method = method || 'Tunai';
+  // Read-only stubs (never mutate billing or status into Lunas locally)
+  const processPayment = () => ({ success: false, disabled: true, message: READ_ONLY_MSG });
+  const verifyBill = () => ({ success: false, disabled: true, message: READ_ONLY_MSG });
+  const settleRemainder = () => ({ success: false, disabled: true, message: READ_ONLY_MSG });
+  const notifyClinic = () => ({ success: false, disabled: true, message: READ_ONLY_MSG });
+  const saveBillOrders = () => ({ success: false, disabled: true, message: READ_ONLY_MSG });
 
-    if (bill.remaining_balance === 0) {
-      bill.status = 'Lunas';
-      bill.patient_note = 'Lunas';
-    } else {
-      bill.status = 'Dibayar Sebagian';
-      bill.patient_note = 'Sisa Pelunasan';
+  const fetchBillingDetail = async (visitId) => {
+    if (!visitId) {
+      return { success: false, status: 400, message: 'Identifier kunjungan (visit_id) tidak valid.' };
     }
-
-    return {
-      success: true,
-      bill,
-      receiptNumber: `KWT-${bill.invoice_number.replace('INV-RJ-', '')}`
-    };
-  };
-
-  // Cashier Action: Verifikasi
-  const verifyBill = (billId) => {
-    const bill = billingList.value.find((b) => b.id === billId);
-    if (!bill) return { success: false };
-
-    bill.status = 'Siap Dibayar';
-    bill.sep_status = 'SEP Terverifikasi';
-    if (bill.guarantor_amount >= bill.total_amount) {
-      bill.patient_note = '100% Ditanggung (Siap Cetak)';
-    } else {
-      bill.patient_note = 'Menunggu Kasir';
+    try {
+      const res = await billingService.getBilling(visitId);
+      const record = res.data?.data || res.data;
+      if (!record || !record.visit_id) {
+        return { success: false, status: 404, message: 'Data tagihan kunjungan tidak ditemukan di database.' };
+      }
+      return { success: true, data: record };
+    } catch (err) {
+      return {
+        success: false,
+        status: err?.response?.status ?? null,
+        message: extractBillingErrorMessage(err, 'Gagal memuat rincian tagihan kunjungan.')
+      };
     }
-
-    return { success: true, bill };
   };
 
-  // Cashier Action: Lunasi
-  const settleRemainder = (billId, method = 'Tunai') => {
-    const bill = billingList.value.find((b) => b.id === billId);
-    if (!bill) return { success: false };
-
-    bill.paid_amount = bill.patient_responsibility;
-    bill.remaining_balance = 0;
-    bill.payment_method = method;
-    bill.status = 'Lunas';
-    bill.patient_note = 'Lunas';
-
-    return { success: true, bill };
+  const getBillById = (visitId) => {
+    return billingList.value.find((b) => String(b.visit_id || b.id) === String(visitId || '')) || null;
   };
 
-  // Cashier Action: Notif Poli
-  const notifyClinic = (billId, notes = '') => {
-    const bill = billingList.value.find((b) => b.id === billId);
-    if (!bill) return { success: false };
-
-    return {
-      success: true,
-      bill,
-      message: `Notifikasi kelengkapan dokumen telah dikirim ke ${bill.polyclinic} (Simulasi).`
-    };
-  };
-
-  // Lookup single bill record for BillingOrderView
-  const getBillById = (billId) => {
-    const targetId = String(billId || '');
-    const base = billingList.value.find((b) => String(b.id) === targetId);
-    if (!base) return null;
-    const override = sessionBillingOverrides[targetId];
-    return override ? { ...base, ...override } : base;
-  };
-
-  // Lookup or initialize order line items for BillingOrderView (LIST ORDERS)
-  const getBillOrders = (billId) => {
-    const targetId = String(billId || '');
-    if (!targetId) return [];
-    if (!sessionBillingOrders[targetId]) {
-      const bill = getBillById(targetId) || billingList.value[0];
-      sessionBillingOrders[targetId] = buildDefaultBillingOrders(bill);
-    }
-    return sessionBillingOrders[targetId].map((item) => ({ ...item }));
-  };
-
-  // Save updated order list and payment summary back into reactive session state
-  const saveBillOrders = (billId, nextOrders = [], summaryMeta = {}) => {
-    const targetId = String(billId || '');
-    if (!targetId) return { success: false };
-
-    const normalized = nextOrders.map((item) => ({ ...item }));
-    sessionBillingOrders[targetId] = normalized;
-
-    const totalSum = normalized.reduce((acc, item) => {
-      const gross = (Number(item.price) || 0) * (Math.max(1, Number(item.qty) || 1));
-      const discPct = Math.min(100, Math.max(0, Number(item.discount_percent) || 0));
-      return acc + Math.max(0, Math.round(gross * (1 - discPct / 100)));
-    }, 0);
-
-    const paidSum = normalized
-      .filter((item) => item.status === 'Lunas')
-      .reduce((acc, item) => {
-        const gross = (Number(item.price) || 0) * (Math.max(1, Number(item.qty) || 1));
-        const discPct = Math.min(100, Math.max(0, Number(item.discount_percent) || 0));
-        return acc + Math.max(0, Math.round(gross * (1 - discPct / 100)));
-      }, 0);
-
-    const allPaid = normalized.length > 0 && normalized.every((item) => item.status === 'Lunas');
-    const somePaid = normalized.some((item) => item.status === 'Lunas');
-    const nextStatus = allPaid ? 'Lunas' : somePaid ? 'Dibayar Sebagian' : 'Siap Dibayar';
-
-    const existing = getBillById(targetId);
-    const overridePayload = {
-      status: summaryMeta.status || nextStatus,
-      total_amount: totalSum,
-      paid_amount: paidSum,
-      remaining_balance: Math.max(0, totalSum - paidSum - (existing?.guarantor_amount || 0)),
-      payment_method: summaryMeta.payment_method || existing?.payment_method || null,
-      polyclinic: summaryMeta.polyclinic || existing?.polyclinic,
-      exam_status: allPaid ? 'Sudah Dilayani' : existing?.exam_status || 'Belum Dilayani',
-      pharmacy_status: allPaid ? 'Sudah Diterima' : existing?.pharmacy_status || 'Tidak Ada Resep',
-      items: normalized.map((ord) => {
-        const gross = (Number(ord.price) || 0) * (Math.max(1, Number(ord.qty) || 1));
-        const discPct = Math.min(100, Math.max(0, Number(ord.discount_percent) || 0));
-        return {
-          name: ord.name,
-          category: ord.jenis,
-          qty: Number(ord.qty) || 1,
-          unit_price: Number(ord.price) || 0,
-          total: Math.max(0, Math.round(gross * (1 - discPct / 100)))
-        };
-      })
-    };
-
-    sessionBillingOverrides[targetId] = {
-      ...sessionBillingOverrides[targetId],
-      ...overridePayload
-    };
-
-    const idx = billingList.value.findIndex((b) => String(b.id) === targetId);
-    if (idx !== -1) {
-      Object.assign(billingList.value[idx], overridePayload);
-    }
-
-    return {
-      success: true,
-      bill: getBillById(targetId),
-      orders: getBillOrders(targetId)
-    };
+  const getBillOrders = (visitId) => {
+    const bill = getBillById(visitId);
+    return Array.isArray(bill?.items) ? bill.items.map((item) => ({ ...item })) : [];
   };
 
   return {
@@ -520,6 +376,7 @@ export function useBilling() {
     selectedRowIds,
     loading,
     error,
+    polyclinicsError,
     cashierShift,
     sort,
     statistics,
@@ -528,7 +385,8 @@ export function useBilling() {
     paginatedRecords,
     pageSubtotal,
     paginationInfo,
-    mockPolyclinics,
+    polyclinics: polyclinicsList,
+    mockPolyclinics: polyclinicsList,
     mockDoctors,
     mockGuarantorOptions,
     mockPeriodOptions,
@@ -541,6 +399,9 @@ export function useBilling() {
     toggleSelectAll,
     toggleSelectRow,
     isRowSelected,
+    loadPolyclinics,
+    fetchBillings,
+    fetchBillingDetail,
     applyFilters,
     resetFilters,
     setQuickFilter,

@@ -296,6 +296,11 @@ const loadMasterData = async () => {
     guarantors.value = res?.data || [];
   } catch (err) {
     guarantors.value = [];
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Penjamin',
+      message: err.response?.data?.message || 'Gagal memuat daftar penjamin dari server.'
+    });
   } finally {
     isLoadingGuarantors.value = false;
   }
@@ -311,6 +316,11 @@ const loadMasterData = async () => {
     polyclinics.value = res?.data?.data || res?.data || [];
   } catch (err) {
     polyclinics.value = [];
+    showToast({
+      type: 'danger',
+      title: 'Gagal Memuat Poliklinik',
+      message: err.response?.data?.message || 'Gagal memuat daftar poliklinik dari server.'
+    });
   } finally {
     isLoadingClinics.value = false;
   }
@@ -331,6 +341,11 @@ const loadMasterData = async () => {
     }
   } catch (err) {
     referralSources.value = [];
+    showToast({
+      type: 'warning',
+      title: 'Gagal Memuat Asal Rujukan',
+      message: err.response?.data?.message || 'Daftar asal rujukan tidak dapat dimuat.'
+    });
   } finally {
     isLoadingReferrals.value = false;
   }
@@ -338,15 +353,25 @@ const loadMasterData = async () => {
 
 // Load Patient Data
 const loadPatient = async (patientId) => {
-  if (!patientId) {
+  if (!patientId || !/^\d+$/.test(String(patientId).trim())) {
     patient.value = null;
+    if (patientId) {
+      showToast({
+        type: 'danger',
+        title: 'Parameter Pasien Tidak Valid',
+        message: 'ID pasien pada URL navigasi tidak valid.'
+      });
+    }
     return;
   }
 
   isLoadingPatient.value = true;
   try {
-    const res = await patientService.getPatient(patientId);
+    const res = await patientService.getPatient(String(patientId).trim());
     const data = res?.data?.data || res?.data;
+    if (!data?.id) {
+      throw new Error('Data pasien dengan ID tersebut tidak ditemukan.');
+    }
     patient.value = data;
 
     // Prefill form
@@ -383,10 +408,17 @@ const loadPatient = async (patientId) => {
     }
   } catch (err) {
     patient.value = null;
+    const status = err?.response?.status;
+    let message = err.response?.data?.message || err.message || 'Data pasien dengan ID tersebut tidak ditemukan.';
+    if (!err?.response && !err?.message?.includes('tidak ditemukan')) {
+      message = 'Tidak dapat terhubung ke server untuk memuat data pasien.';
+    } else if (status === 401 || status === 403) {
+      message = err.response?.data?.message || 'Sesi login berakhir atau Anda tidak memiliki akses ke data pasien.';
+    }
     showToast({
       type: 'danger',
       title: 'Gagal Memuat Pasien',
-      message: err.response?.data?.message || 'Data pasien dengan ID tersebut tidak ditemukan.'
+      message
     });
   } finally {
     isLoadingPatient.value = false;
@@ -521,7 +553,11 @@ const handleSubmit = async () => {
       kode_booking: form.value.kode_booking ? form.value.kode_booking.trim() : null
     };
 
-    await admissionService.createAdmission(payload);
+    const res = await admissionService.createAdmission(payload);
+    const created = res?.data?.data || res?.data;
+    if (!created?.id && !res?.data?.success) {
+      throw new Error('Server tidak mengembalikan konfirmasi ID admisi yang sah.');
+    }
 
     isSaved.value = true;
 
@@ -557,6 +593,12 @@ const handleSubmit = async () => {
         type: 'danger',
         title: 'Akses Ditolak',
         message: responseData?.message || 'Anda tidak memiliki hak akses untuk menyimpan data admisi.'
+      });
+    } else if (status === 404 || status === 409) {
+      showToast({
+        type: 'danger',
+        title: status === 404 ? 'Data Tidak Ditemukan' : 'Konflik Data Admisi',
+        message: responseData?.message || 'Data referensi admisi tidak ditemukan atau terjadi duplikasi kunjungan.'
       });
     } else if (status >= 500) {
       showToast({

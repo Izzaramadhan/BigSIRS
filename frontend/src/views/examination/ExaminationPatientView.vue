@@ -5,6 +5,11 @@ import MasterDataPageHeader from '@/components/master-data/shared/MasterDataPage
 import AppToast from '@/components/common/AppToast.vue';
 import { useExaminations } from '@/composables/useExaminations';
 import { examinationService } from '@/services/examination.service';
+import lookupService from '@/services/lookup.service';
+import icd10Service from '@/services/master-data/icd10.service';
+import icd9CmService from '@/services/master-data/icd9cm.service';
+import procedureService from '@/services/procedure';
+import { medicinesService } from '@/services/master-data/medicines.service';
 
 import './components/patient/patientWorkspace.css';
 import ExaminationTabHistory from './components/patient/ExaminationTabHistory.vue';
@@ -24,16 +29,10 @@ const route = useRoute();
 const router = useRouter();
 
 const {
-  examinations,
-  mockDoctors,
   mockMidwives,
   mockBidanPhysicalHistory,
-  mockIcd10Catalog,
-  mockIcd9Catalog,
-  mockClinicalProcedures,
   mockProcedurePackages,
   mockParamedics,
-  mockMedicinesCatalog,
   mockPrescriptionPackages,
   mockPrescriptionHistory,
   mockLaboratoryCatalog,
@@ -44,10 +43,75 @@ const {
   mockRadiologyHistory,
   mockVkSurgeryOptions,
   mockIbsSurgeryOptions,
-  getExaminationById,
-  saveSessionExaminationData,
-  completeExamination
+  saveSessionExaminationData
 } = useExaminations();
+
+const backendDoctors = ref([]);
+const backendIcd10Catalog = ref([]);
+const backendIcd9Catalog = ref([]);
+const backendProceduresCatalog = ref([]);
+const backendMedicinesCatalog = ref([]);
+
+const unwrapCollection = (res) => {
+  const payload = res?.data?.data ?? res?.data ?? res ?? [];
+  return Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
+};
+
+const loadClinicalCatalogs = async () => {
+  const [docRes, icd10Res, icd9Res, procRes, medRes] = await Promise.allSettled([
+    lookupService.getDoctors({ per_page: 100 }),
+    icd10Service.getIcd10Codes({ per_page: 100, is_active: true }),
+    icd9CmService.lookup({ per_page: 100, is_active: true }),
+    procedureService.getProcedures({ per_page: 100, is_visible: true }),
+    medicinesService.getMedicines({ per_page: 100 })
+  ]);
+
+  if (docRes.status === 'fulfilled') {
+    const docs = unwrapCollection(docRes.value)
+      .map((d) => (typeof d === 'string' ? d : (d.name || d.nama || d.nama_lengkap)))
+      .filter(Boolean);
+    backendDoctors.value = Array.from(new Set(docs));
+  }
+
+  if (icd10Res.status === 'fulfilled') {
+    backendIcd10Catalog.value = unwrapCollection(icd10Res.value).map((item) => ({
+      id: item.id,
+      id_diagnosa: item.id,
+      code: item.code || '',
+      name: item.name || item.nama || ''
+    }));
+  }
+
+  if (icd9Res.status === 'fulfilled') {
+    backendIcd9Catalog.value = unwrapCollection(icd9Res.value).map((item) => ({
+      id: item.id,
+      code: item.code || item.kode || '',
+      name: item.name || item.nama || ''
+    }));
+  }
+
+  if (procRes.status === 'fulfilled') {
+    backendProceduresCatalog.value = unwrapCollection(procRes.value).map((item) => ({
+      id: item.id,
+      procedure_id: item.id,
+      code: item.code || item.kode || '',
+      name: item.name || item.nama || '',
+      tariff: Number(item.tariff ?? item.harga ?? item.price ?? 0)
+    }));
+  }
+
+  if (medRes.status === 'fulfilled') {
+    backendMedicinesCatalog.value = unwrapCollection(medRes.value).map((item) => ({
+      id: item.id,
+      code: item.code || item.kode || '',
+      name: item.name || item.nama || '',
+      unit: item.unit?.name || item.unit || 'Tablet',
+      defaultSigna: item.defaultSigna || '3 x 1',
+      usageRule: item.usageRule || 'Sesudah makan',
+      price: Number(item.selling_price_per_unit ?? item.price ?? item.harga ?? 0)
+    }));
+  }
+};
 
 const activeTab = ref('riwayat');
 const activeSubTabs = ref({
@@ -294,104 +358,221 @@ const formatGuarantorLabel = (val) => {
 
 const isLoadingPatient = ref(false);
 const loadPatientError = ref(null);
+let latestLoadSeq = 0;
+
+const resetPatientContext = () => {
+  patientSummary.value = {
+    id: '',
+    visit_id: '',
+    admission_id: '',
+    patient_id: '',
+    queue_number: '—',
+    medical_record_number: '-',
+    patient_name: '-',
+    gender: '',
+    birth_place: '',
+    birth_date: '',
+    address: '-',
+    guarantor: '-',
+    guarantor_type: '-',
+    polyclinic: '-',
+    doctor: '-',
+    status: '-',
+    admission_date: '',
+    blood_type: '-',
+    initial_diagnosis: '-',
+    billing_status: 'belum bayar',
+    visit_history: []
+  };
+  allergyNote.value = '';
+  diagnoses.value = [];
+  icd9List.value = [];
+  procedures.value = [];
+  orders.value = {
+    pharmacy: [],
+    racikan: [],
+    lab: [],
+    radiology: [],
+    consult: []
+  };
+};
+
+const extractApiErrorMessage = (err, fallback) => {
+  const status = err?.response?.status;
+  if (status === 401 || status === 403) {
+    return err.response?.data?.message || 'Sesi tidak sah atau Anda tidak memiliki akses untuk kunjungan ini.';
+  }
+  if (status === 404) {
+    return err.response?.data?.message || 'Data kunjungan pasien tidak ditemukan di server.';
+  }
+  if (status === 422 && err.response?.data?.errors) {
+    const firstFieldErrors = Object.values(err.response.data.errors).flat();
+    if (firstFieldErrors.length > 0) {
+      return String(firstFieldErrors[0]);
+    }
+  }
+  if (!err?.response) {
+    return 'Koneksi ke server backend gagal. Periksa jaringan lalu coba lagi.';
+  }
+  return err.response?.data?.message || err.message || fallback;
+};
 
 const loadPatientData = async () => {
   const visitId = route.params.id;
-  if (!visitId) return;
+  if (!visitId) {
+    resetPatientContext();
+    loadPatientError.value = 'Identifier kunjungan (visit_id) tidak ditemukan pada URL.';
+    return;
+  }
 
+  const seq = ++latestLoadSeq;
   isLoadingPatient.value = true;
   loadPatientError.value = null;
 
   try {
     const res = await examinationService.getExamination(visitId);
+    if (seq !== latestLoadSeq) return;
+
     const record = res.data?.data || res.data;
-    if (record) {
-      patientSummary.value = {
-        id: record.id,
-        visit_id: record.visit_id || record.id,
-        admission_id: record.admission_id,
-        patient_id: record.patient_id,
-        queue_number: record.queue_number || '—',
-        medical_record_number: record.medical_record_number || record.patient?.medical_record_number || record.no_rm || '-',
-        patient_name: record.patient_name || record.patient?.name || '-',
-        gender: record.gender || record.patient?.gender || '',
-        birth_place: record.birth_place || record.patient?.birth_place || '',
-        birth_date: record.birth_date || record.patient?.birth_date || '',
-        address: record.address || record.patient?.address || '-',
-        guarantor: record.guarantor || record.guarantor_info?.name || 'UMUM',
-        guarantor_type: record.guarantor_type || record.guarantor_info?.type || 'UMUM',
-        polyclinic: record.polyclinic || record.polyclinic_info?.name || '-',
-        doctor: record.doctor || record.doctor_info?.name || '-',
-        status: record.status || 'Sedang Diperiksa',
-        admission_date: record.visit_date || new Date().toISOString().split('T')[0],
-        blood_type: record.blood_type || 'O',
-        initial_diagnosis: record.initial_diagnosis || '-',
-        visit_history: Array.isArray(record.visit_history) ? record.visit_history : []
+    if (!record || !record.id) {
+      throw new Error('Data kunjungan pemeriksaan tidak ditemukan di database.');
+    }
+
+    patientSummary.value = {
+      id: record.id,
+      visit_id: record.visit_id || record.id,
+      admission_id: record.admission_id,
+      patient_id: record.patient_id,
+      queue_number: record.queue_number || '—',
+      medical_record_number: record.medical_record_number || record.patient?.medical_record_number || record.no_rm || '-',
+      patient_name: record.patient_name || record.patient?.name || '-',
+      gender: record.gender || record.patient?.gender || '',
+      birth_place: record.birth_place || record.patient?.birth_place || '',
+      birth_date: record.birth_date || record.patient?.birth_date || '',
+      address: record.address || record.patient?.address || '-',
+      guarantor: record.guarantor || record.guarantor_info?.name || 'UMUM',
+      guarantor_type: record.guarantor_type || record.guarantor_info?.type || 'UMUM',
+      polyclinic: record.polyclinic || record.polyclinic_info?.name || '-',
+      doctor: record.doctor || record.doctor_info?.name || '-',
+      status: record.status || 'Sedang Diperiksa',
+      admission_date: record.visit_date || record.admission_date || '',
+      blood_type: record.blood_type || record.patient?.blood_type || '-',
+      initial_diagnosis: record.initial_diagnosis || '-',
+      billing_status: record.billing_status || 'belum bayar',
+      visit_history: Array.isArray(record.visit_history) ? record.visit_history : []
+    };
+
+    if (typeof record.allergy_note === 'string') {
+      allergyNote.value = record.allergy_note;
+    } else if (Array.isArray(record.allergies) && record.allergies.length > 0) {
+      allergyNote.value = record.allergies
+        .map((a) => `${a.substance}${a.reaction && a.reaction !== '-' ? ` (${a.reaction})` : ''}`)
+        .join(', ');
+    } else {
+      allergyNote.value = '';
+    }
+
+    diagnoses.value = Array.isArray(record.diagnoses) ? [...record.diagnoses] : [];
+    icd9List.value = Array.isArray(record.icd9List) ? [...record.icd9List] : [];
+    diagnosisForm.value = {
+      working_diagnosis: record.diagnosis_form?.working_diagnosis || '',
+      final_diagnosis: record.diagnosis_form?.final_diagnosis || '',
+      procedure_narrative: record.diagnosis_form?.procedure_narrative || ''
+    };
+    procedures.value = (Array.isArray(record.procedures) ? record.procedures : []).map((p) => {
+      const tariff = Number(p.tariff ?? p.price ?? 0);
+      const qty = Math.max(1, Number(p.quantity ?? p.qty) || 1);
+      return {
+        ...p,
+        quantity: qty,
+        tariff,
+        subtotal: p.subtotal ?? (tariff * qty)
       };
+    });
 
-      if (typeof record.allergy_note === 'string') {
-        allergyNote.value = record.allergy_note;
-      } else if (Array.isArray(record.allergies) && record.allergies.length > 0) {
-        allergyNote.value = record.allergies
-          .map((a) => `${a.substance}${a.reaction && a.reaction !== '-' ? ` (${a.reaction})` : ''}`)
-          .join(', ');
-      } else {
-        allergyNote.value = '';
-      }
+    const rawPharmacy = Array.isArray(record.orders?.pharmacy)
+      ? record.orders.pharmacy
+      : (Array.isArray(record.prescriptions) ? record.prescriptions : []);
+    const rawLab = Array.isArray(record.orders?.lab)
+      ? record.orders.lab
+      : (Array.isArray(record.lab_orders) ? record.lab_orders : []);
+    const rawRad = Array.isArray(record.orders?.radiology)
+      ? record.orders.radiology
+      : (Array.isArray(record.radiology_orders) ? record.radiology_orders : []);
 
-      diagnoses.value = Array.isArray(record.diagnoses) ? [...record.diagnoses] : [];
-      icd9List.value = Array.isArray(record.icd9List) ? [...record.icd9List] : [];
-      diagnosisForm.value = {
-        working_diagnosis: record.diagnosis_form?.working_diagnosis || '',
-        final_diagnosis: record.diagnosis_form?.final_diagnosis || '',
-        procedure_narrative: record.diagnosis_form?.procedure_narrative || ''
-      };
-      procedures.value = Array.isArray(record.procedures) ? [...record.procedures] : [];
+    orders.value = {
+      pharmacy: rawPharmacy.map((r) => ({
+        ...r,
+        persisted: Boolean(r.prescription_id || r.id),
+        name: r.name || r.medicine_name || '',
+        medicine_name: r.medicine_name || r.name || '',
+        qty: Number(r.qty ?? r.quantity) || 1,
+        quantity: Number(r.quantity ?? r.qty) || 1,
+        usage_rule: r.usage_rule || r.instruction || '',
+        instruction: r.instruction || r.usage_rule || ''
+      })),
+      racikan: Array.isArray(record.orders?.racikan) ? [...record.orders.racikan] : [],
+      lab: rawLab.map((l) => ({
+        ...l,
+        persisted: Boolean(l.order_id || l.id),
+        item: l.item || l.name || '',
+        name: l.name || l.item || ''
+      })),
+      radiology: rawRad.map((r) => ({
+        ...r,
+        persisted: Boolean(r.order_id || r.id),
+        item: r.item || r.name || '',
+        name: r.name || r.item || ''
+      })),
+      consult: Array.isArray(record.orders?.consult) ? [...record.orders.consult] : []
+    };
 
-      orders.value = {
-        pharmacy: Array.isArray(record.orders?.pharmacy) ? [...record.orders.pharmacy] : [],
-        racikan: Array.isArray(record.orders?.racikan) ? [...record.orders.racikan] : [],
-        lab: Array.isArray(record.orders?.lab) ? [...record.orders.lab] : [],
-        radiology: Array.isArray(record.orders?.radiology) ? [...record.orders.radiology] : [],
-        consult: Array.isArray(record.orders?.consult) ? [...record.orders.consult] : []
-      };
-
-      if (record.vitals) {
-        clinicalForm.value.vitals = { ...clinicalForm.value.vitals, ...record.vitals };
-        const bpParts = String(clinicalForm.value.vitals.blood_pressure || '').split('/');
-        if (bpParts.length === 2 && !record.vitals?.systole) {
-          clinicalForm.value.vitals.systole = bpParts[0].trim();
-          clinicalForm.value.vitals.diastole = bpParts[1].trim();
-        }
-      }
-      if (record.soap) {
-        clinicalForm.value.soap = { ...clinicalForm.value.soap, ...record.soap };
-      }
-      if (record.physical) {
-        clinicalForm.value.physical = { ...clinicalForm.value.physical, ...record.physical };
-      }
-      if (record.doctor && record.doctor !== '-') {
-        clinicalForm.value.dokter.dpjp = record.doctor;
-        clinicalForm.value.resume.doctor = record.doctor;
-      }
-      if (record.complaint) {
-        clinicalForm.value.dokter.chief_complaint = record.complaint;
+    if (record.vitals) {
+      clinicalForm.value.vitals = { ...clinicalForm.value.vitals, ...record.vitals };
+      const bpParts = String(clinicalForm.value.vitals.blood_pressure || '').split('/');
+      if (bpParts.length === 2 && !record.vitals?.systole) {
+        clinicalForm.value.vitals.systole = bpParts[0].trim();
+        clinicalForm.value.vitals.diastole = bpParts[1].trim();
       }
     }
+    if (record.soap) {
+      clinicalForm.value.soap = { ...clinicalForm.value.soap, ...record.soap };
+    }
+    if (record.physical) {
+      clinicalForm.value.physical = {
+        ...clinicalForm.value.physical,
+        ...record.physical,
+        head_neck: record.physical.head_neck ?? record.physical.head ?? clinicalForm.value.physical.head_neck,
+        thorax: record.physical.thorax ?? record.physical.chest ?? clinicalForm.value.physical.thorax,
+        localis: record.physical.localis ?? record.physical.other ?? clinicalForm.value.physical.localis
+      };
+    }
+    if (record.doctor && record.doctor !== '-') {
+      clinicalForm.value.dokter.dpjp = record.doctor;
+      clinicalForm.value.resume.doctor = record.doctor;
+    }
+    if (record.clinical_examination?.anamnesa || record.clinical_note || record.complaint) {
+      clinicalForm.value.dokter.chief_complaint =
+        record.clinical_examination?.anamnesa || record.clinical_note || record.complaint || '';
+    }
   } catch (err) {
-    console.error('Gagal mengambil detail pemeriksaan:', err);
-    loadPatientError.value = err.response?.data?.message || 'Data kunjungan pasien tidak ditemukan di database.';
+    if (seq !== latestLoadSeq) return;
+    resetPatientContext();
+    loadPatientError.value = extractApiErrorMessage(err, 'Data kunjungan pasien tidak ditemukan di database.');
     showToast({
       type: 'danger',
       title: 'Data Pasien Tidak Ditemukan',
       message: loadPatientError.value
     });
   } finally {
-    isLoadingPatient.value = false;
+    if (seq === latestLoadSeq) {
+      isLoadingPatient.value = false;
+    }
   }
 };
 
 loadPatientData();
+loadClinicalCatalogs();
 
 watch(() => route.params.id, () => {
   activeTab.value = 'riwayat';
@@ -462,16 +643,41 @@ const syncSession = (partial) => {
   saveSessionExaminationData(patientSummary.value.id, partial);
 };
 
+const ensureActiveVisitId = () => {
+  const visitId = patientSummary.value.visit_id || patientSummary.value.id;
+  if (!visitId || loadPatientError.value) {
+    showToast({
+      type: 'danger',
+      title: 'Kunjungan Tidak Valid',
+      message: 'Muat data kunjungan pasien dari backend terlebih dahulu sebelum menyimpan.'
+    });
+    return null;
+  }
+  return visitId;
+};
+
+const makeIdempotencyKey = (prefix, visitId) => {
+  return `${prefix}-${visitId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
 const isSavingAllergy = ref(false);
 const allergyError = ref(null);
+const isSavingClinical = ref(false);
+const isSubmittingDiagnosis = ref(false);
+const isSubmittingProcedure = ref(false);
+const isSavingResep = ref(false);
+const isSavingLab = ref(false);
+const isSavingRad = ref(false);
+const isCompletingExam = ref(false);
 
 const handleSaveAllergy = async (note) => {
-  if (isSavingAllergy.value) return;
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSavingAllergy.value) return;
   isSavingAllergy.value = true;
   allergyError.value = null;
 
   try {
-    const res = await examinationService.saveAllergies(patientSummary.value.id, {
+    const res = await examinationService.saveAllergies(visitId, {
       allergy_note: note,
       notes: note
     });
@@ -487,8 +693,7 @@ const handleSaveAllergy = async (note) => {
         : `Catatan alergi pasien ${patientSummary.value.patient_name} telah dikosongkan.`
     });
   } catch (err) {
-    console.error('Gagal menyimpan data alergi ke backend:', err);
-    allergyError.value = err.response?.data?.message || 'Gagal menyimpan catatan alergi ke database.';
+    allergyError.value = extractApiErrorMessage(err, 'Gagal menyimpan catatan alergi ke database.');
     showToast({
       type: 'danger',
       title: 'Gagal Menyimpan Alergi',
@@ -500,87 +705,130 @@ const handleSaveAllergy = async (note) => {
 };
 
 const handleSaveClinical = async (sectionLabel) => {
-  if (clinicalForm.value.dokter.dpjp) {
-    patientSummary.value.doctor = clinicalForm.value.dokter.dpjp;
-    clinicalForm.value.resume.doctor = clinicalForm.value.dokter.dpjp;
-  }
-  if (sectionLabel === 'Asesmen Awal Perawat' && clinicalForm.value.nursing.chief_complaint) {
-    clinicalForm.value.dokter.chief_complaint = clinicalForm.value.nursing.chief_complaint;
-  }
-  syncSession({
-    doctor: patientSummary.value.doctor,
-    blood_type: patientSummary.value.blood_type,
-    vitals: { ...clinicalForm.value.vitals },
-    dokter: { ...clinicalForm.value.dokter },
-    soap: { ...clinicalForm.value.soap },
-    physical: { ...clinicalForm.value.physical },
-    bidan: {
-      ...clinicalForm.value.bidan,
-      marriage_rows: [...clinicalForm.value.bidan.marriage_rows],
-      past_pregnancies: [...clinicalForm.value.bidan.past_pregnancies]
-    },
-    nursing: { ...clinicalForm.value.nursing },
-    hais: { logs: [...clinicalForm.value.hais.logs] }
-  });
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSavingClinical.value) return;
+  isSavingClinical.value = true;
 
   try {
     await Promise.all([
-      examinationService.saveVitals(patientSummary.value.id, clinicalForm.value.vitals),
-      examinationService.saveClinical(patientSummary.value.id, {
+      examinationService.saveVitals(visitId, clinicalForm.value.vitals),
+      examinationService.saveClinical(visitId, {
         chief_complaint: clinicalForm.value.dokter.chief_complaint,
         subjective: clinicalForm.value.soap.subjective,
         objective: clinicalForm.value.soap.objective,
         assessment: clinicalForm.value.soap.assessment,
         plan: clinicalForm.value.soap.plan,
         physical_general: clinicalForm.value.physical.general,
-        physical_head: clinicalForm.value.physical.head,
-        physical_neck: clinicalForm.value.physical.neck,
-        physical_chest: clinicalForm.value.physical.chest,
-        physical_abdomen: clinicalForm.value.physical.abdomen,
-        physical_extremities: clinicalForm.value.physical.extremities,
+        physical_head: clinicalForm.value.physical.head_neck ?? clinicalForm.value.physical.head ?? '',
+        physical_neck: clinicalForm.value.physical.neck ?? '',
+        physical_chest: clinicalForm.value.physical.thorax ?? clinicalForm.value.physical.chest ?? '',
+        physical_abdomen: clinicalForm.value.physical.abdomen ?? '',
+        physical_extremities: clinicalForm.value.physical.extremities ?? '',
+        physical_localis: clinicalForm.value.physical.localis ?? clinicalForm.value.physical.other ?? '',
         allergy_note: allergyNote.value
       })
     ]);
-  } catch (err) {
-    console.warn('Gagal simpan klinis ke backend:', err);
-  }
 
-  showToast({
-    type: 'success',
-    title: 'Catatan Klinis Disimpan',
-    message: `Data ${sectionLabel} pasien ${patientSummary.value.patient_name} berhasil diperbarui.`
-  });
+    if (clinicalForm.value.dokter.dpjp) {
+      patientSummary.value.doctor = clinicalForm.value.dokter.dpjp;
+      clinicalForm.value.resume.doctor = clinicalForm.value.dokter.dpjp;
+    }
+    if (sectionLabel === 'Asesmen Awal Perawat' && clinicalForm.value.nursing.chief_complaint) {
+      clinicalForm.value.dokter.chief_complaint = clinicalForm.value.nursing.chief_complaint;
+    }
+    syncSession({
+      doctor: patientSummary.value.doctor,
+      blood_type: patientSummary.value.blood_type,
+      vitals: { ...clinicalForm.value.vitals },
+      dokter: { ...clinicalForm.value.dokter },
+      soap: { ...clinicalForm.value.soap },
+      physical: { ...clinicalForm.value.physical },
+      bidan: {
+        ...clinicalForm.value.bidan,
+        marriage_rows: [...clinicalForm.value.bidan.marriage_rows],
+        past_pregnancies: [...clinicalForm.value.bidan.past_pregnancies]
+      },
+      nursing: { ...clinicalForm.value.nursing },
+      hais: { logs: [...clinicalForm.value.hais.logs] }
+    });
+
+    showToast({
+      type: 'success',
+      title: 'Catatan Klinis Disimpan',
+      message: `Data ${sectionLabel} pasien ${patientSummary.value.patient_name} berhasil diperbarui.`
+    });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Menyimpan Catatan Klinis',
+      message: extractApiErrorMessage(err, `Gagal menyimpan ${sectionLabel} ke server.`)
+    });
+  } finally {
+    isSavingClinical.value = false;
+  }
 };
 
 const handleAddDiagnosis = async (entry) => {
-  diagnoses.value = [...diagnoses.value, entry];
-  syncSession({ diagnoses: diagnoses.value });
-  if (entry.id_diagnosa || entry.id) {
-    try {
-      const res = await examinationService.addDiagnosis(patientSummary.value.id, {
-        diagnosis_id: entry.id_diagnosa || entry.id,
-        type: entry.type === 'Utama' ? 'Primer' : 'Sekunder',
-        case_type: entry.case_type || 'Kasus Baru',
-        notes: entry.notes || ''
-      });
-      if (res.data?.data?.id) {
-        entry.id = res.data.data.id;
-      }
-    } catch (e) {
-      console.warn('Gagal simpan diagnosa ke database legacy:', e);
-    }
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSubmittingDiagnosis.value) return;
+
+  const diagId = entry.diagnosis_id ?? entry.id_diagnosa ?? entry.id;
+  if (!diagId) {
+    showToast({
+      type: 'danger',
+      title: 'Diagnosis Tidak Valid',
+      message: 'Identifier diagnosis ICD-10 dari master data tidak ditemukan.'
+    });
+    return;
   }
-  showToast({ type: 'success', title: 'Diagnosis Ditambahkan', message: `${entry.code} - ${entry.name}` });
+
+  isSubmittingDiagnosis.value = true;
+  try {
+    const res = await examinationService.addDiagnosis(visitId, {
+      diagnosis_id: diagId,
+      type: entry.type === 'Utama' ? 'Primer' : 'Sekunder',
+      case_type: entry.case_type || 'Kasus Baru',
+      notes: entry.notes || ''
+    });
+    const saved = res.data?.data || {};
+    const persistedEntry = {
+      ...entry,
+      id: saved.id ?? entry.id,
+      code: saved.code || entry.code,
+      name: saved.name || entry.name,
+      type: saved.type || entry.type,
+      case_type: saved.case_type || entry.case_type,
+      notes: saved.notes ?? entry.notes ?? ''
+    };
+    diagnoses.value = [...diagnoses.value, persistedEntry];
+    syncSession({ diagnoses: diagnoses.value });
+    showToast({ type: 'success', title: 'Diagnosis Ditambahkan', message: `${persistedEntry.code} - ${persistedEntry.name}` });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Menambahkan Diagnosis',
+      message: extractApiErrorMessage(err, 'Gagal menyimpan diagnosis ke database.')
+    });
+  } finally {
+    isSubmittingDiagnosis.value = false;
+  }
 };
 
 const handleRemoveDiagnosis = async (id) => {
+  const visitId = ensureActiveVisitId();
+  if (!visitId) return;
+
   try {
-    await examinationService.deleteDiagnosis(patientSummary.value.id, id);
-  } catch (e) {
-    console.warn('Gagal hapus diagnosa:', e);
+    await examinationService.deleteDiagnosis(visitId, id);
+    diagnoses.value = diagnoses.value.filter((d) => d.id !== id);
+    syncSession({ diagnoses: diagnoses.value });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Menghapus Diagnosis',
+      message: extractApiErrorMessage(err, 'Gagal menghapus diagnosis di server.')
+    });
   }
-  diagnoses.value = diagnoses.value.filter((d) => d.id !== id);
-  syncSession({ diagnoses: diagnoses.value });
 };
 
 const handleAddIcd9 = (entry) => {
@@ -608,34 +856,70 @@ const handleSaveDiagnosis = () => {
 };
 
 const handleAddProcedure = async (entry) => {
-  procedures.value = [...procedures.value, entry];
-  syncSession({ procedures: procedures.value });
-  if (entry.procedure_id || entry.id) {
-    try {
-      const res = await examinationService.addProcedure(patientSummary.value.id, {
-        procedure_id: entry.procedure_id || entry.id,
-        qty: entry.qty || 1,
-        discount: entry.discount || 0,
-        notes: entry.notes || ''
-      });
-      if (res.data?.data?.id) {
-        entry.id = res.data.data.id;
-      }
-    } catch (e) {
-      console.warn('Gagal simpan tindakan ke database legacy:', e);
-    }
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSubmittingProcedure.value) return;
+
+  const procId = entry.procedure_id ?? entry.id;
+  if (!procId) {
+    showToast({
+      type: 'danger',
+      title: 'Tindakan Tidak Valid',
+      message: 'Identifier tindakan dari master tarif tidak ditemukan.'
+    });
+    return;
   }
-  showToast({ type: 'success', title: 'Tindakan Ditambahkan', message: `${entry.name}` });
+
+  isSubmittingProcedure.value = true;
+  try {
+    const res = await examinationService.addProcedure(visitId, {
+      procedure_id: procId,
+      qty: entry.qty || entry.quantity || 1,
+      discount: entry.discount || 0,
+      notes: entry.notes || '',
+      idempotency_key: makeIdempotencyKey('proc', visitId)
+    });
+    const saved = res.data?.data || {};
+    const tariff = Number(saved.price ?? entry.tariff ?? 0);
+    const qty = Number(saved.qty ?? entry.quantity ?? 1);
+    const persistedEntry = {
+      ...entry,
+      id: saved.id ?? entry.id,
+      procedure_id: saved.procedure_id ?? procId,
+      code: saved.code || entry.code,
+      name: saved.name || entry.name,
+      quantity: qty,
+      tariff,
+      subtotal: saved.subtotal ?? (tariff * qty)
+    };
+    procedures.value = [...procedures.value, persistedEntry];
+    syncSession({ procedures: procedures.value });
+    showToast({ type: 'success', title: 'Tindakan Ditambahkan', message: `${persistedEntry.name}` });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Menambahkan Tindakan',
+      message: extractApiErrorMessage(err, 'Gagal menyimpan tindakan medis ke database.')
+    });
+  } finally {
+    isSubmittingProcedure.value = false;
+  }
 };
 
 const handleRemoveProcedure = async (id) => {
+  const visitId = ensureActiveVisitId();
+  if (!visitId) return;
+
   try {
-    await examinationService.deleteProcedure(patientSummary.value.id, id);
-  } catch (e) {
-    console.warn('Gagal hapus tindakan:', e);
+    await examinationService.deleteProcedure(visitId, id);
+    procedures.value = procedures.value.filter((p) => p.id !== id);
+    syncSession({ procedures: procedures.value });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Menghapus Tindakan',
+      message: extractApiErrorMessage(err, 'Gagal menghapus tindakan medis di server.')
+    });
   }
-  procedures.value = procedures.value.filter((p) => p.id !== id);
-  syncSession({ procedures: procedures.value });
 };
 
 const handleSaveProcedures = () => {
@@ -683,6 +967,47 @@ const handleRemoveOrder = ({ bucket, id }) => {
 };
 
 const handleSaveResep = async () => {
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSavingResep.value) return;
+
+  const currentPharmacy = orders.value.pharmacy || [];
+  const pendingItems = currentPharmacy.filter((i) => !i.persisted && !i.prescription_id);
+
+  if (pendingItems.length > 0) {
+    isSavingResep.value = true;
+    try {
+      const res = await examinationService.savePrescription(visitId, {
+        idempotency_key: makeIdempotencyKey('rx', visitId),
+        items: pendingItems.map((i) => ({
+          medicine_name: i.medicine_name || i.name || '',
+          quantity: i.quantity || i.qty || 1,
+          signa: i.signa || '',
+          instruction: i.instruction || i.usage_rule || '',
+          notes: i.notes || i.note || ''
+        }))
+      });
+      const rxId = res.data?.data?.id || Date.now();
+      orders.value = {
+        ...orders.value,
+        pharmacy: currentPharmacy.map((i) => (
+          i.persisted || i.prescription_id
+            ? i
+            : { ...i, persisted: true, prescription_id: rxId }
+        ))
+      };
+    } catch (err) {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Menyimpan Resep',
+        message: extractApiErrorMessage(err, 'Gagal menyimpan order resep ke database.')
+      });
+      isSavingResep.value = false;
+      return;
+    } finally {
+      isSavingResep.value = false;
+    }
+  }
+
   syncSession({
     orders: {
       ...orders.value,
@@ -690,21 +1015,6 @@ const handleSaveResep = async () => {
       racikan: (orders.value.racikan || []).map((r) => ({ ...r }))
     }
   });
-  if (orders.value.pharmacy && orders.value.pharmacy.length > 0) {
-    try {
-      await examinationService.savePrescription(patientSummary.value.id, {
-        items: orders.value.pharmacy.map((i) => ({
-          medicine_name: i.medicine_name || i.name || '',
-          quantity: i.quantity || i.qty || 1,
-          signa: i.signa || '',
-          instruction: i.instruction || '',
-          notes: i.notes || ''
-        }))
-      });
-    } catch (e) {
-      console.warn('Gagal simpan resep ke database legacy:', e);
-    }
-  }
   showToast({
     type: 'success',
     title: 'Data Resep Disimpan',
@@ -713,24 +1023,48 @@ const handleSaveResep = async () => {
 };
 
 const handleSaveLabOrder = async ({ entries }) => {
-  orders.value = {
-    ...orders.value,
-    lab: entries.map((e) => ({ ...e }))
-  };
-  syncSession({ orders: orders.value });
-  if (entries && entries.length > 0) {
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSavingLab.value) return;
+
+  const existingLab = orders.value.lab || [];
+  const existingKeys = new Set(existingLab.filter((l) => l.persisted || l.order_id).map((l) => `${l.code || ''}::${l.name || l.item || ''}`));
+  const newEntries = (entries || []).filter((i) => !existingKeys.has(`${i.code || ''}::${i.name || i.item || i.test_name || ''}`));
+
+  if (newEntries.length > 0) {
+    isSavingLab.value = true;
     try {
-      await examinationService.saveLabOrder(patientSummary.value.id, {
-        items: entries.map((i) => ({
-          name: i.name || i.test_name || '',
-          item_id: i.item_id || i.id || 0,
+      const res = await examinationService.saveLabOrder(visitId, {
+        idempotency_key: makeIdempotencyKey('lab', visitId),
+        items: newEntries.map((i) => ({
+          name: i.name || i.item || i.test_name || '',
+          item_id: i.item_id || (Number.isInteger(Number(i.id)) ? Number(i.id) : 0),
           notes: i.notes || ''
         }))
       });
-    } catch (e) {
-      console.warn('Gagal simpan order lab ke database legacy:', e);
+      const labOrderId = res.data?.data?.id || Date.now();
+      orders.value = {
+        ...orders.value,
+        lab: entries.map((e) => ({ ...e, persisted: true, order_id: e.order_id || labOrderId }))
+      };
+    } catch (err) {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Menyimpan Order Lab',
+        message: extractApiErrorMessage(err, 'Gagal menyimpan order laboratorium ke database.')
+      });
+      isSavingLab.value = false;
+      return;
+    } finally {
+      isSavingLab.value = false;
     }
+  } else {
+    orders.value = {
+      ...orders.value,
+      lab: entries.map((e) => ({ ...e }))
+    };
   }
+
+  syncSession({ orders: orders.value });
   showToast({
     type: 'success',
     title: 'Data Order Laboratorium Disimpan',
@@ -739,27 +1073,59 @@ const handleSaveLabOrder = async ({ entries }) => {
 };
 
 const handleSaveRadiologyOrder = async ({ section, entries }) => {
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isSavingRad.value) return;
+
   const otherSectionEntries = (orders.value.radiology || []).filter(
     (item) => (item.section || 'umum') !== section
   );
-  orders.value = {
-    ...orders.value,
-    radiology: [...otherSectionEntries, ...entries.map((e) => ({ ...e }))]
-  };
-  syncSession({ orders: orders.value });
-  if (entries && entries.length > 0) {
+  const existingKeys = new Set(
+    (orders.value.radiology || [])
+      .filter((r) => (r.section || 'umum') === section && (r.persisted || r.order_id))
+      .map((r) => `${r.code || ''}::${r.name || r.item || ''}`)
+  );
+  const newEntries = (entries || []).filter(
+    (i) => !existingKeys.has(`${i.code || ''}::${i.name || i.item || i.modality || ''}`)
+  );
+
+  if (newEntries.length > 0) {
+    isSavingRad.value = true;
     try {
-      await examinationService.saveRadiologyOrder(patientSummary.value.id, {
-        items: entries.map((i) => ({
-          name: i.name || i.modality || '',
-          item_id: i.item_id || i.id || 0,
-          notes: i.notes || ''
+      const res = await examinationService.saveRadiologyOrder(visitId, {
+        idempotency_key: makeIdempotencyKey(`rad-${section}`, visitId),
+        items: newEntries.map((i) => ({
+          name: i.name || i.item || i.modality || '',
+          item_id: i.item_id || (Number.isInteger(Number(i.id)) ? Number(i.id) : 0),
+          notes: i.notes || i.note || ''
         }))
       });
-    } catch (e) {
-      console.warn('Gagal simpan order radiologi ke database legacy:', e);
+      const radOrderId = res.data?.data?.id || Date.now();
+      orders.value = {
+        ...orders.value,
+        radiology: [
+          ...otherSectionEntries,
+          ...entries.map((e) => ({ ...e, persisted: true, order_id: e.order_id || radOrderId }))
+        ]
+      };
+    } catch (err) {
+      showToast({
+        type: 'danger',
+        title: 'Gagal Menyimpan Order Radiologi',
+        message: extractApiErrorMessage(err, 'Gagal menyimpan order radiologi ke database.')
+      });
+      isSavingRad.value = false;
+      return;
+    } finally {
+      isSavingRad.value = false;
     }
+  } else {
+    orders.value = {
+      ...orders.value,
+      radiology: [...otherSectionEntries, ...entries.map((e) => ({ ...e }))]
+    };
   }
+
+  syncSession({ orders: orders.value });
   const label = section === 'koas' ? 'Radiologi Koas' : 'Radiologi Umum/Residen';
   showToast({
     type: 'success',
@@ -782,18 +1148,28 @@ const handlePrintResume = () => {
 };
 
 const handleCompleteExam = async () => {
-  syncSession({ resume: { ...clinicalForm.value.resume } });
+  const visitId = ensureActiveVisitId();
+  if (!visitId || isCompletingExam.value) return;
+
+  isCompletingExam.value = true;
   try {
-    await examinationService.updateStatus(patientSummary.value.id, 'Selesai');
-  } catch (e) {
-    console.warn('Gagal update status selesai ke backend:', e);
+    await examinationService.updateStatus(visitId, 'Selesai');
+    patientSummary.value.status = 'Selesai';
+    syncSession({ resume: { ...clinicalForm.value.resume }, status: 'Selesai' });
+    showToast({
+      type: 'success',
+      title: 'Pemeriksaan Selesai',
+      message: `Status pemeriksaan ${patientSummary.value.patient_name} diperbarui menjadi Selesai.`
+    });
+  } catch (err) {
+    showToast({
+      type: 'danger',
+      title: 'Gagal Menyelesaikan Pemeriksaan',
+      message: extractApiErrorMessage(err, 'Status pemeriksaan gagal diperbarui di server.')
+    });
+  } finally {
+    isCompletingExam.value = false;
   }
-  patientSummary.value.status = 'Selesai';
-  showToast({
-    type: 'success',
-    title: 'Pemeriksaan Selesai',
-    message: `Status pemeriksaan ${patientSummary.value.patient_name} diperbarui menjadi Selesai.`
-  });
 };
 
 const statusBadgeClass = computed(() => {
@@ -849,9 +1225,14 @@ const goBack = () => {
         <div>
           <strong>Gagal Memuat Pasien:</strong> {{ loadPatientError }}
         </div>
-        <button type="button" class="btn-secondary" @click="goBack" style="margin-left: 12px; padding: 6px 12px; font-size: 0.875rem;">
-          Kembali ke Daftar
-        </button>
+        <div style="display: flex; gap: 8px; margin-left: 12px;">
+          <button type="button" class="btn-secondary btn-retry-patient" @click="loadPatientData" style="padding: 6px 12px; font-size: 0.875rem;">
+            Muat Ulang
+          </button>
+          <button type="button" class="btn-secondary" @click="goBack" style="padding: 6px 12px; font-size: 0.875rem;">
+            Kembali ke Daftar
+          </button>
+        </div>
       </div>
 
       <!-- Card 1: DATA PASIEN -->
@@ -1106,7 +1487,7 @@ const goBack = () => {
             :surgeries="surgeries"
             :default-unit="patientSummary.polyclinic"
             :default-doctor="patientSummary.doctor"
-            :doctors="mockDoctors"
+            :doctors="backendDoctors"
             :midwives="mockMidwives"
             :physical-history="mockBidanPhysicalHistory"
             @save-clinical="handleSaveClinical"
@@ -1118,8 +1499,8 @@ const goBack = () => {
             :diagnosis-form="diagnosisForm"
             :diagnoses="diagnoses"
             :icd9-list="icd9List"
-            :icd10-catalog="mockIcd10Catalog"
-            :icd9-catalog="mockIcd9Catalog"
+            :icd10-catalog="backendIcd10Catalog"
+            :icd9-catalog="backendIcd9Catalog"
             @add-diagnosis="handleAddDiagnosis"
             @remove-diagnosis="handleRemoveDiagnosis"
             @add-icd9="handleAddIcd9"
@@ -1130,9 +1511,9 @@ const goBack = () => {
           <ExaminationTabProcedures
             v-else-if="activeTab === 'tindakan'"
             :procedures="procedures"
-            :procedure-catalog="mockClinicalProcedures"
+            :procedure-catalog="backendProceduresCatalog"
             :package-catalog="mockProcedurePackages"
-            :doctors="mockDoctors"
+            :doctors="backendDoctors"
             :paramedics="mockParamedics"
             :default-doctor="patientSummary.doctor"
             @add-procedure="handleAddProcedure"
@@ -1143,7 +1524,7 @@ const goBack = () => {
           <ExaminationTabOrderResep
             v-else-if="activeTab === 'order' && activeSubTabs.order === 'pharmacy'"
             :orders="orders"
-            :medicines-catalog="mockMedicinesCatalog"
+            :medicines-catalog="backendMedicinesCatalog"
             :package-catalog="mockPrescriptionPackages"
             :prescription-history="mockPrescriptionHistory"
             @add-order="handleAddOrder"
@@ -1155,7 +1536,7 @@ const goBack = () => {
             v-else-if="activeTab === 'order' && activeSubTabs.order === 'lab'"
             :orders="orders"
             :lab-catalog="mockLaboratoryCatalog"
-            :doctors="mockDoctors"
+            :doctors="backendDoctors"
             :lab-dpjp-doctors="mockLabDpjpDoctors"
             :lab-staff="mockLabClinicalStaff"
             :lab-history="mockLabHistory"
@@ -1180,7 +1561,7 @@ const goBack = () => {
             :title="activeSubTabs.operasi === 'vk' ? 'OPERASI VK' : 'IBS'"
             :id-prefix="activeSubTabs.operasi"
             :surgeries="surgeries"
-            :doctors="mockDoctors"
+            :doctors="backendDoctors"
             :schedule-options="activeSubTabs.operasi === 'vk' ? mockVkSurgeryOptions : mockIbsSurgeryOptions"
             :default-doctor="patientSummary.doctor"
             @add-order="handleAddOrder"
@@ -1203,7 +1584,7 @@ const goBack = () => {
             :icd9-list="icd9List"
             :procedures="procedures"
             :orders="orders"
-            :doctors="mockDoctors"
+            :doctors="backendDoctors"
             :paramedics="mockParamedics"
             @print-resume="handlePrintResume"
             @complete-examination="handleCompleteExam"
